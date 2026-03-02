@@ -1,0 +1,97 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "NetMap: Build (Debug)",
+            "type": "shell",
+            "command": "xcodebuild -project '${workspaceFolder}/NetMap/NetMap.xcodeproj' -scheme NetMap -configuration Debug -destination 'platform=macOS' build 2>&1 | /Users/phil/.gem/ruby/2.6.0/bin/xcpretty --color || true",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "swift",
+                "fileLocation": ["absolute"],
+                "pattern": {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "NetMap: Build & Run",
+            "type": "shell",
+            "command": "xcodebuild -project '${workspaceFolder}/NetMap/NetMap.xcodeproj' -scheme NetMap -configuration Debug -destination 'platform=macOS' build 2>&1 | /Users/phil/.gem/ruby/2.6.0/bin/xcpretty --color || true && open \"$(xcodebuild -project '${workspaceFolder}/NetMap/NetMap.xcodeproj' -scheme NetMap -configuration Debug -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR' | awk '{print $3}')/NetMap.app\"",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "NetMap: Clean",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project", "${workspaceFolder}/NetMap/NetMap.xcodeproj",
+                "-scheme", "NetMap",
+                "clean"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "NetMap: Build (Release)",
+            "type": "shell",
+            "command": "xcodebuild -project '${workspaceFolder}/NetMap/NetMap.xcodeproj' -scheme NetMap -configuration Release -destination 'platform=macOS' build 2>&1 | /Users/phil/.gem/ruby/2.6.0/bin/xcpretty --color || true",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Server: Restart",
+            "type": "shell",
+            "command": "lsof -ti tcp:8765 | xargs kill -9 2>/dev/null; echo '⏹  Ancien processus arrêté'; sleep 1; cd '${workspaceFolder}/NetMapServer' && swift run App >> /tmp/netmap_server.log 2>&1 &\nsleep 5 && tail -8 /tmp/netmap_server.log",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Server: Logs",
+            "type": "shell",
+            "command": "tail -f /tmp/netmap_server.log",
+            "group": "build",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}

@@ -1,0 +1,9 @@
+{
+    "tasks.statusbar.notifications": "off",
+    "tasks.statusbar.separator": "  ",
+    "tasks.statusbar.taskFilter": [
+        "NetMap: Build (Debug)",
+        "NetMap: Build & Run",
+        "NetMap: Clean"
+    ]
+}

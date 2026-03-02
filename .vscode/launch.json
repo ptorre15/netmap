@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:hub}/NetMapServer",
+            "name": "Debug App (NetMapServer)",
+            "target": "App",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug App (NetMapServer)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:hub}/NetMapServer",
+            "name": "Release App (NetMapServer)",
+            "target": "App",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release App (NetMapServer)"
+        }
+    ]
+}

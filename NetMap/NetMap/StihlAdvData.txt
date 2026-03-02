@@ -1,0 +1,44 @@
+
+TMS:
+RSSI=-55-data=02010611ff2808010353c7ca03739d080167b70f0000000000
+
+Stihl sensor:
+RSSI=-35-data=0201060302     43fe    17    ff      dd03      01   2877b0431300  00000000  01            5000 0001                00    01     3e   			18
+
+RSSI=-55-data=0201060302     43fe    17    ff      dd03      01   72b4af431300  00000000  01            5000 0001                00    01     3f    		17
+RSSI=-84-data=0201040302     43fe    17    ff      dd03      01   2877b0431300  2c010000  01            5000 0001                00    00     3b    		12
+
+RSSI=-66-data=0201040302     43fe    17    ff      dd03      01   72b4af431300  1e020000  01            5000 0001                00    00     3b     		14
+
+                            Member  Size  Manuf.  Company   Data   Serial=MAC  Total Time  ProductID   HW vers/SW vers          dBm   status   Battery    Temperature
+						   Service        Data      ID      Type               (seconds)
+   						    UUID
+              
+
+Stihl Battery:
+RSSI=-55-data=0201060302     43fe    17    ff      dd03      06   05    E597a73600       0c       80000000             000002      af       00       63        0201
+
+Serial Number                UUID  Length                           Data   ??  Serial Number     ??       Total Discharge     charging    health   state   charge      ??
+                                                            Type                                      Time              cycles                       %
+															
+															
+															
+															
+ELA:
+
+
+"C ID 003EC1" (small one)
+MAC=E576432B08D5															
+   len=02 type=01 value=06
+ / len=0A type=FF value=570706112233AABBCC             CompanyID=0757=ELA Innovation DataType=06 
+ / len=0C type=09 value=4320494420303033454331         "C ID 003EC1"  
+
+"P ID 013CA9" (big one)
+  MAC=D0D7CC87BD5A
+   len=2 type=01 value=06
+ / len=0A type=FF value=570706222222222222		CompanyID=0757=ELA Innovation DataType=06 
+ / len=0C type=09 value=5020494420303133434139 		"P ID 013CA9"
+
+
+
+															

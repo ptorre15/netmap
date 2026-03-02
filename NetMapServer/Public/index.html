@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetMap Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>�</text></svg>">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── Auth overlay (login / first-run setup) ──────────────── -->
+<div id="auth-overlay" class="auth-overlay" style="display:none">
+  <div class="auth-card">
+    <div class="auth-card-header">
+      <div class="auth-logo">
+        <div class="auth-logo-icon">
+          <!-- Wheel SVG — navy on yellow bg -->
+          <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28">
+            <circle cx="20" cy="20" r="18" stroke="#00205B" stroke-width="3.5"/>
+            <circle cx="20" cy="20" r="10" stroke="#00205B" stroke-width="2"/>
+            <circle cx="20" cy="20" r="3"  fill="#00205B"/>
+            <line x1="20" y1="17" x2="20" y2="10" stroke="#00205B" stroke-width="2" stroke-linecap="round"/>
+            <line x1="22.85" y1="18.08" x2="27.50" y2="12.34" stroke="#00205B" stroke-width="2" stroke-linecap="round"/>
+            <line x1="22.35" y1="21.55" x2="26.94" y2="27.00" stroke="#00205B" stroke-width="2" stroke-linecap="round"/>
+            <line x1="17.65" y1="21.55" x2="13.06" y2="27.00" stroke="#00205B" stroke-width="2" stroke-linecap="round"/>
+            <line x1="17.15" y1="18.08" x2="12.50" y2="12.34" stroke="#00205B" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span>NetMap</span>
+      </div>
+    </div>
+    <div class="auth-card-body">
+      <h2 id="auth-title">Sign in</h2>
+      <p  id="auth-subtitle" class="auth-sub"></p>
+      <form id="auth-form" novalidate>
+        <div class="auth-field">
+          <label for="auth-email">Email address</label>
+          <input type="email" id="auth-email" autocomplete="email" autofocus required>
+        </div>
+        <div class="auth-field">
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" autocomplete="current-password" required>
+        </div>
+        <div id="auth-error" class="auth-error" style="display:none"></div>
+        <button type="submit" class="auth-submit" id="auth-submit-btn">Sign in</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── Vehicle admin modal ─────────────────────────────────── -->
+<div id="vehicle-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="modal-title">New Asset</h3>
+      <button class="modal-close" id="vehicle-modal-close">✕</button>
+    </div>
+    <form id="vehicle-form" novalidate>
+      <!-- Asset type selector (hidden when editing since type can't change) -->
+      <div class="modal-field" id="vf-type-row">
+        <label>Asset Type</label>
+        <select id="vf-type"></select>
+      </div>
+      <!-- Common -->
+      <div class="modal-field">
+        <label>Name *</label>
+        <input type="text" id="vf-name" required placeholder="e.g. Paul's Car, Chainsaw 1">
+      </div>
+      <!-- Vehicle-specific fields -->
+      <div id="vf-vehicle-fields">
+        <div class="modal-row">
+          <div class="modal-field">
+            <label>Brand</label>
+            <input type="text" id="vf-brand" placeholder="Toyota">
+          </div>
+          <div class="modal-field">
+            <label>Model</label>
+            <input type="text" id="vf-model" placeholder="Corolla">
+          </div>
+        </div>
+        <div class="modal-row">
+          <div class="modal-field">
+            <label>Year</label>
+            <input type="number" id="vf-year" placeholder="2024" min="1900" max="2100">
+          </div>
+          <div class="modal-field">
+            <label>Plate</label>
+            <input type="text" id="vf-vrn" placeholder="AB-123-CD">
+          </div>
+        </div>
+        <div class="modal-field">
+          <label>VIN</label>
+          <input type="text" id="vf-vin" placeholder="optional">
+        </div>
+      </div>
+      <!-- Tool-specific fields -->
+      <div id="vf-tool-fields" style="display:none">
+        <div class="modal-field">
+          <label>Tool Type</label>
+          <input type="text" id="vf-tool-type" placeholder="e.g. Chainsaw, Hedge Trimmer">
+        </div>
+        <div class="modal-field">
+          <label>Serial Number</label>
+          <input type="text" id="vf-serial" placeholder="Manufacturer serial number">
+        </div>
+      </div>
+      <div id="modal-error" class="auth-error" style="display:none"></div>
+      <div class="modal-actions">
+        <button type="button"   id="modal-delete-btn"   class="modal-btn-danger"     style="display:none">Delete</button>
+        <button type="button"   id="modal-cancel-btn"   class="modal-btn-secondary">Cancel</button>
+        <button type="submit"                            class="modal-btn-primary"   id="modal-save-btn">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<header id="header">
+  <div class="logo">
+    <div class="logo-icon">
+      <!-- Wheel SVG — navy on yellow background -->
+      <svg viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" width="17" height="17">
+        <circle cx="11" cy="11" r="9.5" stroke="#00205B" stroke-width="2"/>
+        <circle cx="11" cy="11" r="5.5" stroke="#00205B" stroke-width="1.5"/>
+        <circle cx="11" cy="11" r="1.6" fill="#00205B"/>
+        <line x1="11" y1="9.4" x2="11" y2="5.5" stroke="#00205B" stroke-width="1.3" stroke-linecap="round"/>
+        <line x1="12.57" y1="10.20" x2="15.13" y2="7.13" stroke="#00205B" stroke-width="1.3" stroke-linecap="round"/>
+        <line x1="12.29" y1="12.35" x2="14.82" y2="15.07" stroke="#00205B" stroke-width="1.3" stroke-linecap="round"/>
+        <line x1="9.71" y1="12.35" x2="7.18" y2="15.07" stroke="#00205B" stroke-width="1.3" stroke-linecap="round"/>
+        <line x1="9.43" y1="10.20" x2="6.87" y2="7.13" stroke="#00205B" stroke-width="1.3" stroke-linecap="round"/>
+      </svg>
+    </div>
+    NetMap
+  </div>
+  <div id="live-pill" class="status-pill">
+    <div class="dot"></div>
+    <span id="live-label">–</span>
+  </div>
+  <div class="spacer"></div>
+  <button id="autorefresh-btn" class="icon-btn" title="Auto-refresh (30s)">⟳</button>
+  <button id="refresh-btn"     class="icon-btn" title="Refresh now">↻</button>
+  <button id="theme-btn"       class="icon-btn" title="Toggle theme">◑</button>
+  <button id="admin-btn"       class="icon-btn" title="Admin panel" style="display:none">⚙</button>
+  <div id="user-badge" class="user-badge" style="display:none">
+    <span id="user-name" class="user-name"></span>
+    <span id="user-role" class="role-badge"></span>
+    <button id="logout-btn" class="icon-btn" title="Logout">⏻</button>
+  </div>
+</header>
+
+<div id="main">
+
+  <!-- ── Sidebar ─────────────────────────────────────────── -->
+  <nav id="sidebar">
+    <div class="sidebar-vehicle-bar">
+      <select id="vehicle-select"><option value="">Loading…</option></select>
+      <button id="edit-vehicle-btn" class="icon-btn" title="Edit asset" style="display:none">✎</button>
+      <button id="add-vehicle-btn"  class="icon-btn" title="New asset"  style="display:none">＋</button>
+    </div>
+    <div class="sidebar-header" id="sensors-header">Sensors</div>
+    <div id="sensor-list" style="flex:1;overflow-y:auto">
+      <div class="sidebar-hint">Select an asset</div>
+    </div>
+    <div class="sidebar-footer">Updated: <span id="last-updated">–</span></div>
+  </nav>
+
+  <!-- ── Main content ────────────────────────────────────── -->
+  <div id="content">
+
+    <div id="breadcrumb">–</div>
+    <div id="sensor-info-card" style="display:none"></div>
+
+    <!-- Period selector -->
+    <div id="period-bar">
+      <button class="period-btn"        data-period="1H">1H</button>
+      <button class="period-btn active" data-period="24H">24H</button>
+      <button class="period-btn"        data-period="7D">7D</button>
+      <button class="period-btn"        data-period="30D">30D</button>
+      <button class="period-btn"        data-period="custom">Custom</button>
+      <span id="custom-range" style="display:none">
+        <label>From</label>
+        <input type="datetime-local" id="custom-from">
+        <label>To</label>
+        <input type="datetime-local" id="custom-to">
+      </span>
+    </div>
+
+    <!-- Stats bar -->
+    <div id="stats-bar">
+      <div class="stat-cell"><div class="stat-label">Readings</div><div class="stat-value" id="stat-count">–</div></div>
+      <div class="stat-cell"><div class="stat-label">Min</div>    <div class="stat-value" id="stat-min">–</div></div>
+      <div class="stat-cell"><div class="stat-label">Avg</div>    <div class="stat-value" id="stat-avg">–</div></div>
+      <div class="stat-cell"><div class="stat-label">Max</div>    <div class="stat-value" id="stat-max">–</div></div>
+      <div class="stat-cell"><div class="stat-label">Last seen</div><div class="stat-value" id="stat-last" style="font-size:12px">–</div></div>
+    </div>
+
+    <!-- Mode tabs -->
+    <div id="mode-bar">
+      <button class="mode-btn active" data-mode="chart">📈 Chart</button>
+      <button class="mode-btn"        data-mode="map">🗺 Map</button>
+      <button class="mode-btn"        data-mode="table">📋 Table</button>
+    </div>
+
+    <!-- Chart view -->
+    <div id="chart-container" style="display:none">
+      <div id="chart-gps-only" style="display:none" class="chart-gps-only">
+        <div class="nodata-icon">🛰</div>
+        <p>No chart available for AirTag</p>
+        <small>Use the <strong>Map</strong> tab to view GPS history.</small>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title" id="chart-title-primary">Pressure (bar)</div>
+        <div class="chart-wrap"><canvas id="pressure-canvas"></canvas></div>
+      </div>
+      <div class="chart-card" id="temp-card" style="display:none">
+        <div class="chart-title">Temperature (°C)</div>
+        <div class="chart-wrap chart-wrap-sm"><canvas id="temp-canvas"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Map view -->
+    <div id="map-container" style="display:none">
+      <div id="leaflet-map"></div>
+    </div>
+
+    <!-- Table view -->
+    <div id="table-container" style="display:none">
+      <table id="data-table">
+        <thead id="table-head">
+          <tr>
+            <th>Time</th>
+            <th>Pressure</th>
+            <th>Status</th>
+            <th>Target</th>
+            <th>Temp</th>
+            <th>Battery</th>
+            <th>Wheel</th>
+            <th>GPS</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Empty / no-sensor state -->
+    <div id="empty-state" style="display:none">
+      <div class="empty-icon">📡</div>
+      <p>No sensor data</p>
+      <small>Select a sensor from the sidebar — data is recorded as soon as the NetMap app sends readings.</small>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- ── Admin panel modal ────────────────────────────── -->
+<div id="admin-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card modal-card-wide">
+    <div class="modal-header">
+      <h3>Admin Panel</h3>
+      <button class="modal-close" id="admin-modal-close">&#x2715;</button>
+    </div>
+    <div class="admin-section-header">
+      <h4>Users</h4>
+      <button id="admin-add-user-btn" class="modal-btn-primary admin-small-btn">+ New User</button>
+    </div>
+    <div id="admin-users-list" class="admin-users-list"></div>
+    <div class="admin-section-header admin-section-sep">
+      <h4>Assets</h4>
+      <button id="admin-add-asset-btn" class="modal-btn-primary admin-small-btn">+ New Asset</button>
+    </div>
+    <div id="admin-assets-list" class="admin-assets-list"></div>
+  </div>
+</div>
+
+<!-- ── New user modal ───────────────────────── -->
+<div id="new-user-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>New User</h3>
+      <button class="modal-close" id="new-user-modal-close">&#x2715;</button>
+    </div>
+    <form id="new-user-form" novalidate>
+      <div class="modal-field">
+        <label>Email *</label>
+        <input type="email" id="nu-email" required placeholder="user@example.com" autocomplete="off">
+      </div>
+      <div class="modal-field">
+        <label>Role</label>
+        <select id="nu-role">
+          <option value="user" selected>User</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div id="nu-error" class="auth-error" style="display:none"></div>
+      <div class="modal-actions">
+        <button type="button" id="new-user-cancel-btn" class="modal-btn-secondary">Cancel</button>
+        <button type="submit" id="nu-save-btn" class="modal-btn-primary">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
