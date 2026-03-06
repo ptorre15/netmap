@@ -404,10 +404,13 @@ struct AdminController: RouteCollection {
     }
 
     private func readablePassword() -> String {
-        let words = ["netmap","sensor","asset","secure","access","reader","fleet","track","admin","device"]
-        let word  = words.randomElement()!
-        let num   = Int.random(in: 100...999)
-        return "\(word)\(num)"
+        let upper  = Array("ABCDEFGHJKLMNPQRSTUVWXYZ")
+        let lower  = Array("abcdefghjkmnpqrstuvwxyz")
+        let digits = Array("23456789")
+        func group() -> String {
+            "\(upper.randomElement()!)\(lower.randomElement()!)\(digits.randomElement()!)"
+        }
+        return "\(group())-\(group())-\(group())-\(group())"
     }
 }
 

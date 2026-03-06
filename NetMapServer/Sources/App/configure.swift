@@ -104,6 +104,12 @@ public func configure(_ app: Application) async throws {
         }
     }
 
+    // ── Safety check: refuse to start in production with the default key ─
+    if app.environment == .production && app.currentAPIKey == "netmap-dev" {
+        app.logger.critical("Refusing to start: default API key 'netmap-dev' must not be used in production. Set the API_KEY environment variable.")
+        throw Abort(.internalServerError, reason: "Insecure default API key in production.")
+    }
+
     // ── Periodic token cleanup ───────────────────────────────────────────
     app.lifecycle.use(TokenCleanupLifecycle())
 

@@ -24,12 +24,22 @@ struct AuthController: RouteCollection {
     // MARK: - POST /api/auth/login
 
     func login(req: Request) async throws -> LoginResponse {
+        let ip = req.remoteAddress?.ipAddress ?? "unknown"
+        guard await !LoginRateLimiter.shared.isBlocked(ip: ip) else {
+            throw Abort(.tooManyRequests, reason: "Too many failed login attempts. Try again in 60 seconds.")
+        }
         let body = try req.content.decode(LoginPayload.self)
         guard let user = try await User.query(on: req.db)
                 .filter(\.$email == body.email.lowercased()).first()
-        else { throw Abort(.unauthorized, reason: "Invalid credentials") }
-        guard try Bcrypt.verify(body.password, created: user.passwordHash)
-        else { throw Abort(.unauthorized, reason: "Invalid credentials") }
+        else {
+            await LoginRateLimiter.shared.recordFailure(ip: ip)
+            throw Abort(.unauthorized, reason: "Invalid credentials")
+        }
+        guard try Bcrypt.verify(body.password, created: user.passwordHash) else {
+            await LoginRateLimiter.shared.recordFailure(ip: ip)
+            throw Abort(.unauthorized, reason: "Invalid credentials")
+        }
+        await LoginRateLimiter.shared.reset(ip: ip)
         try await UserToken.query(on: req.db).filter(\.$userID == user.id!).delete()
         let tok = UserToken(value: randomToken(), userID: user.id!, email: user.email, role: user.role)
         try await tok.save(on: req.db)
@@ -44,8 +54,8 @@ struct AuthController: RouteCollection {
         else { throw Abort(.forbidden, reason: "Server already configured. Use /api/auth/login.") }
         let body  = try req.content.decode(LoginPayload.self)
         let email = body.email.lowercased().trimmingCharacters(in: .whitespaces)
-        guard email.contains("@"), body.password.count >= 6
-        else { throw Abort(.badRequest, reason: "Valid email required, password >= 6 chars.") }
+        guard email.contains("@"), body.password.count >= 12
+        else { throw Abort(.badRequest, reason: "Valid email required, password >= 12 chars.") }
         let user = User(email: email, passwordHash: try Bcrypt.hash(body.password), role: "admin")
         try await user.save(on: req.db)
         let tok = UserToken(value: randomToken(), userID: user.id!, email: user.email, role: user.role)
