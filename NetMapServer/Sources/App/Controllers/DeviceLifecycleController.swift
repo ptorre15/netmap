@@ -4,7 +4,7 @@ import SQLKit
 
 // MARK: - Model
 
-final class DeviceLifecycleEvent: Model, Content {
+final class DeviceLifecycleEvent: Model, Content, @unchecked Sendable {
     static let schema = "device_lifecycle_events"
 
     @ID(key: .id)                                var id:              UUID?

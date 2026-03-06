@@ -30,7 +30,7 @@ struct SensorPayload: Content {
 
 // MARK: - Fluent Model (SQLite row)
 
-final class SensorReading: Model, Content {
+final class SensorReading: Model, Content, @unchecked Sendable {
     static let schema = "sensor_readings"
 
     @ID(key: .id)                                  var id:               UUID?

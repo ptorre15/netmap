@@ -19,7 +19,7 @@ func behaviorTypeName(_ raw: Int) -> String {
 
 // MARK: - Model
 
-final class DriverBehaviorEvent: Model, Content {
+final class DriverBehaviorEvent: Model, Content, @unchecked Sendable {
     static let schema = "driver_behavior_events"
 
     @ID(key: .id)                              var id:              UUID?

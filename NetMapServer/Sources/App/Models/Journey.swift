@@ -42,7 +42,7 @@ struct VehicleEventPayload: Content {
 
 // MARK: - Fluent Model
 
-final class VehicleEvent: Model, Content {
+final class VehicleEvent: Model, Content, @unchecked Sendable {
     static let schema = "vehicle_events"
 
     @ID(key: .id)                                  var id:                 UUID?
