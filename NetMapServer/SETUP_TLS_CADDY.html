@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetMap — Setup TLS avec Caddy</title>
+  <style>
+    :root {
+      --navy:   #003189;
+      --yellow: #FFD900;
+      --green:  #2e7d32;
+      --red:    #c62828;
+      --bg:     #f5f6fa;
+      --card:   #ffffff;
+      --border: #e0e3eb;
+      --text:   #1a1a2e;
+      --muted:  #6b7280;
+      --font:   'Segoe UI', Roboto, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; line-height: 1.65; }
+
+    header { background: var(--navy); color: #fff; }
+    .header-stripe { background: var(--yellow); height: 5px; }
+    .header-body { padding: 32px 48px 24px; }
+    .header-body h1 { font-size: 24px; font-weight: 700; }
+    .header-body h1 span { color: var(--yellow); }
+    .header-body p { color: rgba(255,255,255,.7); font-size: 13px; margin-top: 6px; }
+
+    main { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 1.8px;
+      text-transform: uppercase; color: var(--navy);
+      border-bottom: 2px solid var(--yellow); padding-bottom: 5px;
+      margin: 36px 0 18px;
+    }
+
+    /* Steps */
+    .steps { display: flex; flex-direction: column; gap: 0; }
+
+    .step {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 0;
+    }
+
+    .step-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .step-num {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--navy);
+      color: #fff;
+      font-size: 14px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      z-index: 1;
+    }
+
+    .step-line {
+      width: 2px;
+      flex: 1;
+      background: var(--border);
+      margin: 4px 0;
+    }
+
+    .step:last-child .step-line { display: none; }
+
+    .step-body {
+      padding: 0 0 28px 16px;
+    }
+
+    .step-body h3 {
+      font-size: 15px; font-weight: 700; color: var(--navy);
+      margin-bottom: 8px; padding-top: 6px;
+    }
+
+    .step-body p { font-size: 14px; color: var(--text); margin-bottom: 8px; }
+
+    .step-body ul { padding-left: 18px; margin-bottom: 10px; }
+    .step-body li { font-size: 14px; margin-bottom: 4px; }
+
+    /* Code */
+    pre {
+      background: #1a1a2e; color: #e8eaf6;
+      border-radius: 6px; padding: 14px 16px;
+      font-size: 12.5px; line-height: 1.55;
+      overflow-x: auto; margin: 10px 0;
+      font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    }
+    code {
+      background: #eef1f8; color: var(--navy);
+      padding: 2px 5px; border-radius: 3px;
+      font-size: 12.5px; font-family: Consolas, monospace;
+    }
+    pre code { background: none; color: inherit; padding: 0; }
+
+    /* Alerts */
+    .alert {
+      border-radius: 6px; padding: 12px 16px; margin: 10px 0;
+      font-size: 13.5px; display: flex; gap: 10px; align-items: flex-start;
+    }
+    .alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 2px; }
+    .alert-warn  { background: #fff8e1; border-left: 4px solid #f9a825; }
+    .alert-info  { background: #e8f0fe; border-left: 4px solid var(--navy); }
+    .alert-ok    { background: #e8f5e9; border-left: 4px solid var(--green); }
+    .alert-danger{ background: #fdecea; border-left: 4px solid var(--red); }
+
+    /* Info card */
+    .info-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 18px 22px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 14px 24px; margin-bottom: 20px;
+    }
+    .info-card .item strong {
+      display: block; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--muted); margin-bottom: 3px;
+    }
+    .info-card .item span {
+      font-size: 14px; font-weight: 600; color: var(--text);
+      font-family: Consolas, monospace;
+    }
+
+    /* Checklist */
+    .checklist { list-style: none; padding: 0; }
+    .checklist li {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li input[type=checkbox] {
+      width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px;
+      accent-color: var(--navy); cursor: pointer;
+    }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; background: var(--card);
+      border-radius: 8px; overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    thead th {
+      background: var(--navy); color: #fff;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+      padding: 10px 14px; text-align: left;
+    }
+    td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+
+    footer {
+      background: var(--navy); color: rgba(255,255,255,.6);
+      text-align: center; padding: 14px; font-size: 12px;
+    }
+    footer span { color: var(--yellow); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-stripe"></div>
+  <div class="header-body">
+    <h1>NetMap — Setup TLS avec <span>Caddy</span></h1>
+    <p>Reverse proxy HTTPS automatique · IP fixe · nip.io · Let's Encrypt · 3 mars 2026</p>
+  </div>
+</header>
+
+<main>
+
+  <h2 class="section-title">Informations réseau</h2>
+
+  <div class="info-card">
+    <div class="item"><strong>IP publique</strong><span>92.137.172.240</span></div>
+    <div class="item"><strong>Domaine nip.io</strong><span>92-137-172-240.nip.io</span></div>
+    <div class="item"><strong>URL finale</strong><span>https://92-137-172-240.nip.io</span></div>
+    <div class="item"><strong>Port Vapor</strong><span>127.0.0.1:8092 (local uniquement)</span></div>
+    <div class="item"><strong>Caddy écoute</strong><span>:80 (challenge) + :443 (HTTPS)</span></div>
+    <div class="item"><strong>Caddyfile</strong><span>NetMapServer/Caddyfile</span></div>
+  </div>
+
+  <div class="alert alert-info">
+    <span class="alert-icon">ℹ</span>
+    <div><strong>nip.io</strong> — aucune inscription requise. Le domaine <code>92-137-172-240.nip.io</code> se résout automatiquement vers <code>92.137.172.240</code>. Let's Encrypt l'accepte pour émettre un certificat valide.</div>
+  </div>
+
+  <!-- ── STEPS ── -->
+  <h2 class="section-title">Procédure d'installation</h2>
+
+  <div class="steps">
+
+    <!-- 1 -->
+    <div class="step">
+      <div class="step-left"><div class="step-num">1</div><div class="step-line"></div></div>
+      <div class="step-body">
+        <h3>Ouvrir les ports 80 et 443 sur la box</h3>
+        <p>Dans l'interface admin de votre routeur (généralement <code>http://192.168.1.1</code>), section <strong>NAT / Redirection de ports</strong> :</p>
+        <table>
+          <thead><tr><th>Port externe</th><th>Protocole</th><th>IP locale du Mac</th><th>Port interne</th></tr></thead>
+          <tbody>
+            <tr><td>80</td><td>TCP</td><td>(voir ci-dessous)</td><td>80</td></tr>
+            <tr><td>443</td><td>TCP</td><td>(voir ci-dessous)</td><td>443</td></tr>
+          </tbody>
+        </table>
+        <p style="margin-top:10px">Pour connaître l'IP locale du Mac :</p>
+        <pre><code>ipconfig getifaddr en0
+# Exemple de résultat : 192.168.1.42</code></pre>
+        <div class="alert alert-warn">
+          <span class="alert-icon">⚠</span>
+          <div>Attribuer une IP locale fixe (bail DHCP statique) au Mac dans la config de la box, pour que la règle NAT reste valide après un redémarrage.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="step">
+      <div class="step-left"><div class="step-num">2</div><div class="step-line"></div></div>
+      <div class="step-body">
+        <h3>Installer Caddy via Homebrew</h3>
+        <pre><code>brew install caddy</code></pre>
+        <p>Vérifier l'installation :</p>
+        <pre><code>caddy version
+# caddy v2.x.x ...</code></pre>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="step">
+      <div class="step-left"><div class="step-num">3</div><div class="step-line"></div></div>
+      <div class="step-body">
+        <h3>Vérifier le Caddyfile</h3>
+        <p>Le fichier <code>NetMapServer/Caddyfile</code> est déjà configuré pour ce déploiement :</p>
+        <pre><code>92-137-172-240.nip.io {
+    reverse_proxy localhost:8092
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options    "nosniff"
+        X-Frame-Options           "DENY"
+        Referrer-Policy           "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    encode gzip zstd
+
+    log {
+        output file /var/log/caddy/netmap_access.log
+        format json
+    }
+}</code></pre>
+        <p>Valider la syntaxe :</p>
+        <pre><code>cd /Users/phil/Projects/hub/NetMapServer
+caddy validate --config Caddyfile --adapter caddyfile</code></pre>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="step">
+      <div class="step-left"><div class="step-num">4</div><div class="step-line"></div></div>
+      <div class="step-body">
+        <h3>S'assurer que Vapor écoute sur 127.0.0.1</h3>
+        <p>Le code <code>configure.swift</code> a déjà été mis à jour. Vapor bind désormais sur <code>127.0.0.1:8092</code> par défaut. Vérifier que le serveur Vapor est démarré :</p>
+        <pre><code># Tester la connectivité locale
+curl -s http://127.0.0.1:8092/api/sensors/latest | head -c 200</code></pre>
+        <div class="alert alert-warn">
+          <span class="alert-icon">⚠</span>
+          <div>Si Vapor n'est pas accessible sur <code>127.0.0.1:8092</code>, Caddy renverra des erreurs 502. Démarrer Vapor en premier.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="step">
+      <div class="step-left"><div class="step-num">5</div><div class="step-line"></div></div>
+      <div class="step-body">
+        <h3>Lancer Caddy</h3>
+        <div class="alert alert-info">
+          <span class="alert-icon">ℹ</span>
+          <div>Caddy a besoin des ports 80 et 443. Sur macOS, les ports &lt; 1024 nécessitent <code>sudo</code>.</div>
+        </div>
+        <pre><code>cd /Users/phil/Projects/hub/NetMapServer
+sudo caddy run --config Caddyfile --adapter caddyfile</code></pre>
+        <p>Lors du premier démarrage, Caddy :</p>
+        <ul>
+          <li>Contacte Let's Encrypt via le challenge HTTP-01 (port 80)</li>
+          <li>Obtient un certificat pour <code>92-137-172-240.nip.io</code></li>
+          <li>Active le HTTPS sur le port 443</li>
+          <li>Redirige automatiquement HTTP → HTTPS</li>
+        </ul>
+        <p>Pour lancer en arrière-plan comme service système :</p>
+        <pre><code>sudo caddy start --config /Users/phil/Projects/hub/NetMapServer/Caddyfile --adapter caddyfile</code></pre>
+      </div>
+    </div>
+
+    <!-- 6 -->
+    <div class="step">
+      <div class="step-left"><div class="step-num">6</div><div class="step-line"></div></div>
+      <div class="step-body">
+        <h3>Tester le HTTPS</h3>
+        <pre><code># Tester depuis une machine externe (ou depuis le Mac en substituant l'IP)
+curl -sv https://92-137-172-240.nip.io/api/sensors/latest 2>&1 | grep -E "SSL|HTTP|issuer"</code></pre>
+        <p>Résultat attendu :</p>
+        <pre><code>* SSL connection using TLSv1.3 / ...
+* Server certificate:
+*  issuer: C=US; O=Let's Encrypt; CN=R11
+*  subject: CN=92-137-172-240.nip.io
+*  expire date: Jun  3 2026
+< HTTP/2 200</code></pre>
+        <div class="alert alert-ok">
+          <span class="alert-icon">✅</span>
+          <div>Si vous voyez <strong>HTTP/2 200</strong> et l'issuer <em>Let's Encrypt</em>, le setup est complet et conforme RED art. 3(3)(d)(e)(f).</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7 -->
+    <div class="step">
+      <div class="step-left"><div class="step-num">7</div><div class="step-line"></div></div>
+      <div class="step-body">
+        <h3>Démarrage automatique au boot macOS</h3>
+        <p>Pour que Caddy redémarre automatiquement avec le Mac :</p>
+        <pre><code># Créer un LaunchDaemon (nécessite sudo)
+sudo tee /Library/LaunchDaemons/org.netmap.caddy.plist &lt;&lt;'EOF'
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd"&gt;
+&lt;plist version="1.0"&gt;
+&lt;dict&gt;
+  &lt;key&gt;Label&lt;/key&gt;
+  &lt;string&gt;org.netmap.caddy&lt;/string&gt;
+  &lt;key&gt;ProgramArguments&lt;/key&gt;
+  &lt;array&gt;
+    &lt;string&gt;/opt/homebrew/bin/caddy&lt;/string&gt;
+    &lt;string&gt;run&lt;/string&gt;
+    &lt;string&gt;--config&lt;/string&gt;
+    &lt;string&gt;/Users/phil/Projects/hub/NetMapServer/Caddyfile&lt;/string&gt;
+    &lt;string&gt;--adapter&lt;/string&gt;
+    &lt;string&gt;caddyfile&lt;/string&gt;
+  &lt;/array&gt;
+  &lt;key&gt;RunAtLoad&lt;/key&gt;
+  &lt;true/&gt;
+  &lt;key&gt;KeepAlive&lt;/key&gt;
+  &lt;true/&gt;
+  &lt;key&gt;StandardOutPath&lt;/key&gt;
+  &lt;string&gt;/var/log/caddy/caddy.log&lt;/string&gt;
+  &lt;key&gt;StandardErrorPath&lt;/key&gt;
+  &lt;string&gt;/var/log/caddy/caddy.err&lt;/string&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;
+EOF
+
+sudo mkdir -p /var/log/caddy
+sudo launchctl load /Library/LaunchDaemons/org.netmap.caddy.plist</code></pre>
+        <div class="alert alert-info">
+          <span class="alert-icon">ℹ</span>
+          <div>Caddy renouvelle automatiquement les certificats Let's Encrypt avant expiration (~30 jours avant). <strong>Aucun cron ni intervention manuelle nécessaire.</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8 -->
+    <div class="step">
+      <div class="step-left"><div class="step-num">8</div><div class="step-line"></div></div>
+      <div class="step-body">
+        <h3>Mettre à jour les clients (tracker GPS + app iOS)</h3>
+        <p>Remplacer l'URL du serveur dans :</p>
+        <ul>
+          <li><strong>GPS tracker</strong> : configuration du firmware — remplacer <code>http://92.137.172.240:8092</code> par <code>https://92-137-172-240.nip.io</code></li>
+          <li><strong>App iOS NetMap</strong> : <code>ServerSettingsView.swift</code> ou la valeur par défaut dans <code>NetMapServerClient.swift</code></li>
+        </ul>
+        <pre><code>// NetMapServerClient.swift — exemple
+let baseURL = "https://92-137-172-240.nip.io"</code></pre>
+        <div class="alert alert-warn">
+          <span class="alert-icon">⚠</span>
+          <div>Si le firmware du tracker GPS ne supporte pas SNI ou TLS, vérifier dans sa documentation. La plupart des trackers modernes supportent HTTPS. Tester avec <code>curl -v https://92-137-172-240.nip.io/api/records</code> depuis le tracker ou un équivalent.</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /steps -->
+
+  <!-- ── CHECKLIST ── -->
+  <h2 class="section-title">Checklist de déploiement</h2>
+
+  <div style="background:var(--card); border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+    <ul class="checklist">
+      <li><input type="checkbox"> Port 80 ouvert sur la box (NAT → IP locale du Mac)</li>
+      <li><input type="checkbox"> Port 443 ouvert sur la box (NAT → IP locale du Mac)</li>
+      <li><input type="checkbox"> IP locale du Mac fixée (bail DHCP statique)</li>
+      <li><input type="checkbox"> <code>brew install caddy</code> exécuté</li>
+      <li><input type="checkbox"> Vapor démarré et accessible sur <code>127.0.0.1:8092</code></li>
+      <li><input type="checkbox"> <code>caddy validate --config Caddyfile --adapter caddyfile</code> → OK</li>
+      <li><input type="checkbox"> <code>sudo caddy start ...</code> exécuté → certificat obtenu</li>
+      <li><input type="checkbox"> Test HTTPS depuis l'extérieur → HTTP/2 200 + Let's Encrypt</li>
+      <li><input type="checkbox"> LaunchDaemon installé (démarrage auto au boot)</li>
+      <li><input type="checkbox"> URL serveur mise à jour dans le firmware du tracker GPS</li>
+      <li><input type="checkbox"> URL serveur mise à jour dans l'app iOS</li>
+    </ul>
+  </div>
+
+  <!-- ── DÉPANNAGE ── -->
+  <h2 class="section-title">Dépannage fréquent</h2>
+
+  <div style="display:flex; flex-direction:column; gap:12px;">
+    <div class="alert alert-warn">
+      <span class="alert-icon">⚠</span>
+      <div><strong>Caddy ne peut pas obtenir le certificat</strong> — Le challenge HTTP-01 échoue. Vérifier : (1) port 80 ouvert sur la box, (2) aucun autre service n'écoute sur le port 80 du Mac (<code>sudo lsof -i :80</code>), (3) pare-feu macOS désactivé ou avec règle entrante sur port 80.</div>
+    </div>
+    <div class="alert alert-warn">
+      <span class="alert-icon">⚠</span>
+      <div><strong>502 Bad Gateway</strong> — Caddy fonctionne mais Vapor est arrêté ou écoute sur la mauvaise adresse. Vérifier : <code>curl http://127.0.0.1:8092/</code>. Si <code>BIND_HOST</code> est défini à <code>0.0.0.0</code> pour les tests, le remettre à <code>127.0.0.1</code>.</div>
+    </div>
+    <div class="alert alert-warn">
+      <span class="alert-icon">⚠</span>
+      <div><strong>IP publique a changé</strong> — Si l'IP change (coupure, reboot box), le domaine <code>nip.io</code> ne sera plus valide. Contacter le FAI pour confirmer que l'IP est bien fixe, ou envisager DuckDNS si l'IP n'est pas garantie fixe.</div>
+    </div>
+    <div class="alert alert-info">
+      <span class="alert-icon">ℹ</span>
+      <div><strong>Logs Caddy en temps réel</strong> — <code>tail -f /var/log/caddy/caddy.log</code> ou <code>sudo launchctl log show org.netmap.caddy</code>.</div>
+    </div>
+  </div>
+
+  <!-- ── CONFORMITÉ ── -->
+  <h2 class="section-title">Impact sur la conformité RED</h2>
+
+  <table>
+    <thead><tr><th>Finding</th><th>Avant</th><th>Après ce setup</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>F1 — Chiffrement en transit</td>
+        <td>🔴 HTTP plain</td>
+        <td>✅ TLS 1.3 / Let's Encrypt</td>
+      </tr>
+      <tr>
+        <td>F12 — Exposition 0.0.0.0</td>
+        <td>🟢 Corrigé dans configure.swift</td>
+        <td>✅ Vapor bind 127.0.0.1 uniquement</td>
+      </tr>
+      <tr>
+        <td>Headers sécurité (HSTS, X-Frame…)</td>
+        <td>❌ Absents</td>
+        <td>✅ Ajoutés par le Caddyfile</td>
+      </tr>
+      <tr>
+        <td>Compression</td>
+        <td>❌ Aucune</td>
+        <td>✅ gzip + zstd via Caddy</td>
+      </tr>
+    </tbody>
+  </table>
+
+</main>
+
+<footer>
+  NetMap — Guide déploiement TLS Caddy · <span>3 mars 2026</span>
+</footer>
+
+</body>
+</html>

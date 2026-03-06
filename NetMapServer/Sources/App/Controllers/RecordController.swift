@@ -14,6 +14,29 @@ struct APIKeyMiddleware: AsyncMiddleware {
     }
 }
 
+/// Accepts either a valid X-API-Key header OR a Bearer token with admin role.
+/// Used for destructive operations that should be accessible from both tracker devices and the web dashboard admin.
+struct APIKeyOrAdminMiddleware: AsyncMiddleware {
+    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        // Accept valid API key
+        let currentKey = request.application.currentAPIKey
+        if request.headers.first(name: "X-API-Key") == currentKey {
+            return try await next.respond(to: request)
+        }
+        // Accept admin Bearer token
+        if let bearer = request.headers.bearerAuthorization,
+           let token  = try await UserToken.query(on: request.db)
+               .filter(\.$value     == bearer.token)
+               .filter(\.$expiresAt >  Date())
+               .first(),
+           token.role == "admin" {
+            request.authUser = AuthUser(userID: token.userID, email: token.email, role: token.role)
+            return try await next.respond(to: request)
+        }
+        throw Abort(.unauthorized, reason: "Valid API key or admin Bearer token required.")
+    }
+}
+
 // MARK: - Sensor summary (used by web dashboard)
 
 struct SensorStat: Content {
@@ -36,6 +59,7 @@ struct SensorStat: Content {
     var latestTotalSeconds:  Int?       // Stihl total operating / discharge time (s)
     var latestTimestamp:     Date
     var readingCount:        Int
+    var latestGpsSatellites: Int?          // GPS tracker: satellites in view
     var latestLatitude:      Double?
     var latestLongitude:     Double?
 }
@@ -60,6 +84,15 @@ struct RecordController: RouteCollection {
         protected.post(use: createSingle)           // POST /api/records
         protected.post("batch", use: createBatch)   // POST /api/records/batch
         protected.delete("purge", use: purge)       // DELETE /api/records/purge
+
+        // Pairing registration (no BLE data required)
+        let sensorAPI = routes.grouped("api", "sensors").grouped(APIKeyMiddleware())
+        sensorAPI.post("pair",          use: registerPairing)     // POST /api/sensors/pair
+
+        // DELETE accepts both API key (from mobile app) and admin Bearer token (from web dashboard)
+        routes.grouped("api", "sensors")
+              .grouped(APIKeyOrAdminMiddleware())
+              .delete("pair", ":sensorID", use: unregisterPairing) // DELETE /api/sensors/pair/:sensorID
 
         // Public reads
         api.get(use: list)                                       // GET /api/records
@@ -94,7 +127,12 @@ struct RecordController: RouteCollection {
             }
         }
         try await upsertVehicles(from: payloads, on: req.db)
-        req.logger.info("Batch saved: \(payloads.count) records")
+        // Log one line per brand so the web log viewer can filter by category
+        let byBrand = Dictionary(grouping: payloads, by: \.brand)
+        for (brand, items) in byBrand.sorted(by: { $0.key < $1.key }) {
+            let tag = ["michelin", "ela", "stihl", "continental", "bridgestone", "pirelli"].contains(brand) ? "tms" : brand
+            req.logger.info("📦 [\(tag)] \(brand)×\(items.count)")
+        }
         return .created
     }
 
@@ -181,6 +219,7 @@ struct RecordController: RouteCollection {
             var charging_cycles:     Int?
             var product_variant:     String?
             var total_seconds:       Int?
+            var gps_satellites:      Int?
             var timestamp:           String
             var latitude:            Double?
             var longitude:           Double?
@@ -202,7 +241,7 @@ struct RecordController: RouteCollection {
                    sr.wheel_position, sr.pressure_bar, sr.temperature_c, sr.vbatt_volts,
                    sr.target_pressure_bar, sr.battery_pct, sr.charge_state, sr.sensor_name,
                    sr.health_pct, sr.charging_cycles, sr.product_variant,
-                   sr.total_seconds,
+                   sr.total_seconds, sr.gps_satellites,
                    sr.timestamp, sr.latitude, sr.longitude,
                    grp.reading_count,
                    COALESCE(v.asset_type_id, 'vehicle') AS asset_type_id
@@ -223,7 +262,10 @@ struct RecordController: RouteCollection {
         let isoBasic = ISO8601DateFormatter()
 
         return rows.map { r in
-            let ts = isoFull.date(from: r.timestamp) ?? isoBasic.date(from: r.timestamp) ?? Date()
+            let ts = isoFull.date(from: r.timestamp)
+                  ?? isoBasic.date(from: r.timestamp)
+                  ?? Double(r.timestamp).map { Date(timeIntervalSince1970: $0) }
+                  ?? Date()
             return SensorStat(
                 sensorID:           r.sensor_id,
                 vehicleID:          r.vehicle_id,
@@ -241,11 +283,12 @@ struct RecordController: RouteCollection {
                 latestHealthPct:     r.health_pct,
                 latestChargingCycles: r.charging_cycles,
                 latestProductVariant: r.product_variant,
-                latestTotalSeconds:  r.total_seconds,
-                latestTimestamp:     ts,
-                readingCount:        r.reading_count,
-                latestLatitude:      r.latitude,
-                latestLongitude:     r.longitude
+                latestTotalSeconds:   r.total_seconds,
+                latestTimestamp:      ts,
+                readingCount:         r.reading_count,
+                latestGpsSatellites:  r.gps_satellites,
+                latestLatitude:       r.latitude,
+                latestLongitude:      r.longitude
             )
         }
     }
@@ -301,6 +344,75 @@ struct RecordController: RouteCollection {
             readingCount: readings.count,
             message: message
         )
+    }
+
+    // MARK: - Pairing registration
+
+    /// POST /api/sensors/pair
+    /// Registers a sensor <-> vehicle pairing immediately, without needing a live BLE reading.
+    /// Creates/updates a SensorReading row with null pressure so the sensor appears in
+    /// GET /api/sensors/latest and is visible in the web dashboard right away.
+    func registerPairing(req: Request) async throws -> HTTPStatus {
+        struct PairingPayload: Content {
+            var sensorID:          String
+            var vehicleID:         String
+            var vehicleName:       String
+            var assetTypeID:       String?
+            var brand:             String
+            var wheelPosition:     String?
+            var targetPressureBar: Double?
+            var sensorName:        String?
+        }
+        let p = try req.content.decode(PairingPayload.self)
+        guard !p.sensorID.isEmpty, !p.vehicleID.isEmpty
+        else { throw Abort(.badRequest, reason: "sensorID and vehicleID are required") }
+
+        // Upsert the vehicle record so it exists in the vehicles table
+        let syntheticPayload = SensorPayload(
+            sensorID:      p.sensorID,
+            vehicleID:     p.vehicleID,
+            vehicleName:   p.vehicleName,
+            assetTypeID:   p.assetTypeID,
+            brand:         p.brand,
+            wheelPosition: p.wheelPosition,
+            pressureBar:   nil, temperatureC: nil, vbattVolts: nil,
+            targetPressureBar: p.targetPressureBar,
+            batteryPct:    nil, chargeState: nil,
+            sensorName:    p.sensorName,
+            healthPct:     nil, chargingCycles: nil,
+            productVariant: nil, totalSeconds: nil,
+            latitude:      nil, longitude: nil,
+            timestamp:     Date()
+        )
+        try await upsertVehicles(from: [syntheticPayload], on: req.db)
+
+        // Delete the previous pairing record for this sensor (if it existed on another vehicle)
+        // then insert a fresh one, so GET /api/sensors/latest always reflects the current pairing.
+        try await SensorReading.query(on: req.db)
+            .filter(\.$sensorID == p.sensorID)
+            .delete()
+
+        let r = SensorReading(from: syntheticPayload)
+        try await r.save(on: req.db)
+
+        req.logger.info("Pairing registered: sensor \(p.sensorID) -> vehicle \(p.vehicleName) (\(p.vehicleID))")
+        return .created
+    }
+
+    /// DELETE /api/sensors/pair/:sensorID
+    /// Removes all server-side readings for a sensor so it disappears from the dashboard.
+    func unregisterPairing(req: Request) async throws -> HTTPStatus {
+        guard let sensorID = req.parameters.get("sensorID") else {
+            throw Abort(.badRequest, reason: "sensorID path parameter is required")
+        }
+        let count = try await SensorReading.query(on: req.db)
+            .filter(\.$sensorID == sensorID)
+            .count()
+        try await SensorReading.query(on: req.db)
+            .filter(\.$sensorID == sensorID)
+            .delete()
+        req.logger.info("Unpairing: sensor \(sensorID) removed (\(count) readings deleted)")
+        return .noContent
     }
 
     // MARK: - Helpers

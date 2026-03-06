@@ -22,6 +22,7 @@ struct SensorPayload: Content {
     var chargingCycles:    Int?            // Stihl Smart Battery charge cycles
     var productVariant:    String?         // ELA product variant: "coin" | "puck" | "unknown"
     var totalSeconds:      Int?            // Stihl total operating / discharge time (seconds)
+    var gpsSatellites:     Int?            // GPS tracker: number of satellites in view
     var latitude:          Double?
     var longitude:         Double?
     var timestamp:         Date
@@ -49,6 +50,7 @@ final class SensorReading: Model, Content {
     @OptionalField(key: "charging_cycles")         var chargingCycles:   Int?
     @OptionalField(key: "product_variant")         var productVariant:   String?
     @OptionalField(key: "total_seconds")           var totalSeconds:     Int?
+    @OptionalField(key: "gps_satellites")          var gpsSatellites:    Int?
     @OptionalField(key: "latitude")                var latitude:         Double?
     @OptionalField(key: "longitude")               var longitude:        Double?
     @Field(key: "timestamp")                       var timestamp:        Date
@@ -73,6 +75,7 @@ final class SensorReading: Model, Content {
         chargingCycles    = p.chargingCycles
         productVariant    = p.productVariant
         totalSeconds      = p.totalSeconds
+        gpsSatellites     = p.gpsSatellites
         latitude          = p.latitude
         longitude         = p.longitude
         timestamp         = p.timestamp
@@ -160,6 +163,16 @@ struct AddTotalSecondsField: AsyncMigration {
     func revert(on db: Database) async throws { /* SQLite does not support DROP COLUMN */ }
 }
 
+// MARK: - v5 migration: add gps_satellites
+
+struct AddGpsSatellitesField: AsyncMigration {
+    func prepare(on db: Database) async throws {
+        guard let sql = db as? SQLDatabase else { return }
+        try await sql.raw("ALTER TABLE sensor_readings ADD COLUMN gps_satellites INTEGER").run()
+    }
+    func revert(on db: Database) async throws { /* SQLite does not support DROP COLUMN */ }
+}
+
 
 struct AddSensorDetailFields: AsyncMigration {
     func prepare(on db: Database) async throws {
@@ -170,3 +183,5 @@ struct AddSensorDetailFields: AsyncMigration {
     }
     func revert(on db: Database) async throws { /* SQLite does not support DROP COLUMN */ }
 }
+
+

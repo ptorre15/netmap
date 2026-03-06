@@ -2,13 +2,19 @@
 
 Cible supportée : **Ubuntu 22.04 LTS** et **Ubuntu 24.04 LTS**.
 
+Architecture :
+- **Vapor 4** écoute sur `localhost:8092` (non exposé directement)
+- **Caddy** sert le HTTPS public sur le port 443, reverse-proxy vers Vapor
+- Domaine public automatique via **nip.io** (ex: `92-137-172-240.nip.io`)
+
 ---
 
 ## Prérequis
 
 - Serveur Linux avec accès root
 - Accès SSH par clé publique depuis votre Mac
-- Port `8765` ouvert (ou configurez `PORT`)
+- Ports `80` et `443` ouverts (Caddy + Let's Encrypt)
+- IP publique fixe ou connue (pour le domaine nip.io)
 
 ---
 
@@ -56,7 +62,7 @@ Fichier : `/etc/netmap/netmap-server.env`
 
 | Variable | Défaut | Description |
 |---|---|---|
-| `PORT` | `8765` | Port d'écoute TCP |
+| `PORT` | `8092` | Port d'écoute TCP (Vapor, local uniquement) |
 | `DB_PATH` | `/opt/netmap/data/netmap_data.db` | Chemin de la base SQLite |
 | `API_KEY` | *(générée)* | Clé API requise par l'app iOS |
 
@@ -65,6 +71,31 @@ Après modification du fichier, redémarrer le service :
 ```bash
 sudo systemctl restart netmap-server
 ```
+
+---
+
+## Caddy (reverse proxy HTTPS)
+
+Caddy est installé séparément et gère le TLS automatiquement via Let's Encrypt.
+
+```bash
+# Installer Caddy sur Ubuntu
+apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+apt-get update && apt-get install -y caddy
+```
+
+Copier le `Caddyfile` (à la racine de `NetMapServer/`) vers `/etc/caddy/Caddyfile`, en remplaçant le domaine nip.io par l'IP publique du serveur :
+
+```bash
+sed 's/92-137-172-240/<VOTRE_IP_TIRETS>/g' Caddyfile > /etc/caddy/Caddyfile
+systemctl reload caddy
+```
+
+Le domaine `<IP-avec-tirets>.nip.io` se résout automatiquement vers l'IP correspondante — aucune configuration DNS requise.
+
+> Les NAT requis : port **80** TCP (challenge Let's Encrypt) et port **443** TCP (HTTPS).
 
 ---
 

@@ -1,45 +1,47 @@
 # NetMap Server — Caddy reverse proxy with automatic HTTPS
 #
 # Prerequisites:
-#   brew install caddy          (macOS)
-#   apt install caddy           (Debian/Ubuntu)
+#   brew install caddy
+#   sudo caddy run --config Caddyfile --adapter caddyfile
 #
-# Usage:
-#   caddy run --config Caddyfile --adapter caddyfile
+# Box NAT rules required:
+#   Port 80  TCP  →  <mac-local-ip>:80   (Let's Encrypt HTTP challenge)
+#   Port 443 TCP  →  <mac-local-ip>:443  (HTTPS traffic)
 #
-# Replace YOUR_DOMAIN with your actual domain (e.g. netmap.example.com).
-# Caddy will automatically obtain and renew a Let's Encrypt certificate.
+# Domain: 92-137-172-240.nip.io resolves automatically to 92.137.172.240
+# No DNS configuration needed — nip.io handles it.
 #
-# For local testing with a self-signed cert, replace the domain with:
+# For local testing only (no public domain), replace the domain with:
 #   localhost:8443
-# and run:
-#   caddy run --config Caddyfile --adapter caddyfile
+92-137-172-240.nip.io {
+	# Proxy everything to the Vapor server
+	reverse_proxy localhost:8092
 
-YOUR_DOMAIN {
-    # Proxy everything to the Vapor server
-    reverse_proxy localhost:8765
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
 
-    # Security headers
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        X-Content-Type-Options    "nosniff"
-        X-Frame-Options           "DENY"
-        Referrer-Policy           "strict-origin-when-cross-origin"
-        -Server
-    }
+	# Compress responses
+	encode gzip zstd
 
-    # Compress responses
-    encode gzip zstd
+	# No browser cache for local JS/CSS so fixes are picked up immediately
+	@localAssets path *.js *.css
+	header @localAssets Cache-Control "no-store, no-cache, must-revalidate"
 
-    # Logging
-    log {
-        output file /var/log/caddy/netmap_access.log {
-            roll_size    100mb
-            roll_keep    5
-            roll_keep_for 720h
-        }
-        format json
-    }
+	# Logging
+	log {
+		output file /var/log/caddy/netmap_access.log {
+			roll_size 100mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
+		format json
+	}
 }
 
 # ── Local development variant (no public domain needed) ──────────────────────
@@ -47,6 +49,6 @@ YOUR_DOMAIN {
 #
 # localhost:8443 {
 #     tls internal
-#     reverse_proxy localhost:8765
+#     reverse_proxy localhost:8092
 #     encode gzip
 # }

@@ -5,9 +5,11 @@ import FluentSQLiteDriver
 public func configure(_ app: Application) async throws {
 
     // ── TCP Port (override with PORT env var) ────────────────────────────
-    let port = Int(Environment.get("PORT") ?? "") ?? 8765
+    let port = Int(Environment.get("PORT") ?? "") ?? 8092
     app.http.server.configuration.port     = port
-    app.http.server.configuration.hostname = "0.0.0.0"
+    // Bind to localhost only — TLS is handled by nginx reverse proxy.
+    // Set BIND_HOST=0.0.0.0 env var to expose directly (dev/debug only).
+    app.http.server.configuration.hostname = Environment.get("BIND_HOST") ?? "127.0.0.1"
 
     // ── ISO-8601 JSON dates ──────────────────────────────────────────────
     let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
@@ -31,21 +33,29 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(MigrateUsernameToEmail())
     app.migrations.add(CreateAssetType())
     app.migrations.add(AddAssetFieldsToVehicle())
+    app.migrations.add(AddIconKeyToVehicle())
     app.migrations.add(CreateUserAsset())
     app.migrations.add(AddSensorBatteryFields())   // pressure_bar nullable + battery_pct + charge_state
     app.migrations.add(AddSensorDetailFields())    // health_pct + charging_cycles + product_variant
     app.migrations.add(AddTotalSecondsField())      // total operating / discharge time
+    app.migrations.add(AddGpsSatellitesField())     // GPS tracker: satellites in view
+    app.migrations.add(CreateVehicleEvent())        // vehicle telemetry events (journey_start / driving / journey_end)
+    app.migrations.add(MigrateVehicleEventSensorIDToIMEI()) // imei + sensor_name sur vehicle_events (migration depuis sensor_id)
+    app.migrations.add(AddDriverIdAndJourneyFuelToVehicleEvent()) // driver_id + journey_fuel_consumed_l
+    app.migrations.add(AddGpsSatellitesToVehicleEvents())         // gps_satellites on vehicle_events
+    app.migrations.add(CreateDriverBehaviorEvent())               // driver behavior alerts (separate table)
+    app.migrations.add(CreateDeviceLifecycleEvent())              // device power lifecycle events (boot/sleep/wake_up)
+    app.migrations.add(AddVehicleEventIndexes())                  // idx_ve_imei_ts + idx_ve_journey (README_JOURNEY_API.md)
+    app.migrations.add(AddGpsFixTypeToVehicleEvents())            // gps_fix_type on vehicle_events (spec v6)
+    app.migrations.add(AddGpsToDeviceLifecycleEvents())           // GPS fields + gps_fix_type on device_lifecycle_events (spec v6)
     try await app.autoMigrate()   // non-blocking in async context
 
     // ── Seed built-in asset types if absent ─────────────────────
-    let builtIns: [(id: String, name: String, img: String, brands: String)] = [
-        ("vehicle", "Vehicle",  "car.fill",                        "michelin,airtag,ela"),
-        ("tool",    "Tool",     "wrench.and.screwdriver.fill",     "airtag,ela,stihl"),
+    let builtIns: [(slug: String, name: String, img: String, brands: String)] = [
+        ("vehicle", "Vehicle", "car.fill",                    "michelin,airtag,ela"),
+        ("tool",    "Tool",    "wrench.and.screwdriver.fill", "airtag,ela,stihl"),
     ]
     for bi in builtIns {
-        guard let uuid = UUID(uuidString: bi.id) ?? Optional(UUID()) else { continue }
-        // Use a stable deterministic UUID derived from the name so re-seeding is idempotent.
-        // We just look up by name + isBuiltIn.
         let exists = try await AssetTypeModel.query(on: app.db)
             .filter(\.$name == bi.name)
             .filter(\.$isBuiltIn == true)
@@ -60,6 +70,25 @@ public func configure(_ app: Application) async throws {
             )
             try await t.save(on: app.db)
             app.logger.info("Seeded built-in asset type: \(bi.name)")
+        }
+    }
+
+    // ── Normalise vehicles.asset_type_id so iOS slugs always match ───────
+    // Built-in asset types get random UUIDs on first seed.
+    // Any vehicle whose asset_type_id is one of those UUIDs must be
+    // rewritten to the canonical slug ("vehicle", "tool", …) so the iOS
+    // app — which uses slug IDs — can display them correctly.
+    let allBuiltInTypes = try await AssetTypeModel.query(on: app.db)
+        .filter(\.$isBuiltIn == true).all()
+    if let sql = app.db as? SQLDatabase {
+        for t in allBuiltInTypes {
+            guard let uuid = t.id else { continue }
+            let slug = t.name.lowercased()
+            try await sql.raw("""
+                UPDATE vehicles SET asset_type_id = \(bind: slug)
+                WHERE asset_type_id = \(bind: uuid.uuidString)
+                AND asset_type_id != \(bind: slug)
+                """).run()
         }
     }
 

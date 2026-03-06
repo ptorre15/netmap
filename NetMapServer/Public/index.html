@@ -7,8 +7,9 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>�</text></svg>">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
-  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="style.css?v=65">
 </head>
 <body>
 
@@ -64,6 +65,12 @@
       <div class="modal-field" id="vf-type-row">
         <label>Asset Type</label>
         <select id="vf-type"></select>
+      </div>
+      <!-- Pictogram picker -->
+      <div class="modal-field" id="vf-picto-row">
+        <label>Pictogram</label>
+        <div id="vf-picto-grid"></div>
+        <input type="hidden" id="vf-icon-key">
       </div>
       <!-- Common -->
       <div class="modal-field">
@@ -143,6 +150,7 @@
   <button id="autorefresh-btn" class="icon-btn" title="Auto-refresh (30s)">⟳</button>
   <button id="refresh-btn"     class="icon-btn" title="Refresh now">↻</button>
   <button id="theme-btn"       class="icon-btn" title="Toggle theme">◑</button>
+  <button id="logs-btn"        class="icon-btn" title="Server logs" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 4a2 2 0 0 0 -2 2v3a2 3 0 0 1 -2 3a2 3 0 0 1 2 3v3a2 2 0 0 0 2 2"/><path d="M17 4a2 2 0 0 1 2 2v3a2 3 0 0 0 2 3a2 3 0 0 0 -2 3v3a2 2 0 0 1 -2 2"/></svg></button>
   <button id="admin-btn"       class="icon-btn" title="Admin panel" style="display:none">⚙</button>
   <div id="user-badge" class="user-badge" style="display:none">
     <span id="user-name" class="user-name"></span>
@@ -157,10 +165,9 @@
   <nav id="sidebar">
     <div class="sidebar-vehicle-bar">
       <select id="vehicle-select"><option value="">Loading…</option></select>
-      <button id="edit-vehicle-btn" class="icon-btn" title="Edit asset" style="display:none">✎</button>
-      <button id="add-vehicle-btn"  class="icon-btn" title="New asset"  style="display:none">＋</button>
+      <button id="add-vehicle-btn" class="icon-btn" title="New asset" style="display:none">＋</button>
     </div>
-    <div class="sidebar-header" id="sensors-header">Sensors</div>
+    <div id="asset-card"></div>
     <div id="sensor-list" style="flex:1;overflow-y:auto">
       <div class="sidebar-hint">Select an asset</div>
     </div>
@@ -173,38 +180,40 @@
     <div id="breadcrumb">–</div>
     <div id="sensor-info-card" style="display:none"></div>
 
-    <!-- Period selector -->
-    <div id="period-bar">
-      <button class="period-btn"        data-period="1H">1H</button>
-      <button class="period-btn active" data-period="24H">24H</button>
-      <button class="period-btn"        data-period="7D">7D</button>
-      <button class="period-btn"        data-period="30D">30D</button>
-      <button class="period-btn"        data-period="custom">Custom</button>
-      <span id="custom-range" style="display:none">
-        <label>From</label>
-        <input type="datetime-local" id="custom-from">
-        <label>To</label>
-        <input type="datetime-local" id="custom-to">
-      </span>
+    <!-- Toolbar: mode tabs left, period right -->
+    <div id="top-toolbar">
+      <div id="mode-bar">
+        <button class="mode-btn"        data-mode="map"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 18.5l-3 -1.5l-6 3v-13l6 -3l6 3l6 -3v7.5"/><path d="M9 4v13"/><path d="M15 7v5.5"/><path d="M21.121 20.121a3 3 0 1 0 -4.242 0c.418 .419 1.125 1.045 2.121 1.879c1.051 -.89 1.759 -1.516 2.121 -1.879"/><path d="M19 18v.01"/></svg> Map</button>
+        <button class="mode-btn active" data-mode="chart"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 19l16 0"/><path d="M4 15l4 -6l4 2l4 -5l4 4"/></svg> Chart</button>
+        <button class="mode-btn"        data-mode="wheels"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M3 12h6"/><path d="M15 12h6"/><path d="M13.6 9.4l3.4 -4.8"/><path d="M10.4 14.6l-3.4 4.8"/><path d="M7 4.6l3.4 4.8"/><path d="M13.6 14.6l3.4 4.8"/></svg> Tires</button>
+        <button class="mode-btn"        data-mode="table"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 5h8"/><path d="M13 9h5"/><path d="M13 15h8"/><path d="M13 19h5"/><path d="M3 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M3 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/></svg> Events</button>
+        <button class="mode-btn"        data-mode="alerts"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg> Alerts</button>
+        <button class="mode-btn"        data-mode="device"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 6a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -12"/><path d="M9 9h6v6h-6l0 -6"/><path d="M3 10h2"/><path d="M3 14h2"/><path d="M10 3v2"/><path d="M14 3v2"/><path d="M21 10h-2"/><path d="M21 14h-2"/><path d="M14 21v-2"/><path d="M10 21v-2"/></svg> System</button>
+        <button class="mode-btn"        data-mode="errors"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M10 10l4 4m0 -4l-4 4"/></svg> Errors</button>
+      </div>
+      <div id="period-bar">
+        <button class="period-btn"        data-period="1H">1H</button>
+        <button class="period-btn active" data-period="24H">24H</button>
+        <button class="period-btn"        data-period="7D">7D</button>
+        <button class="period-btn"        data-period="30D">30D</button>
+        <button class="period-btn"        data-period="custom">Custom</button>
+        <span id="custom-range" style="display:none">
+          <label>From</label>
+          <input type="datetime-local" id="custom-from">
+          <label>To</label>
+          <input type="datetime-local" id="custom-to">
+        </span>
+      </div>
     </div>
 
     <!-- Stats bar -->
     <div id="stats-bar">
-      <div class="stat-cell"><div class="stat-label">Readings</div><div class="stat-value" id="stat-count">–</div></div>
+      <div id="stat-count" style="display:none"></div>
+      <div id="stat-last" style="display:none"></div>
       <div class="stat-cell"><div class="stat-label">Min</div>    <div class="stat-value" id="stat-min">–</div></div>
       <div class="stat-cell"><div class="stat-label">Avg</div>    <div class="stat-value" id="stat-avg">–</div></div>
       <div class="stat-cell"><div class="stat-label">Max</div>    <div class="stat-value" id="stat-max">–</div></div>
-      <div class="stat-cell"><div class="stat-label">Last seen</div><div class="stat-value" id="stat-last" style="font-size:12px">–</div></div>
     </div>
-
-    <!-- Mode tabs -->
-    <div id="mode-bar">
-      <button class="mode-btn active" data-mode="chart">📈 Chart</button>
-      <button class="mode-btn"        data-mode="map">🗺 Map</button>
-      <button class="mode-btn"        data-mode="table">📋 Table</button>
-    </div>
-
-    <!-- Chart view -->
     <div id="chart-container" style="display:none">
       <div id="chart-gps-only" style="display:none" class="chart-gps-only">
         <div class="nodata-icon">🛰</div>
@@ -245,6 +254,18 @@
       </table>
     </div>
 
+    <!-- Alerts view -->
+    <div id="alerts-container" style="display:none"></div>
+
+    <!-- Device lifecycle view -->
+    <div id="device-container" style="display:none"></div>
+
+    <!-- Errors: events with invalid timestamp -->
+    <div id="errors-container" style="display:none"></div>
+
+    <!-- Tires TPMS overview -->
+    <div id="wheels-container" style="display:none"></div>
+
     <!-- Empty / no-sensor state -->
     <div id="empty-state" style="display:none">
       <div class="empty-icon">📡</div>
@@ -255,23 +276,46 @@
   </div><!-- /content -->
 </div><!-- /main -->
 
-<!-- ── Admin panel modal ────────────────────────────── -->
-<div id="admin-modal" class="modal-overlay" style="display:none">
-  <div class="modal-card modal-card-wide">
-    <div class="modal-header">
-      <h3>Admin Panel</h3>
-      <button class="modal-close" id="admin-modal-close">&#x2715;</button>
-    </div>
-    <div class="admin-section-header">
-      <h4>Users</h4>
+<!-- ── Admin drawer ─────────────────────────────────────── -->
+<div id="admin-backdrop" class="admin-backdrop" style="display:none"></div>
+<div id="admin-drawer" class="admin-drawer">
+  <div class="admin-drawer-header">
+    <span class="admin-drawer-title">Admin</span>
+    <button class="admin-drawer-close" id="admin-drawer-close">&#x2715;</button>
+  </div>
+  <div class="admin-tabs-bar">
+    <button class="admin-tab-btn" data-tab="users"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/></svg> Users<span class="admin-tab-count" id="admin-count-users"></span></button>
+    <button class="admin-tab-btn" data-tab="assets"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12l0 9"/><path d="M12 12l-8 -4.5"/><path d="M16 5.25l-8 4.5"/></svg> Assets<span class="admin-tab-count" id="admin-count-assets"></span></button>
+    <button class="admin-tab-btn" data-tab="trackers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 18l0 -3"/><path d="M10 18l0 -6"/><path d="M14 18l0 -9"/><path d="M18 18l0 -12"/></svg> Trackers<span class="admin-tab-count" id="admin-count-trackers"></span></button>
+  </div>
+  <!-- Users tab -->
+  <div class="admin-tab-pane" id="admin-tab-users">
+    <div class="admin-tab-toolbar">
       <button id="admin-add-user-btn" class="modal-btn-primary admin-small-btn">+ New User</button>
     </div>
     <div id="admin-users-list" class="admin-users-list"></div>
-    <div class="admin-section-header admin-section-sep">
-      <h4>Assets</h4>
+  </div>
+  <!-- Assets tab -->
+  <div class="admin-tab-pane" id="admin-tab-assets">
+    <div class="admin-tab-toolbar">
       <button id="admin-add-asset-btn" class="modal-btn-primary admin-small-btn">+ New Asset</button>
     </div>
     <div id="admin-assets-list" class="admin-assets-list"></div>
+  </div>
+  <!-- Trackers tab -->
+  <div class="admin-tab-pane" id="admin-tab-trackers">
+    <div class="admin-tab-toolbar">
+      <button id="admin-add-tracker-btn" class="modal-btn-primary admin-small-btn">+ New Tracker</button>
+    </div>
+    <div id="admin-new-tracker-form" class="admin-new-tracker-form" style="display:none">
+      <input type="text" id="nt-imei" placeholder="IMEI (e.g. 357312098765432)" autocomplete="off" spellcheck="false">
+      <select id="nt-vehicle"></select>
+      <input type="text" id="nt-name" placeholder="Name (optional)" autocomplete="off">
+      <button id="nt-save-btn" class="modal-btn-primary admin-small-btn">Register</button>
+      <button id="nt-cancel-btn" class="modal-btn admin-small-btn">Cancel</button>
+      <span id="nt-error" class="auth-error" style="display:none"></span>
+    </div>
+    <div id="admin-trackers-list" class="admin-trackers-list"></div>
   </div>
 </div>
 
@@ -303,9 +347,52 @@
   </div>
 </div>
 
+<!-- Toast notifications -->
+<div id="toast-container"></div>
+
+<!-- Delete confirmation modal -->
+<div id="del-modal">
+  <div id="del-modal-backdrop" class="del-modal-backdrop"></div>
+  <div class="del-modal-box">
+    <div class="del-modal-icon">🗑︎</div>
+    <div class="del-modal-title" id="del-modal-title"></div>
+    <div class="del-modal-body"  id="del-modal-body"></div>
+    <div class="del-modal-actions">
+      <button id="del-modal-cancel">Cancel</button>
+      <button id="del-modal-ok">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Server logs viewer ──────────────────────────────────── -->
+<div id="logs-overlay" class="logs-overlay" style="display:none" aria-modal="true" role="dialog">
+  <div class="logs-panel">
+    <div class="logs-toolbar">
+      <span class="logs-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;opacity:.7"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 4a2 2 0 0 0 -2 2v3a2 3 0 0 1 -2 3a2 3 0 0 1 2 3v3a2 2 0 0 0 2 2"/><path d="M17 4a2 2 0 0 1 2 2v3a2 3 0 0 0 2 3a2 3 0 0 0 -2 3v3a2 2 0 0 1 -2 2"/></svg>
+        Server Logs
+      </span>
+      <span id="logs-status" class="logs-status"></span>
+      <div class="logs-toolbar-actions">
+        <label class="logs-autoscroll-label"><input type="checkbox" id="logs-autoscroll" checked> Auto-scroll</label>
+        <button id="logs-clear-btn" class="logs-action-btn">Clear</button>
+        <button id="logs-close-btn" class="logs-action-btn logs-close">✕</button>
+      </div>
+    </div>
+    <div class="logs-filters">
+      <span class="logs-filter-label">Show:</span>
+      <button class="logs-filter-btn active" data-cat="tracker">Tracker</button>
+      <button class="logs-filter-btn active" data-cat="tms">TMS</button>
+      <button class="logs-filter-btn active" data-cat="airtag">AirTag</button>
+      <button class="logs-filter-btn active" data-cat="internal">Internal</button>
+      <button class="logs-filter-btn active" data-cat="other">Other</button>
+    </div>
+    <div id="logs-output" class="logs-output"></div>
+  </div>
+</div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=97"></script>
 </body>
 </html>

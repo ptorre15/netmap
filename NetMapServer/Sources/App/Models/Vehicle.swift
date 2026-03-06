@@ -22,6 +22,8 @@ final class Vehicle: Model, Content, @unchecked Sendable {
     // Tool-specific
     @OptionalField(key: "serial_number")       var serialNumber:  String?
     @OptionalField(key: "tool_type")           var toolType:      String?
+    // Pictogram key (e.g. "car", "suv", "hgv", "bike", …)
+    @OptionalField(key: "icon_key")            var iconKey:       String?
     // Metadata
     @Field(key: "created_by")                  var createdBy:     String
     @Timestamp(key: "created_at", on: .create) var createdAt:     Date?
@@ -33,6 +35,7 @@ final class Vehicle: Model, Content, @unchecked Sendable {
          brand: String? = nil, modelName: String? = nil, year: Int? = nil,
          vin: String? = nil, vrn: String? = nil,
          serialNumber: String? = nil, toolType: String? = nil,
+         iconKey: String? = nil,
          createdBy: String) {
         self.name         = name
         self.assetTypeID  = assetTypeID
@@ -43,6 +46,7 @@ final class Vehicle: Model, Content, @unchecked Sendable {
         self.vrn          = vrn
         self.serialNumber = serialNumber
         self.toolType     = toolType
+        self.iconKey      = iconKey
         self.createdBy    = createdBy
     }
 }
@@ -59,6 +63,7 @@ struct VehiclePayload: Content {
     var vrn:          String?
     var serialNumber: String?
     var toolType:     String?
+    var iconKey:      String?
 }
 
 // MARK: - Initial migration (original schema)
@@ -104,5 +109,20 @@ struct AddAssetFieldsToVehicle: AsyncMigration {
     }
     func revert(on db: Database) async throws {
         // SQLite does not support DROP COLUMN in all versions — no-op
+    }
+}
+
+// MARK: - Add icon_key column migration (v3)
+
+struct AddIconKeyToVehicle: AsyncMigration {
+    func prepare(on db: Database) async throws {
+        guard let sql = db as? SQLDatabase else {
+            try await db.schema(Vehicle.schema).field("icon_key", .string).update()
+            return
+        }
+        try await sql.raw("ALTER TABLE vehicles ADD COLUMN icon_key TEXT").run()
+    }
+    func revert(on db: Database) async throws {
+        // SQLite: no DROP COLUMN — no-op
     }
 }

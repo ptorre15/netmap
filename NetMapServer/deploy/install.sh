@@ -17,7 +17,7 @@ APP_USER="netmap"
 INSTALL_DIR="/opt/netmap"
 SERVICE_NAME="netmap-server"
 SWIFT_VERSION="6.0.3"          # https://swift.org/download/
-PORT="${PORT:-8765}"
+PORT="${PORT:-8092}"
 DATA_DIR="${DATA_DIR:-$INSTALL_DIR/data}"
 API_KEY="${API_KEY:-$(openssl rand -hex 20)}"
 

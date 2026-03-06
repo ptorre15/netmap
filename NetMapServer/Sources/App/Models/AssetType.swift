@@ -46,8 +46,11 @@ struct AssetTypeResponse: Content {
 
 extension AssetTypeModel {
     func toResponse() -> AssetTypeResponse {
-        AssetTypeResponse(
-            id:            self.id?.uuidString ?? "",
+        // Built-in types use their name slug ("vehicle", "tool") as canonical ID —
+        // this matches the iOS app's compiled-in AssetType constants.
+        let resolvedID = isBuiltIn ? name.lowercased() : (self.id?.uuidString ?? "")
+        return AssetTypeResponse(
+            id:            resolvedID,
             name:          name,
             systemImage:   systemImage,
             allowedBrands: allowedBrands.split(separator: ",").map(String.init),

@@ -15,7 +15,6 @@ function clearAuth() {
 function applyAuthUI() {
   const badge  = $('user-badge');
   const addBtn = $('add-vehicle-btn');
-  const editBt = $('edit-vehicle-btn');
   const adminBtn = $('admin-btn');
   if (AUTH.token) {
     $('user-name').textContent = AUTH.username;
@@ -25,11 +24,14 @@ function applyAuthUI() {
     badge.style.display = 'flex';
     if (addBtn)   addBtn.style.display   = AUTH.isAdmin ? '' : 'none';
     if (adminBtn) adminBtn.style.display = AUTH.isAdmin ? '' : 'none';
+    const logsBtn = $('logs-btn');
+    if (logsBtn) logsBtn.style.display = AUTH.isAdmin ? '' : 'none';
   } else {
     badge.style.display = 'none';
     if (addBtn)   addBtn.style.display   = 'none';
-    if (editBt)   editBt.style.display   = 'none';
     if (adminBtn) adminBtn.style.display = 'none';
+    const logsBtn = $('logs-btn');
+    if (logsBtn) logsBtn.style.display = 'none';
   }
 }
 
@@ -94,8 +96,8 @@ function openVehicleModal(vehicle = null) {
       if (byName) sel.value = byName.id;
     }
   }
-  // Hide type row when editing (type cannot change)
-  $('vf-type-row').style.display = vehicle ? 'none' : '';
+  // Always show type selector (admins can change the type)
+  $('vf-type-row').style.display = '';
   updateModalFields(sel.value || currentTypeID);
 
   // Populate fields
@@ -107,6 +109,8 @@ function openVehicleModal(vehicle = null) {
   $('vf-vin').value        = vehicle?.vin          ?? '';
   $('vf-serial').value     = vehicle?.serialNumber ?? '';
   $('vf-tool-type').value  = vehicle?.toolType     ?? '';
+  $('vf-icon-key').value   = vehicle?.iconKey      ?? '';
+  renderPictoGrid(vehicle?.iconKey ?? null);
 
   $('modal-delete-btn').style.display = vehicle ? '' : 'none';
   $('modal-error').style.display = 'none';
@@ -141,13 +145,76 @@ async function loadAssetTypes() {
 const REFRESH_MS = 30_000;
 const HOURS = { '1H': 1, '24H': 24, '7D': 168, '30D': 720 };
 const WHEEL_LABELS  = { FL: 'Front Left', FR: 'Front Right', RL: 'Rear Left', RR: 'Rear Right' };
-const BRAND_LABELS  = { michelin: 'Michelin', stihl: 'STIHL', ela: 'ELA', airtag: 'AirTag' };
+const BRAND_LABELS  = { michelin: 'Michelin TMS', stihl: 'STIHL', ela: 'ELA Innovation', airtag: 'AirTag', tracker: 'GPS Tracker' };
+const GPS_FIX_LABELS = {
+  0: { icon: '✕', label: 'No fix',   color: '#6b7280' },
+  2: { icon: '◎', label: '2D',       color: '#fbbf24' },
+  3: { icon: '⏺', label: '3D',       color: '#34d399' },
+  4: { icon: '⏺', label: 'GNSS+DR', color: '#60a5fa' },
+};
+function gpsFixBadge(fixType) {
+  const f = fixType != null
+    ? (GPS_FIX_LABELS[fixType] ?? { icon: '?', label: String(fixType), color: 'var(--fg2)' })
+    : { icon: '✕', label: 'No fix', color: '#6b7280' };
+  return `<span class="ev-badge" style="--ev-color:${f.color};font-size:10px">${f.icon} ${f.label}</span>`;
+}
+function gpsCell(e) {
+  const badge = gpsFixBadge(e.gpsFixType);
+  const link  = e.latitude != null
+    ? `<a href="https://www.openstreetmap.org/?mlat=${e.latitude}&mlon=${e.longitude}&zoom=16" target="_blank" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a> `
+    : '';
+  return link + badge;
+}
 const PRODUCT_VARIANT_LABELS = { coin: 'ELA Blue Coin', puck: 'ELA Blue Puck', unknown: 'ELA Beacon' };
+
+// ─── Pictogram icon library (Tabler Icons — tabler.io) ──────────────────────
+const _SVG = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const PICTO_ICONS = {
+  car:       _SVG(`<path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"/>`),
+  suv:       _SVG(`<path d="M5 17a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M16 17a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M5 9l2 -4h7.438a2 2 0 0 1 1.94 1.515l.622 2.485h3a2 2 0 0 1 2 2v3"/><path d="M10 9v-4"/><path d="M2 7v4"/><path d="M22.001 14.001a4.992 4.992 0 0 0 -4.001 -2.001a4.992 4.992 0 0 0 -4 2h-3a4.998 4.998 0 0 0 -8.003 .003"/><path d="M5 12v-3h13"/>`),
+  pickup:    _SVG(`<path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-11a1 1 0 0 1 1 -1h9v12m-4 0h6m4 0h2v-6h-8m0 -5h5l3 5"/>`),
+  van:       _SVG(`<path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-4m-1 -8h11v12m-4 0h6m4 0h2v-6h-8m0 -5h5l3 5"/><path d="M3 9l4 0"/>`),
+  lcv:       _SVG(`<path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-4m-1 -8h11v12m-4 0h6m4 0h2v-6h-8m0 -5h5l3 5"/><path d="M3 9l4 0"/><path d="M10 5v4"/>`),
+  hgv:       _SVG(`<path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-11a1 1 0 0 1 1 -1h9v12m-4 0h6m4 0h2v-6h-8m0 -5h5l3 5"/><path d="M12 7h4"/>`),
+  trailer:   _SVG(`<path d="M7 18a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M11 18h7a2 2 0 0 0 2 -2v-7a2 2 0 0 0 -2 -2h-9.5a5.5 5.5 0 0 0 -5.5 5.5v3.5a2 2 0 0 0 2 2h2"/><path d="M8 7l7 -3l1 3"/><path d="M13 11.5a.5 .5 0 0 1 .5 -.5h2a.5 .5 0 0 1 .5 .5v2a.5 .5 0 0 1 -.5 .5h-2a.5 .5 0 0 1 -.5 -.5l0 -2"/><path d="M20 16h2"/>`),
+  bus:       _SVG(`<path d="M4 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M16 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M4 17h-2v-11a1 1 0 0 1 1 -1h14a5 7 0 0 1 5 7v5h-2m-4 0h-8"/><path d="M16 5l1.5 7l4.5 0"/><path d="M2 10l15 0"/><path d="M7 5l0 5"/><path d="M12 5l0 5"/>`),
+  motorbike: _SVG(`<path d="M2 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M16 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M7.5 14h5l4 -4h-10.5m1.5 4l4 -4"/><path d="M13 6h2l1.5 3l2 4"/>`),
+  scooter:   _SVG(`<path d="M16 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M4 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M8 17h5a6 6 0 0 1 5 -5v-5a2 2 0 0 0 -2 -2h-1"/>`),
+  bike:      _SVG(`<path d="M2 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M16 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M12 19l0 -4l-3 -3l5 -4l2 3l3 0"/><path d="M16 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/>`),
+  atv:       _SVG(`<path d="M5 5a2 2 0 0 1 2 -2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2a2 2 0 0 1 -2 -2l0 -2"/><path d="M5 17a2 2 0 0 1 2 -2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2a2 2 0 0 1 -2 -2l0 -2"/><path d="M15 5a2 2 0 0 1 2 -2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2a2 2 0 0 1 -2 -2l0 -2"/><path d="M15 17a2 2 0 0 1 2 -2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2a2 2 0 0 1 -2 -2l0 -2"/><path d="M9 18h6"/><path d="M9 6h6"/><path d="M12 6.5v-.5v12"/>`),
+  tractor:   _SVG(`<path d="M3 15a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M7 15l0 .01"/><path d="M17 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M10.5 17l6.5 0"/><path d="M20 15.2v-4.2a1 1 0 0 0 -1 -1h-6l-2 -5h-6v6.5"/><path d="M18 5h-1a1 1 0 0 0 -1 1v4"/>`),
+  boat:      _SVG(`<path d="M2 20a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1"/><path d="M4 18l-1 -3h18l-1 3"/><path d="M11 12h7l-7 -9v9"/><path d="M8 7l-2 5"/>`),
+  forklift:  _SVG(`<path d="M3 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M12 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M7 17l5 0"/><path d="M3 17v-6h13v6"/><path d="M5 11v-4h4"/><path d="M9 11v-6h4l3 6"/><path d="M22 15h-3v-10"/><path d="M16 13l3 0"/>`),
+  tool:      _SVG(`<path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5"/>`),
+  equipment: _SVG(`<path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/>`),
+};
+const PICTO_LABELS = {
+  car: 'Car', suv: 'SUV', pickup: 'Pickup', van: 'Van', lcv: 'LCV', hgv: 'HGV',
+  trailer: 'Trailer', bus: 'Bus', motorbike: 'Moto', scooter: 'Scooter',
+  bike: 'Bike', atv: 'ATV', tractor: 'Tractor', boat: 'Boat',
+  forklift: 'Forklift', tool: 'Tool', equipment: 'Equipment',
+};
+
+function renderPictoGrid(currentKey) {
+  const grid = $('vf-picto-grid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(PICTO_ICONS).map(([key, svg]) =>
+    `<button type="button" class="picto-btn${key === currentKey ? ' picto-sel' : ''}" data-key="${key}" title="${PICTO_LABELS[key] ?? key}">${svg}<span>${PICTO_LABELS[key] ?? key}</span></button>`
+  ).join('');
+  grid.querySelectorAll('.picto-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      grid.querySelectorAll('.picto-btn').forEach(b => b.classList.remove('picto-sel'));
+      btn.classList.add('picto-sel');
+      $('vf-icon-key').value = btn.dataset.key;
+    });
+  });
+}
 const SC = { ok: '#34d399', warn: '#fbbf24', danger: '#f87171', unknown: '#55556a' };
 const SC_BG = { ok: 'rgba(52,211,153,0.15)', warn: 'rgba(251,191,36,0.15)', danger: 'rgba(248,113,113,0.15)', unknown: 'rgba(85,85,106,0.15)' };
 
-function isTpms(s)   { return s.brand === 'michelin' || s.wheelPosition != null; }
-function isBattery(s){ return s.brand === 'stihl' || s.brand === 'ela'; }
+function isTpms(s)    { return s.brand === 'michelin' || s.wheelPosition != null; }
+function isBattery(s) { return s.brand === 'stihl' || s.brand === 'ela' || s.brand === 'airtag'; }
+function isTracker(s) { return s?.brand === 'tracker'; }
 
 /** Format seconds as "Xd Xh Xm" (omits leading zero units) */
 function fmtDuration(secs) {
@@ -158,6 +225,52 @@ function fmtDuration(secs) {
   if (d > 0) return `${d}d ${h}h ${m}m`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+/** Compact timestamp: time only today, weekday+time within 7d, date+time otherwise */
+function fmtTs(dateVal) {
+  const d = dateVal instanceof Date ? dateVal : new Date(dateVal);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString())
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if ((now - d) < 7 * 864e5)
+    return d.toLocaleDateString([], { weekday: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+/** Transient toast notification (bottom-right) */
+function showToast(msg, type = 'success') {
+  const cont = $('toast-container');
+  if (!cont) return;
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  t.innerHTML = msg;
+  cont.appendChild(t);
+  requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('toast-visible')));
+  setTimeout(() => {
+    t.classList.remove('toast-visible');
+    t.addEventListener('transitionend', () => t.remove(), { once: true });
+  }, 3200);
+}
+
+/** Branded delete confirmation modal (replaces browser confirm()) */
+function showDeleteModal({ title, body, confirmLabel = 'Delete', onConfirm }) {
+  const modal = $('del-modal');
+  if (!modal) { if (confirm(title + '\n\n' + body)) onConfirm(); return; }
+  $('del-modal-title').textContent = title;
+  $('del-modal-body').innerHTML    = body;
+  $('del-modal-ok').textContent    = confirmLabel;
+  modal.classList.add('del-modal-open');
+  const close = () => modal.classList.remove('del-modal-open');
+  $('del-modal-backdrop').onclick = close;
+  $('del-modal-cancel').onclick   = close;
+  $('del-modal-ok').onclick       = () => { close(); onConfirm(); };
+}
+
+/** Animated skeleton rows for loading states */
+function skeletonRows(cols, n = 6) {
+  const cell = '<td><span class="skel-cell"></span></td>';
+  return Array(n).fill(`<tr class="skel-row">${cell.repeat(cols)}</tr>`).join('');
 }
 
 function pStatus(pressure, target) {
@@ -174,14 +287,15 @@ const S = {
   period: '24H', customFrom: null, customTo: null,
   mode: 'chart', records: [],
   loading: false, autoRefresh: false, timer: null,
-  pChart: null, tChart: null, leafletMap: null,
+  pChart: null, tChart: null, wovChart: null, wovTChart: null, leafletMap: null,
+  mapMatchEnabled: false,
 };
 
 // ─── DOM helpers ──────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const D = {
   vehicleSelect: $('vehicle-select'),
-  sensorsHeader: $('sensors-header'),
+  assetCard:     $('asset-card'),
   sensorList:   $('sensor-list'),
   lastUpdated:  $('last-updated'),
   livePill:     $('live-pill'),
@@ -198,6 +312,10 @@ const D = {
   chartCont:    $('chart-container'),
   mapCont:      $('map-container'),
   tableCont:    $('table-container'),
+  alertsCont:   $('alerts-container'),
+  deviceCont:   $('device-container'),
+  errorsCont:   $('errors-container'),
+  wheelsCont:   $('wheels-container'),
   emptyState:   $('empty-state'),
   tableBody:    $('table-body'),
   tempCard:     $('temp-card'),
@@ -228,7 +346,7 @@ function toDatetimeLocal(d) {
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function isStale(iso, mins = 5) {
+function isStale(iso, mins = 10) {
   return !iso || (Date.now() - new Date(iso)) > mins * 60_000;
 }
 
@@ -289,74 +407,198 @@ function renderVehicles() {
     '<option value="">— Pick an asset —</option>' +
     ids.map(vid => {
       const g     = groups[vid];
-      const label = g.sensors.length ? g.name : `${g.name} \u2014 no sensors`;
+      const name  = g.serverVehicle?.name ?? g.name;
+      const label = g.sensors.length ? name : `${name} \u2014 no sensors`;
       return `<option value="${vid}"${S.vehicleFilter === vid ? ' selected' : ''}>${label}</option>`;
     }).join('');
-  // Admin edit button: show when selected vehicle has a server entry
-  const editBtn = $('edit-vehicle-btn');
-  if (editBtn) {
-    const g = S.vehicleFilter ? groups[S.vehicleFilter] : null;
-    const sv = g?.serverVehicle;
-    editBtn.style.display = (AUTH.isAdmin && sv) ? '' : 'none';
-    editBtn.onclick = sv ? () => openVehicleModal(sv) : null;
-  }
+  // Edit button is rendered inside the asset card (see renderSensors)
 }
 
 function renderSensors() {
   const groups  = groupByVehicle();
   const entry   = S.vehicleFilter ? groups[S.vehicleFilter] : null;
   const sensors = entry ? entry.sensors : [];
-  const vName   = entry ? entry.name : null;
-  D.sensorsHeader.textContent = vName ? vName + ' — Sensors' : 'Sensors';
-  if (!sensors.length) {
-    D.sensorList.innerHTML = `<div class="sidebar-hint">${S.vehicleFilter ? 'No sensors' : 'Select a vehicle'}</div>`;
+  // ──── Asset card ──────────────────────────────────────────────────────────
+  if (!entry) {
+    D.assetCard.innerHTML = '';
+    D.sensorList.innerHTML = '<div class="sidebar-hint">Select a vehicle</div>';
     return;
   }
-  D.sensorList.innerHTML = sensors.map(s => {
-    const isPressure = isTpms(s);
-    const status = pStatus(s.latestPressureBar, s.targetPressureBar);
-    const color  = SC[status];
+  const sv      = entry.serverVehicle;
+  const S_CAR       = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 L6.5 6.5 Q7 6 8 6 h8 q1 0 1.5.5 L20 11.5"/><rect x="2" y="11.5" width="20" height="5" rx="1.2"/><circle cx="7" cy="18" r="1.7"/><circle cx="17" cy="18" r="1.7"/><path d="M2 14h1M21 14h1"/></svg>`;
+  const S_TRUCK     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="8" width="13" height="8" rx="1"/><path d="M14 10.5 L18.5 10.5 L22 14.5 V16.5 H14 Z"/><circle cx="5" cy="18" r="1.7"/><circle cx="11" cy="18" r="1.7"/><circle cx="19" cy="18" r="1.7"/><path d="M17 12h2.5"/></svg>`;
+  const S_MOTO      = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="16" r="3"/><circle cx="19" cy="16" r="3"/><path d="M8 16 L10.5 9.5 h4 L17.5 14"/><path d="M12 9.5 L13 6.5 h3.5"/><path d="M5 16 L8 13"/></svg>`;
+  const S_VAN       = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="7" width="15" height="9" rx="1"/><path d="M16 9.5 L20.5 9.5 L22.5 13.5 V16 H16 Z"/><circle cx="5.5" cy="17.5" r="1.7"/><circle cx="12.5" cy="17.5" r="1.7"/><circle cx="20" cy="17.5" r="1.7"/><rect x="3" y="9" width="4.5" height="3" rx="0.5"/><rect x="9" y="9" width="4.5" height="3" rx="0.5"/></svg>`;
+  const S_EQUIPMENT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>`;
+  const S_TOOL      = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.77 3.77z"/></svg>`;
+  const ASSET_SVG = { truck: S_TRUCK, moto: S_MOTO, bike: S_MOTO, tool: S_TOOL, equipment: S_EQUIPMENT, trailer: S_VAN, van: S_VAN };
+  const typeName = S.assetTypes.find(t => t.id === sv?.assetTypeID)?.name?.toLowerCase() ?? '';
+  const typeIcon = (sv?.iconKey && PICTO_ICONS[sv.iconKey])
+    ? PICTO_ICONS[sv.iconKey]
+    : (Object.entries(ASSET_SVG).find(([k]) => typeName.includes(k))?.[1] ?? S_CAR);
+  const assetName   = sv?.name ?? entry.name;
+  const subParts    = [sv?.brand, sv?.modelName, sv?.year].filter(Boolean);
+  const subText     = subParts.join('\u00a0· ');
+  const vrnBadge    = sv?.vrn  ? `<span class="ac-badge ac-vrn">${sv.vrn}</span>`  : '';
+  const vinBadge    = sv?.vin  ? `<span class="ac-badge ac-vin" title="${sv.vin}">${sv.vin}</span>` : '';
+  const sCount      = sensors.length;
+  const sLabel      = `${sCount} sensor${sCount !== 1 ? 's' : ''}`;
+  const editBtn     = AUTH.isAdmin && sv
+    ? `<button id="edit-vehicle-btn" class="ac-edit-btn" title="Edit asset">✎</button>` : '';
+  D.assetCard.innerHTML = `
+    <div class="asset-card">
+      <div class="ac-left">
+        ${vrnBadge}
+        ${sv?.vin ? `<span class="ac-badge ac-vin">${sv.vin}</span>` : ''}
+        <span class="ac-badge ac-count">${sLabel}</span>
+      </div>
+      <div class="ac-right">
+        <div class="ac-icon">${typeIcon}</div>
+        <div class="ac-name">${assetName}${editBtn}</div>
+        ${subText ? `<div class="ac-sub">${subText}</div>` : ''}
+      </div>
+    </div>`;
+  if (AUTH.isAdmin && sv) {
+    D.assetCard.querySelector('#edit-vehicle-btn')?.addEventListener('click', () => openVehicleModal(sv));
+  }
+  if (!sensors.length) {
+    D.sensorList.innerHTML = '<div class="sidebar-hint">No sensors</div>';
+    return;
+  }
+
+  const WHEEL_ORDER    = ['FL', 'FR', 'RL', 'RR'];
+  const tpmsSensors    = sensors.filter(s => isTpms(s));
+  // Trackers first, then everything else (excluding TPMS)
+  const nonTpmsSensors = [
+    ...sensors.filter(s => !isTpms(s) && s.brand === 'tracker'),
+    ...sensors.filter(s => !isTpms(s) && s.brand !== 'tracker'),
+  ];
+  let html = '';
+
+  // ──── Non-TPMS tracker rows rendered first ───────────────────────────────
+  html += nonTpmsSensors.filter(s => s.brand === 'tracker').map(s => {
     const stale  = isStale(s.latestTimestamp);
-    const label  = s.wheelPosition
-      ? (WHEEL_LABELS[s.wheelPosition] ?? s.wheelPosition)
-      : (s.sensorName ?? BRAND_LABELS[s.brand] ?? s.brand);
+    const label  = s.sensorName ?? s.vehicleName ?? BRAND_LABELS[s.brand] ?? s.brand;
     const sel    = s.sensorID === S.selected;
-    const dotCol = stale ? SC.unknown : (isPressure ? color : SC.ok);
-
-    // Value display
-    let valueHtml, barPct;
-    if (isPressure) {
-      valueHtml = `<div class="s-pres" style="color:${dotCol}">${s.latestPressureBar != null ? s.latestPressureBar.toFixed(2) : '\u2013'}</div>`;
-      barPct = s.latestPressureBar != null ? Math.min(100, (s.latestPressureBar / 5) * 100) : 0;
-    } else if (s.latestBatteryPct != null || s.latestChargeState) {
-      const pct = s.latestBatteryPct ?? 0;
-      const bCol = pct > 50 ? '#34d399' : pct > 20 ? '#fbbf24' : '#f87171';
-      const state = s.latestChargeState ? ` \u00b7 ${s.latestChargeState}` : '';
-      valueHtml = `<div class="s-pres" style="color:${bCol}">${pct}%${state}</div>`;
-      barPct = pct;
-    } else if (s.latestTemperatureC != null) {
-      valueHtml = `<div class="s-pres" style="color:${dotCol}">${s.latestTemperatureC.toFixed(1)}\u00b0C</div>`;
-      barPct = Math.min(100, Math.max(0, ((s.latestTemperatureC + 20) / 80) * 100));
-    } else {
-      valueHtml = `<div class="s-pres" style="color:${dotCol}">\u2013</div>`;
-      barPct = 0;
-    }
-
-    const brandLabel = BRAND_LABELS[s.brand] ?? s.brand;
-    const subExtra = s.wheelPosition && s.sensorName ? ` \u00b7 ${s.sensorName}` : '';
-
+    const dotCol = stale ? SC.unknown : SC.ok;
+    const parts  = [];
+    if (s.latestGpsSatellites != null)
+      parts.push(`<span style="color:#34d399;font-weight:600">\u{1F6F0}\uFE0E ${s.latestGpsSatellites} sats</span>`);
+    if (s.latestLatitude != null && s.latestLongitude != null)
+      parts.push(`<span style="color:#60a5fa;font-weight:600">${s.latestLatitude.toFixed(4)}, ${s.latestLongitude.toFixed(4)}</span>`);
+    const valueSpan = parts.length ? ' \u00b7 ' + parts.join(' \u00b7 ') : '';
     return `<div class="sensor-row${sel ? ' selected' : ''}" data-sid="${s.sensorID}">
-      <div class="s-dot" style="background:${dotCol};color:${dotCol}"></div>
+      <div class="s-dot" style="background:${dotCol}"></div>
       <div class="s-info">
         <div class="s-name">${label}</div>
-        <div class="s-sub">${brandLabel}${subExtra} \u00b7 ${s.readingCount.toLocaleString()} readings${stale ? ' \u00b7 offline' : ''}</div>
-      </div>
-      <div class="s-right">
-        ${valueHtml}
-        <div class="s-bar"><div class="s-bar-fill" style="width:${barPct}%;background:${dotCol}"></div></div>
+        <div class="s-sub"><span class="s-brand" data-brand="${s.brand}">${BRAND_LABELS[s.brand] ?? s.brand}</span>${valueSpan}</div>
       </div>
     </div>`;
   }).join('');
+
+  // ──── TPMS group card ────────────────────────────────────────────────────
+  if (tpmsSensors.length) {
+    // Worst status
+    let worstStatus = 'ok';
+    for (const s of tpmsSensors) {
+      const st = pStatus(s.latestPressureBar, s.targetPressureBar);
+      if (st === 'critical') { worstStatus = 'critical'; break; }
+      if (st === 'low') worstStatus = 'low';
+    }
+    const anyStale   = tpmsSensors.some(s => isStale(s.latestTimestamp));
+    const worstDot   = anyStale ? SC.unknown : SC[worstStatus];
+    const brandLabel = BRAND_LABELS[tpmsSensors[0].brand] ?? tpmsSensors[0].brand;
+    const anySelected = tpmsSensors.some(s => s.sensorID === S.selected);
+
+    // Sort by wheel position
+    const byPos = {};
+    const unpositioned = [];
+    for (const s of tpmsSensors) {
+      if (s.wheelPosition) byPos[s.wheelPosition] = s;
+      else unpositioned.push(s);
+    }
+
+    // Wheel chip builder
+    const chip = (s, pos) => {
+      if (!s) return `<div class="tpms-chip tpms-chip-empty"><div class="tpms-chip-pos">${pos ?? ''}</div></div>`;
+      const stale  = isStale(s.latestTimestamp);
+      const status = pStatus(s.latestPressureBar, s.targetPressureBar);
+      const pCol   = stale ? SC.unknown : SC[status];
+      const bgCol  = stale ? 'rgba(255,255,255,.04)' : SC_BG[status];
+      const sel    = s.sensorID === S.selected;
+      const pText  = s.latestPressureBar != null ? s.latestPressureBar.toFixed(2) : '\u2013';
+      const cp     = s.wheelPosition ?? '?';
+      return `<div class="tpms-chip${sel ? ' tpms-chip-sel' : ''}" data-sid="${s.sensorID}" style="--chip-col:${pCol};--chip-bg:${bgCol}" title="${WHEEL_LABELS[cp] ?? cp}">
+        <div class="tpms-chip-pos">${cp}</div>
+        <div class="tpms-chip-pres" style="color:var(--chip-col)">${pText}</div>
+        <div class="tpms-chip-unit">bar</div>
+      </div>`;
+    };
+
+    const hasPositioned = WHEEL_ORDER.some(p => byPos[p]);
+    const gridHtml = hasPositioned
+      ? `<div class="tpms-wheel-grid">
+          <div class="tpms-axle">
+            ${chip(byPos['FL'], 'FL')}
+            <div class="tpms-axle-line"></div>
+            ${chip(byPos['FR'], 'FR')}
+          </div>
+          <div class="tpms-axle">
+            ${chip(byPos['RL'], 'RL')}
+            <div class="tpms-axle-line"></div>
+            ${chip(byPos['RR'], 'RR')}
+          </div>
+        </div>` : '';
+
+    // Extra positions (e.g. spare) + unpositioned
+    const extraPos = Object.keys(byPos).filter(p => !WHEEL_ORDER.includes(p));
+    const extrasHtml = [...extraPos.map(p => chip(byPos[p], p)), ...unpositioned.map(s => chip(s))].join('');
+    const extraGrid  = extrasHtml ? `<div class="tpms-wheel-grid tpms-extra-grid">${extrasHtml}</div>` : '';
+
+    html += `<div class="sensor-row tpms-group-card${anySelected ? ' selected' : ''}" data-sid="${tpmsSensors[0].sensorID}" data-tpms-card="1">
+      <div class="tpms-row-top">
+        <div class="s-dot" style="background:${worstDot}"></div>
+        <div class="s-info">
+          <div class="s-name"><span class="s-brand" data-brand="${tpmsSensors[0].brand}">${brandLabel}</span></div>
+          <div class="s-sub">${tpmsSensors.length} sensor${tpmsSensors.length > 1 ? 's' : ''}${anyStale ? ' \u00b7 <span style="color:var(--fg3)">stale</span>' : ''}</div>
+        </div>
+      </div>
+      ${gridHtml}${extraGrid}
+    </div>`;
+  }
+
+  // ──── Other non-TPMS rows (non-tracker) ──────────────────────────────────
+  html += nonTpmsSensors.filter(s => s.brand !== 'tracker').map(s => {
+    const stale  = isStale(s.latestTimestamp);
+    const label  = s.sensorName ?? (s.brand === 'tracker' ? s.vehicleName : null) ?? BRAND_LABELS[s.brand] ?? s.brand;
+    const sel    = s.sensorID === S.selected;
+    const dotCol = stale ? SC.unknown : SC.ok;
+    let valueSpan = '';
+    if (s.brand === 'tracker') {
+      const parts = [];
+      if (s.latestGpsSatellites != null)
+        parts.push(`<span style="color:#34d399;font-weight:600">\u{1F6F0}\uFE0E ${s.latestGpsSatellites} sats</span>`);
+      if (s.latestLatitude != null && s.latestLongitude != null)
+        parts.push(`<span style="color:#60a5fa;font-weight:600">${s.latestLatitude.toFixed(4)}, ${s.latestLongitude.toFixed(4)}</span>`);
+      if (parts.length) valueSpan = ' \u00b7 ' + parts.join(' \u00b7 ');
+    } else if (s.latestBatteryPct != null || s.latestChargeState) {
+      const pct  = s.latestBatteryPct ?? 0;
+      const bCol = pct > 50 ? '#34d399' : pct > 20 ? '#fbbf24' : '#f87171';
+      valueSpan  = ` \u00b7 <span style="color:${bCol};font-weight:600">${pct}%${s.latestChargeState ? ' \u00b7 ' + s.latestChargeState : ''}</span>`;
+    } else if (s.latestTemperatureC != null) {
+      valueSpan = ` \u00b7 <span style="color:#60a5fa;font-weight:600">${s.latestTemperatureC.toFixed(1)}\u00b0C</span>`;
+    }
+    const brandLabel = BRAND_LABELS[s.brand] ?? s.brand;
+    return `<div class="sensor-row${sel ? ' selected' : ''}" data-sid="${s.sensorID}">
+      <div class="s-dot" style="background:${dotCol}"></div>
+      <div class="s-info">
+        <div class="s-name">${label}</div>
+        <div class="s-sub"><span class="s-brand" data-brand="${s.brand}">${brandLabel}</span>${valueSpan}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  D.sensorList.innerHTML = html;
 }
 
 function renderSidebar() {
@@ -374,16 +616,17 @@ function renderSidebar() {
 function renderBreadcrumb() {
   const s = S.sensors.find(x => x.sensorID === S.selected);
   if (!s) { D.breadcrumb.innerHTML = '&ndash;'; return; }
-  const sensorLabel = s.sensorName
-    ?? (s.wheelPosition ? (WHEEL_LABELS[s.wheelPosition] ?? s.wheelPosition) : (BRAND_LABELS[s.brand] ?? s.brand));
-  const status = pStatus(s.latestPressureBar, s.targetPressureBar);
-  const badgeStyle = `background:${SC_BG[status]};color:${SC[status]}`;
-  D.breadcrumb.innerHTML =
-    `<span class="bc-vehicle">${s.vehicleName}</span>` +
-    `<span class="bc-sep">›</span>` +
-    `<span class="bc-sensor">${sensorLabel}</span>` +
-    (s.targetPressureBar ? `<span class="bc-badge" style="${badgeStyle}">target ${s.targetPressureBar.toFixed(2)} bar</span>` : '') +
-    (s.latestBatteryPct != null ? `<span class="bc-badge" style="background:rgba(52,211,153,.15);color:#34d399">🔋 ${s.latestBatteryPct}%${ s.latestChargeState ? ' · ' + s.latestChargeState : ''}</span>` : '');
+  // Vehicle part: prefer the server-registered asset name (avoids tracker
+  // overwriting vehicleName with its own label on push)
+  const groups       = groupByVehicle();
+  const group        = Object.values(groups).find(g => g.sensors.some(x => x.sensorID === s.sensorID));
+  const vehicleLabel = group?.serverVehicle?.name ?? s.vehicleName;
+  // Sensor part: wheel position > sensorName > tracker vehicleName > brand label
+  const sensorLabel  = s.wheelPosition
+    ? (WHEEL_LABELS[s.wheelPosition] ?? s.wheelPosition)
+    : (s.sensorName ?? (s.brand === 'tracker' ? s.vehicleName : null) ?? (BRAND_LABELS[s.brand] ?? s.brand));
+  D.breadcrumb.innerHTML = '';
+  D.breadcrumb.style.display = 'none';
 }
 
 // ─── Sensor info card ─────────────────────────────────────────────────────────
@@ -397,7 +640,7 @@ function renderSensorInfoCard() {
   const stale = isStale(s.latestTimestamp);
   const mainLabel = s.wheelPosition
     ? (WHEEL_LABELS[s.wheelPosition] ?? s.wheelPosition)
-    : (s.sensorName ?? brandLabel);
+    : (s.sensorName ?? (s.brand === 'tracker' ? s.vehicleName : null) ?? brandLabel);
   const rows = [];
   if (isTpms(s)) {
     const status = pStatus(s.latestPressureBar, s.targetPressureBar);
@@ -434,6 +677,8 @@ function renderSensorInfoCard() {
       const hex = s.sensorID.slice(6);
       const mac = hex.match(/.{2}/g).join(':').toUpperCase();
       rows.push(siRow('MAC', mac));
+    } else if (s.sensorID.startsWith('STIHLBATT-')) {
+      rows.push(siRow('Serial', s.sensorID.slice(10)));
     }
     rows.push(siRow('Sensor ID', s.sensorID));
   } else if (s.brand === 'ela') {
@@ -449,19 +694,77 @@ function renderSensorInfoCard() {
     }
     rows.push(siRow('Sensor ID', s.sensorID));
   } else if (s.brand === 'airtag') {
-    rows.push(siRow('Last seen', fmtDT(s.latestTimestamp), stale ? '#f87171' : '#34d399'));
+    if (s.sensorName && s.sensorName !== s.sensorID)
+      rows.push(siRow('Name', s.sensorName));
+    if (s.latestBatteryPct != null) {
+      const atBPct   = s.latestBatteryPct;
+      const atBLabel = atBPct >= 100 ? 'Full' : atBPct >= 60 ? 'Medium' : atBPct >= 25 ? 'Low' : 'Critical';
+      const atBCol   = atBPct >= 60 ? '#34d399' : atBPct >= 25 ? '#fbbf24' : '#f87171';
+      rows.push(siRow('Battery', `${atBLabel} (\u224a${atBPct}%)`, atBCol));
+    }
+    const separated = s.latestChargeState === 'Separated';
+    rows.push(siRow('Status',
+      separated ? '\u26a0\uFE0E Separated from owner' : '\u25cf Near owner',
+      separated ? '#f87171' : '#34d399'));
     if (s.latestLatitude != null && s.latestLongitude != null)
-      rows.push(siRow('Location', `${s.latestLatitude.toFixed(5)}, ${s.latestLongitude.toFixed(5)}`));
-    rows.push(siRow('ID', s.sensorID));
+      rows.push(siRow('GPS', `${s.latestLatitude.toFixed(5)}, ${s.latestLongitude.toFixed(5)}`));
+    rows.push(siRow('Sensor ID', s.sensorID));
+  } else if (s.brand === 'tracker') {
+    rows.push(siRow('IMEI', s.sensorID));
+    if (s.latestGpsSatellites != null)
+      rows.push(siRow('Satellites', `${s.latestGpsSatellites}`, '#34d399'));
+    if (s.latestLatitude != null && s.latestLongitude != null)
+      rows.push(siRow('Position', `${s.latestLatitude.toFixed(5)}, ${s.latestLongitude.toFixed(5)}`));
+    if (s.latestSpeedKmh != null)
+      rows.push(siRow('Speed', `${s.latestSpeedKmh.toFixed(0)} km/h`, '#60a5fa'));
+    if (s.latestTemperatureC != null)
+      rows.push(siRow('Engine temp', `${s.latestTemperatureC.toFixed(1)} \u00b0C`, '#fbbf24'));
+    if (s.latestBatteryPct != null) {
+      const bCol = s.latestBatteryPct > 50 ? '#34d399' : s.latestBatteryPct > 20 ? '#fbbf24' : '#f87171';
+      rows.push(siRow('Fuel level', `${s.latestBatteryPct}%`, bCol));
+    }
   }
-  rows.push(siRow('Readings', s.readingCount.toLocaleString()));
+  if (s.latestTimestamp) rows.unshift(siRow('Last seen', fmtDT(s.latestTimestamp), stale ? '#f87171' : '#34d399'));
+  if (s.readingCount != null) rows.push(siRow('Readings', s.readingCount.toLocaleString()));
   const liveBadge = stale ? '' : `<span class="si-live">\u25cf Live</span>`;
+  const status = pStatus(s.latestPressureBar, s.targetPressureBar);
+  const gaugeIcon = `<svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="vertical-align:-1px"><circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" stroke-width="1.2"/><path d="M5.5 5.5L8 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor"/></svg>`;
+  const tgtBadge = s.targetPressureBar != null
+    ? `<span class="si-badge si-badge-tgt" style="background:${SC_BG[status]};color:${SC[status]}">${gaugeIcon} ${s.targetPressureBar.toFixed(2)} bar</span>` : '';
+  if (s.latestBatteryPct != null) {
+    const bp = s.latestBatteryPct;
+    const bCol = bp > 50 ? '#34d399' : bp > 20 ? '#fbbf24' : '#f87171';
+    const fillW = Math.round((bp / 100) * 12);
+    const battIcon = `<svg width="16" height="10" viewBox="0 0 16 10" fill="none" style="vertical-align:-1px"><rect x="0.6" y="0.6" width="13.8" height="8.8" rx="1.8" stroke="currentColor" stroke-width="1.2"/><rect x="14.4" y="3" width="1.6" height="4" rx="0.8" fill="currentColor"/><rect x="2" y="2" width="${fillW}" height="6" rx="1" fill="currentColor"/></svg>`;
+    var battBadge = `<span class="si-badge si-badge-batt" style="background:rgba(52,211,153,.1);color:${bCol}">${battIcon} ${bp}%${ s.latestChargeState ? ' \u00b7 ' + s.latestChargeState : ''}</span>`;
+  } else {
+    var battBadge = '';
+  }
+  const unpairBtn = AUTH.isAdmin && s.brand !== 'tracker'
+    ? `<div class="si-actions"><button class="si-unpair-btn modal-btn-danger" data-sid="${s.sensorID}">Unpair sensor</button></div>`
+    : '';
   el.innerHTML = `<div class="si-header">
     <span class="si-brand" data-brand="${s.brand}">${brandLabel}</span>
     <span class="si-name">${mainLabel}</span>
     ${liveBadge}
+    <span class="si-badges">${tgtBadge}${battBadge}</span>
   </div>
-  <div class="si-rows">${rows.join('')}</div>`;
+  <div class="si-rows">${rows.join('')}</div>
+  ${unpairBtn}`;
+
+  el.querySelector('.si-unpair-btn')?.addEventListener('click', async () => {
+    if (!confirm(`Remove sensor "${mainLabel}" from server? This will delete all its readings.`)) return;
+    const res = await fetch(`/api/sensors/pair/${encodeURIComponent(s.sensorID)}`, { method: 'DELETE', headers: authHeaders() });
+    if (res.ok || res.status === 204) {
+      S.selected = null;
+      await loadSensors();
+      renderAll();
+      showToast('Sensor removed from server.');
+    } else {
+      const msg = await res.text().catch(() => res.status);
+      alert(`Failed to unpair sensor: ${msg}`);
+    }
+  });
 }
 
 function siRow(label, value, color = '') {
@@ -495,25 +798,10 @@ function renderStats() {
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
 
   if (isTpms(sensor)) {
-    setStatLabels('Min', 'Avg', 'Max');
-    const ps     = S.records.map(r => r.pressureBar).filter(v => v != null);
-    const target = sensor?.targetPressureBar ?? null;
-    if (!ps.length) {
-      ['stat-min','stat-avg','stat-max'].forEach(id => $(id).textContent = '–');
-      D.statCount.textContent = S.records.length ? S.records.length.toLocaleString() : '–';
-      D.statLast.textContent  = S.records.length ? fmtDT(S.records.at(-1).timestamp) : '–';
-      return;
-    }
-    const min = Math.min(...ps), max = Math.max(...ps);
-    const avg = ps.reduce((a, b) => a + b, 0) / ps.length;
-    D.statCount.textContent = S.records.length.toLocaleString();
-    D.statMin.textContent   = min.toFixed(2) + ' bar';
-    D.statAvg.textContent   = avg.toFixed(2) + ' bar';
-    D.statMax.textContent   = max.toFixed(2) + ' bar';
+    showStatCells(false);
+    D.statCount.textContent = S.records.length ? S.records.length.toLocaleString() : '–';
     D.statLast.textContent  = S.records.length ? fmtDT(S.records.at(-1).timestamp) : '–';
-    D.statAvg.closest('.stat-cell')?.classList.add(pStatus(avg, target));
-    D.statMin.closest('.stat-cell')?.classList.add(pStatus(min, target));
-    D.statMax.closest('.stat-cell')?.classList.add(pStatus(max, target));
+    return;
 
   } else if (sensor?.brand === 'stihl') {
     showStatCells(false);
@@ -535,11 +823,17 @@ function renderStats() {
 
 // ─── Show/hide content areas ──────────────────────────────────────────────────
 function showMode(mode) {
+  S.mode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   const noData = S.records.length === 0;
-  D.chartCont.style.display = mode === 'chart' && !noData ? 'flex' : 'none';
-  D.mapCont.style.display   = mode === 'map'   && !noData ? 'flex' : 'none';
-  D.tableCont.style.display = mode === 'table' && !noData ? 'block': 'none';
-  D.emptyState.style.display = noData ? 'flex' : 'none';
+  D.chartCont.style.display  = mode === 'chart'  && !noData ? 'flex'  : 'none';
+  D.mapCont.style.display    = mode === 'map'    && !noData ? 'flex'  : 'none';
+  D.tableCont.style.display  = mode === 'table'  && !noData ? 'block' : 'none';
+  D.alertsCont.style.display = mode === 'alerts'            ? 'block' : 'none';
+  D.deviceCont.style.display  = mode === 'device'            ? 'block' : 'none';
+  D.wheelsCont.style.display  = mode === 'wheels'            ? 'block' : 'none';
+  D.errorsCont.style.display  = mode === 'errors'            ? 'block' : 'none';
+  D.emptyState.style.display = noData && !['alerts','device','wheels','errors'].includes(mode) ? 'flex' : 'none';
 }
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
@@ -549,6 +843,210 @@ function renderChart() {
   if (isTpms(sensor)) { renderChartTpms(sensor); }
   else if (sensor?.brand === 'airtag') { renderChartAirtag(); }
   else { renderChartBatteryTemp(sensor); }
+}
+
+// ─── Wheels overview (all TPMS combined) ─────────────────────────────────────
+async function renderWheels() {
+  const groups = groupByVehicle();
+  const entry  = S.vehicleFilter ? groups[S.vehicleFilter] : null;
+  const tpmsAll = (entry?.sensors ?? []).filter(s => isTpms(s));
+  if (!tpmsAll.length) { D.wheelsCont.innerHTML = '<div class="bat-loading-full">No TPMS sensors</div>'; return; }
+
+  // Show skeleton immediately
+  D.wheelsCont.innerHTML = `<div class="wov-wrap"><div style="padding:16px">${skeletonRows(4, 4)}</div></div>`;
+
+  // Fetch records for all TPMS sensors in parallel
+  const { from, to } = getRange();
+  const allData = await Promise.all(tpmsAll.map(s =>
+    apiFetch(`/api/records/by-sensor/${s.sensorID}?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`)
+      .then(recs => ({ sensor: s, records: Array.isArray(recs) ? recs.sort((a,b) => new Date(a.timestamp)-new Date(b.timestamp)) : [] }))
+      .catch(() => ({ sensor: s, records: [] }))
+  ));
+
+  // Sort by wheel position order
+  const WHEEL_ORDER  = ['FL', 'FR', 'RL', 'RR'];
+  const WHEEL_COLORS = { FL: '#60a5fa', FR: '#34d399', RL: '#fbbf24', RR: '#f87171' };
+  const sorted = [
+    ...WHEEL_ORDER.map(p => allData.find(d => d.sensor.wheelPosition === p)).filter(Boolean),
+    ...allData.filter(d => !WHEEL_ORDER.includes(d.sensor.wheelPosition)),
+  ];
+
+  const target = tpmsAll.find(s => s.targetPressureBar != null)?.targetPressureBar ?? null;
+
+  // Balance: current pressures across wheels
+  const curPressures = sorted.map(d => d.sensor.latestPressureBar).filter(v => v != null);
+  const spread = curPressures.length > 1 ? Math.max(...curPressures) - Math.min(...curPressures) : null;
+  const spreadCol = spread == null ? '#8A8D9E' : spread < 0.10 ? '#34d399' : spread < 0.20 ? '#fbbf24' : '#f87171';
+  const spreadLabel = spread == null ? '–' : spread < 0.10 ? '✓ Balanced' : spread < 0.20 ? '⚠︎ Monitor' : '⚠︎ Check tyres';
+
+  // SVG semicircle gauge
+  const gauge = (pressure, tgt, color) => {
+    const R = 27, cx = 35, cy = 35;
+    const ratio = tgt && pressure != null ? Math.min(Math.max(pressure / tgt, 0), 1.1) : 0;
+    const r = Math.min(ratio, 1);
+    const ex = cx - R * Math.cos(r * Math.PI);
+    const ey = cy - R * Math.sin(r * Math.PI);
+    const trackPath = `M ${cx-R} ${cy} A ${R} ${R} 0 0 1 ${cx+R} ${cy}`;
+    const fillPath  = r > 0.005 ? `M ${cx-R} ${cy} A ${R} ${R} 0 0 1 ${ex.toFixed(1)} ${ey.toFixed(1)}` : '';
+    const valTxt    = pressure != null ? pressure.toFixed(2) : '–';
+    const valColor  = pressure != null ? color : 'rgba(255,255,255,.25)';
+    return `<svg width="70" height="44" viewBox="0 0 70 44">
+      <path d="${trackPath}" stroke="rgba(255,255,255,.07)" stroke-width="7" fill="none" stroke-linecap="round"/>
+      ${fillPath ? `<path d="${fillPath}" stroke="${color}" stroke-width="7" fill="none" stroke-linecap="round"/>` : ''}
+      <text x="${cx}" y="29" text-anchor="middle" fill="${valColor}" font-size="16" font-weight="700" font-family="-apple-system,sans-serif">${valTxt}</text>
+      <text x="${cx}" y="40" text-anchor="middle" fill="rgba(255,255,255,.3)" font-size="9" font-family="-apple-system,sans-serif">bar</text>
+    </svg>`;
+  };
+
+  // Wheel cards
+  const cardsHTML = sorted.map(({ sensor: s }) => {
+    const pos    = s.wheelPosition ?? '?';
+    const color  = WHEEL_COLORS[pos] ?? '#a78bfa';
+    const sTgt   = s.targetPressureBar ?? target;
+    const status = pStatus(s.latestPressureBar, sTgt);
+    const stale  = isStale(s.latestTimestamp);
+    const bCol   = s.latestBatteryPct != null
+      ? (s.latestBatteryPct > 50 ? '#34d399' : s.latestBatteryPct > 20 ? '#fbbf24' : '#f87171') : '';
+    const isSelected = s.sensorID === S.selected;
+    const statusDot  = `<span class="wov-status-dot" style="background:${stale ? SC.unknown : SC[status]}"></span>`;
+    const brandLabel = BRAND_LABELS[s.brand] ?? s.brand ?? '';
+    const nameLabel  = s.sensorName ? s.sensorName : '';
+    const subLabel   = [brandLabel, nameLabel].filter(Boolean).join(' · ');
+    return `<div class="wov-wheel-card${isSelected ? ' wov-sel' : ''}" data-sid="${s.sensorID}" style="--wov-col:${color}">
+      <div class="wov-card-header">
+        ${statusDot}<span class="wov-pos">${pos}</span>
+        ${stale ? '<span class="wov-stale">stale</span>' : ''}
+      </div>
+      <div class="wov-card-namerow">
+        <span class="wov-card-brand">${subLabel}</span>
+        <span class="wov-card-meta">
+          ${sTgt   != null ? `<span class="wov-target-inline">${sTgt.toFixed(2)} bar</span>` : ''}
+          ${s.latestBatteryPct != null ? `<span style="color:${bCol}">${s.latestBatteryPct}%</span>` : ''}
+        </span>
+      </div>
+      <div class="wov-gauge">${gauge(s.latestPressureBar, sTgt, stale ? SC.unknown : SC[status])}</div>
+      <div class="wov-subrow">
+        ${s.latestTemperatureC != null ? `<span style="color:#60a5fa">${s.latestTemperatureC.toFixed(1)}\u00b0C</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Balance bar
+  const balHTML = `<div class="wov-balance">
+    <span class="wov-balance-label">Pressure spread</span>
+    <span class="wov-balance-val" style="color:${spreadCol}">${spread != null ? spread.toFixed(3)+' bar' : '–'}</span>
+    <span class="wov-balance-status" style="color:${spreadCol}">${spreadLabel}</span>
+  </div>`;
+
+  D.wheelsCont.innerHTML = `
+    <div class="wov-wrap">
+      <div class="wov-cards">${cardsHTML}</div>
+      ${balHTML}
+      <div class="wov-chart-section">
+        <div class="wov-chart-title">Pressure history — all tires</div>
+        <div class="wov-chart-wrap"><canvas id="wov-chart-canvas"></canvas></div>
+      </div>
+      <div class="wov-chart-section" id="wov-temp-section" style="display:none">
+        <div class="wov-chart-title">Temperature history — all tires</div>
+        <div class="wov-chart-wrap"><canvas id="wov-temp-canvas"></canvas></div>
+      </div>
+    </div>`;
+
+  // Click wheel card → select that sensor
+  D.wheelsCont.querySelectorAll('.wov-wheel-card[data-sid]').forEach(card => {
+    card.addEventListener('click', () => selectSensor(card.dataset.sid));
+  });
+
+  // Build Chart.js multi-dataset chart
+  if (S.wovChart) { S.wovChart.destroy(); S.wovChart = null; }
+  const datasets = sorted.map(({ sensor: s, records }) => {
+    const pos   = s.wheelPosition ?? '?';
+    const color = WHEEL_COLORS[pos] ?? '#a78bfa';
+    return {
+      label: `${pos} — ${WHEEL_LABELS[pos] ?? pos}`,
+      data: records.map(r => ({ x: new Date(r.timestamp), y: r.pressureBar ?? null })),
+      borderColor: color,
+      backgroundColor: 'transparent',
+      fill: false, tension: 0.35,
+      pointRadius: 0, pointHoverRadius: 5,
+      borderWidth: 2,
+    };
+  });
+  // Target reference line
+  const allTimes = sorted.flatMap(d => d.records.map(r => new Date(r.timestamp).getTime())).filter(Boolean);
+  if (target != null && allTimes.length) {
+    datasets.push({
+      label: `Target (${target.toFixed(2)} bar)`,
+      data: [{ x: new Date(Math.min(...allTimes)), y: target }, { x: new Date(Math.max(...allTimes)), y: target }],
+      borderColor: 'rgba(255,255,255,.2)', borderDash: [5, 4],
+      borderWidth: 1.5, pointRadius: 0, fill: false,
+    });
+  }
+  const allPVals = sorted.flatMap(d => d.records.map(r => r.pressureBar)).filter(v => v != null);
+  const yMin = allPVals.length ? Math.max(0, Math.min(...allPVals, target ?? Infinity) - 0.2) : 0;
+  const yMax = allPVals.length ? Math.max(...allPVals, target ?? 0) + 0.2 : 4;
+  const scaleCommon = {
+    ticks: { color: '#8A8D9E', font: { size: 11 } },
+    grid:  { color: 'rgba(255,255,255,.04)' },
+  };
+  const cvs = document.getElementById('wov-chart-canvas');
+  if (cvs) {
+    S.wovChart = new Chart(cvs, {
+      type: 'line',
+      data: { datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: true, labels: { color: '#8A8D9E', font: { size: 11 }, boxWidth: 12, padding: 12 } },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw?.y != null ? ctx.raw.y.toFixed(3)+' bar' : '–'}` } },
+        },
+        scales: {
+          x: { type: 'time', time: { unit: guessTimeUnit(sorted[0]?.records ?? []) }, ...scaleCommon, ticks: { ...scaleCommon.ticks, maxTicksLimit: 8 } },
+          y: { min: yMin, max: yMax, ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v.toFixed(2)+' b' } },
+        },
+      },
+    });
+  }
+
+  // Temperature chart
+  if (S.wovTChart) { S.wovTChart.destroy(); S.wovTChart = null; }
+  const tDatasets = sorted
+    .filter(({ records }) => records.some(r => r.temperatureC != null))
+    .map(({ sensor: s, records }) => {
+      const pos   = s.wheelPosition ?? '?';
+      const color = WHEEL_COLORS[pos] ?? '#a78bfa';
+      return {
+        label: `${pos} — ${WHEEL_LABELS[pos] ?? pos}`,
+        data: records.map(r => ({ x: new Date(r.timestamp), y: r.temperatureC ?? null })),
+        borderColor: color,
+        backgroundColor: 'transparent',
+        fill: false, tension: 0.35,
+        pointRadius: 0, pointHoverRadius: 5,
+        borderWidth: 2,
+      };
+    });
+  const tempSection = document.getElementById('wov-temp-section');
+  const tcvs = document.getElementById('wov-temp-canvas');
+  if (tDatasets.length && tempSection && tcvs) {
+    tempSection.style.display = '';
+    S.wovTChart = new Chart(tcvs, {
+      type: 'line',
+      data: { datasets: tDatasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: true, labels: { color: '#8A8D9E', font: { size: 11 }, boxWidth: 12, padding: 12 } },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw?.y != null ? ctx.raw.y.toFixed(1)+'°C' : '–'}` } },
+        },
+        scales: {
+          x: { type: 'time', time: { unit: guessTimeUnit(sorted[0]?.records ?? []) }, ...scaleCommon, ticks: { ...scaleCommon.ticks, maxTicksLimit: 8 } },
+          y: { ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v.toFixed(0)+'°C' } },
+        },
+      },
+    });
+  }
 }
 
 function renderChartTpms(sensor) {
@@ -728,10 +1226,516 @@ function resetChartCards() {
   $('chart-gps-only').style.display = 'none';
 }
 
+// ─── Tracker journey map ──────────────────────────────────────────────────────
+async function loadJourneys(vehicleID) {
+  return apiFetch(`/api/vehicle-events/journeys?vehicle=${encodeURIComponent(vehicleID)}&limit=50`);
+}
+
+async function loadJourneyTrack(journeyID) {
+  return apiFetch(`/api/vehicle-events?journey=${encodeURIComponent(journeyID)}&limit=2000`);
+}
+
+async function loadDriverBehavior(journeyID) {
+  try { return await apiFetch(`/api/driver-behavior?journey=${encodeURIComponent(journeyID)}&limit=500`); }
+  catch (e) { console.warn('Driver behavior fetch failed:', e); return []; }
+}
+
+// Driver behavior icon config — Tabler.io SVG icons (currentColor, consistent with event badges)
+const BEHAVIOR_SVG = {
+  // arrow-big-up-lines = harsh acceleration
+  acceleration: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 12h-3.586a1 1 0 0 1 -.707 -1.707l6.586 -6.586a1 1 0 0 1 1.414 0l6.586 6.586a1 1 0 0 1 -.707 1.707h-3.586v3h-6v-3"/><path d="M9 21h6"/><path d="M9 18h6"/></svg>',
+  // arrow-big-down-lines = harsh braking
+  braking:      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M15 12h3.586a1 1 0 0 1 .707 1.707l-6.586 6.586a1 1 0 0 1 -1.414 0l-6.586 -6.586a1 1 0 0 1 .707 -1.707h3.586v-3h6v3"/><path d="M15 3h-6"/><path d="M15 6h-6"/></svg>',
+  // corner-right-down = cornering
+  cornering:    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 6h6a3 3 0 0 1 3 3v10l-4 -4m8 0l-4 4"/></svg>',
+  // gauge = overspeed
+  overspeed:    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M13.41 10.59l2.59 -2.59"/><path d="M7 12a5 5 0 0 1 5 -5"/></svg>',
+  // activity (ECG pulse) = over-rev
+  revving:      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12h4l3 8l4 -16l3 8h4"/></svg>',
+  // hourglass = idling (same as events)
+  idling:       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',
+  // alert-triangle = unknown
+  unknown:      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg>',
+};
+
+const BEHAVIOR_CONFIG = {
+  acceleration: { label: 'Harsh Accel.',  color: '#fb923c', unit: 'm/s²' },
+  braking:      { label: 'Harsh Braking', color: '#f87171', unit: 'm/s²' },
+  cornering:    { label: 'Cornering',     color: '#818cf8', unit: 'm/s²' },
+  overspeed:    { label: 'Overspeed',     color: '#facc15', unit: 'km/h' },
+  revving:      { label: 'Over-Rev',      color: '#f472b6', unit: 'RPM'  },
+  idling:       { label: 'Idling',        color: '#60a5fa', unit: 's'    },
+  unknown:      { label: 'Alert',         color: '#94a3b8', unit: ''     },
+};
+
+function behaviorIcon(alertType) {
+  const c   = BEHAVIOR_CONFIG[alertType] || BEHAVIOR_CONFIG.unknown;
+  const svg = BEHAVIOR_SVG[alertType] || BEHAVIOR_SVG.unknown;
+  return L.divIcon({
+    className:  '',
+    iconSize:   [32, 28],
+    iconAnchor: [16, 14],
+    popupAnchor:[0, -18],
+    html: `<div style="padding:6px 8px;border-radius:99px;background:color-mix(in srgb,${c.color} 18%,#fff);border:1.5px solid color-mix(in srgb,${c.color} 45%,transparent);color:${c.color};display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.18);cursor:pointer">${svg}</div>`,
+  });
+}
+
+// ─── OSRM Map Matching ────────────────────────────────────────────────────────
+const OSRM_BASE        = 'https://router.project-osrm.org/match/v1/driving/';
+const OSRM_CHUNK       = 9;   // public demo server hard limit: 10 coords per match request
+const _osrmCache       = new Map(); // journeyID -> matched lls
+
+async function osrmMatchChunk(lls, attempt = 0) {
+  // lls: [[lat, lon], ...]  — OSRM expects lon,lat order
+  // Filter invalid coords and deduplicate consecutive identical points
+  const deduped = [];
+  for (const [lat, lon] of lls) {
+    if (!isFinite(lat) || !isFinite(lon) || (lat === 0 && lon === 0)) continue;
+    const prev = deduped.at(-1);
+    if (prev && prev[0] === lat && prev[1] === lon) continue;
+    deduped.push([lat, lon]);
+  }
+  const valid = deduped;
+  if (valid.length < 2) throw new Error('not enough valid points');
+  const coords  = valid.map(([lat, lon]) => `${lon},${lat}`).join(';');
+  const url     = `${OSRM_BASE}${coords}?overview=full&geometries=geojson&gaps=ignore`;
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (networkErr) {
+    if (attempt < 3) {
+      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      return osrmMatchChunk(lls, attempt + 1);
+    }
+    throw networkErr;
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`OSRM HTTP ${res.status}: ${body.slice(0, 120)}`);
+  }
+  const data    = await res.json();
+  if (data.code !== 'Ok') throw new Error(`OSRM code=${data.code}`);
+  const matched = [];
+  for (const m of data.matchings)
+    for (const [lon, lat] of m.geometry.coordinates)
+      matched.push([lat, lon]);
+  return matched;
+}
+
+async function mapMatchTrack(lls, journeyID) {
+  if (lls.length < 2) return null;
+  if (journeyID != null && _osrmCache.has(journeyID)) return _osrmCache.get(journeyID);
+
+  // Build chunks (overlap of 1 point for continuity)
+  const chunks = [];
+  for (let i = 0; i < lls.length; i += OSRM_CHUNK) {
+    const chunk = lls.slice(i, i + OSRM_CHUNK + 1);
+    if (chunk.length < 2) break;
+    chunks.push({ index: chunks.length, chunk });
+  }
+
+  // Fire all chunk requests in parallel
+  const settled = await Promise.allSettled(chunks.map(({ chunk }) => osrmMatchChunk(chunk)));
+
+  // Assemble results in order
+  const results = [];
+  let anyMatched = false;
+  settled.forEach(({ status, value, reason }, i) => {
+    const rawChunk = chunks[i].chunk;
+    if (status === 'fulfilled') {
+      results.push(...(results.length > 0 ? value.slice(1) : value));
+      anyMatched = true;
+    } else {
+      console.warn('[OSRM] chunk failed:', reason?.message);
+      results.push(...(results.length > 0 ? rawChunk.slice(1) : rawChunk));
+    }
+  });
+
+  const out = anyMatched ? results : null;
+  if (journeyID != null && out !== null) _osrmCache.set(journeyID, out);
+  if (!anyMatched) console.warn('[OSRM] no chunk matched — unavailable');
+  return out;
+}
+
+async function renderTrackerMap(sensor) {
+  D.mapCont.innerHTML = '';
+
+  // ── Delete-period toolbar ────────────────────────────────────────────────
+  const toolbar = document.createElement('div');
+  toolbar.id = 'tracker-toolbar';
+  const { from, to } = getRange();
+  const dfShort = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const periodLabel = `${dfShort.format(from)} – ${dfShort.format(to)}`;
+  toolbar.innerHTML = `
+    <span class="tracker-toolbar-label">Period: <b>${periodLabel}</b></span>
+    <button id="tracker-delete-period-btn" class="modal-btn-danger admin-small-btn" title="Delete all tracker events for this period">
+      \uD83D\uDDD1\uFE0E Delete period data
+    </button>`;
+  D.mapCont.appendChild(toolbar);
+  toolbar.querySelector('#tracker-delete-period-btn').addEventListener('click', async () => {
+    const { from, to } = getRange();
+    if (!confirm(`Delete all tracker data for ${periodLabel}?\nThis cannot be undone.`)) return;
+    try {
+      const res = await fetch(
+        `/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&from=${from.toISOString()}&to=${to.toISOString()}`,
+        { method: 'DELETE', headers: authHeaders() }
+      );
+      if (!res.ok) throw new Error(await res.text());
+      const { deleted } = await res.json();
+      alert(`Deleted ${deleted} event${deleted !== 1 ? 's' : ''}.`);
+      renderTrackerMap(sensor);  // refresh
+    } catch (e) { alert(e.message); }
+  });
+
+  // ── Build map shell ──────────────────────────────────────────────────────
+  const wrapper = document.createElement('div');
+  wrapper.id = 'tracker-map-wrapper';
+  D.mapCont.appendChild(wrapper);
+
+  const mapDiv = document.createElement('div');
+  mapDiv.id = 'leaflet-map';
+  wrapper.appendChild(mapDiv);
+
+  const panel = document.createElement('div');
+  panel.id = 'journey-list-panel';
+  const trackerDisplayName = sensor.sensorName || sensor.vehicleName || 'GPS Tracker';
+  const isAdmin = !!S.authToken;
+  const editBtnHtml = isAdmin
+    ? `<button class="jlp-rename-btn">&#x270F;&#xFE0E; Rename</button>` : '';
+  panel.innerHTML =
+    `<div class="jlp-header">`+
+    `<span class="jlp-header-title">Journeys</span>${editBtnHtml}`+
+    `<form class="jlp-rename-form" style="display:none">`+
+    `<input class="jlp-rename-input" type="text" value="${trackerDisplayName}" placeholder="Tracker name\u2026">`+
+    `<button type="submit" class="modal-btn-primary admin-small-btn">Save</button>`+
+    `<button type="button" class="modal-btn admin-small-btn jlp-rename-cancel">Cancel</button>`+
+    `</form>`+
+    `</div>`+
+    `<div class="jlp-body"><div class="jlp-loading">Loading\u2026</div></div>`;
+  wrapper.appendChild(panel);
+
+  // ── Inline tracker rename ────────────────────────────────────────────────
+  if (isAdmin) {
+    const renameBtn    = panel.querySelector('.jlp-rename-btn');
+    const renameForm   = panel.querySelector('.jlp-rename-form');
+    const renameInput  = panel.querySelector('.jlp-rename-input');
+    const renameCancel = panel.querySelector('.jlp-rename-cancel');
+    const headerTitle  = panel.querySelector('.jlp-header-title');
+
+    renameBtn.addEventListener('click', () => {
+      renameBtn.style.display    = 'none';
+      headerTitle.style.display  = 'none';
+      renameForm.style.display   = 'flex';
+      renameInput.select();
+    });
+    renameCancel.addEventListener('click', () => {
+      renameForm.style.display   = 'none';
+      headerTitle.style.display  = '';
+      renameBtn.style.display    = '';
+    });
+    renameForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newName = renameInput.value.trim();
+      if (!newName) return;
+      try {
+        await adminUpdateTracker(sensor.sensorID, newName);
+        headerTitle.textContent    = newName;
+        sensor.sensorName          = newName;   // update in-memory
+        renameForm.style.display   = 'none';
+        headerTitle.style.display  = '';
+        renameBtn.style.display    = '';
+        await loadSensors(); renderBreadcrumb(); renderSensorInfoCard();
+      } catch (err) { alert(err.message); }
+    });
+  }
+
+  if (S.leafletMap) { S.leafletMap.remove(); S.leafletMap = null; }
+  const defaultLL = sensor.latestLatitude != null ? [sensor.latestLatitude, sensor.latestLongitude] : [48.8566, 2.3522];
+  const map = S.leafletMap = L.map('leaflet-map', { preferCanvas: true })
+    .setView(defaultLL, sensor.latestLatitude != null ? 14 : 5);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+
+  // ── Behavior alert legend ────────────────────────────────────────────────
+  const BehaviorLegend = L.Control.extend({
+    options: { position: 'bottomright' },
+    onAdd() {
+      const div = L.DomUtil.create('div', 'behavior-legend leaflet-control');
+      let html = '<div class="behavior-legend-title">Driver Alerts</div>';
+      Object.entries(BEHAVIOR_CONFIG).filter(([k]) => k !== 'unknown').forEach(([k, c]) => {
+        const svg = BEHAVIOR_SVG[k] || BEHAVIOR_SVG.unknown;
+        html += `<div class="behavior-legend-row"><span class="behavior-legend-icon" style="border-color:${c.color};color:${c.color}">${svg}</span><span style="color:${c.color}">${c.label}</span></div>`;
+      });
+      div.innerHTML = html;
+      L.DomEvent.disableClickPropagation(div);
+      return div;
+    }
+  });
+  new BehaviorLegend().addTo(map);
+
+  // Show latest position pin
+  let latestMarker = null;
+  if (sensor.latestLatitude != null) {
+    latestMarker = L.circleMarker([sensor.latestLatitude, sensor.latestLongitude], {
+      radius: 10, fillColor: '#30d158', color: '#fff', weight: 2,
+      fillOpacity: 1, opacity: 1,
+    }).bindPopup('<b>Latest position</b>').addTo(map);
+  }
+
+  // ── Map-match toggle (native checkbox, zero Leaflet interference) ─────
+  let matchDrawFn = null;
+  const mmLabel = document.createElement('label');
+  mmLabel.id = 'mm-toggle-wrap';
+  mmLabel.innerHTML = `<input type="checkbox" id="mm-checkbox"${S.mapMatchEnabled ? ' checked' : ''}><span class="mm-toggle-track"><span class="mm-toggle-thumb"></span></span><span class="mm-toggle-text">Map match</span>`;
+  L.DomEvent.disableClickPropagation(mmLabel);
+  mapDiv.appendChild(mmLabel);
+
+  document.getElementById('mm-checkbox').addEventListener('change', async function() {
+    S.mapMatchEnabled = this.checked;
+    if (this.checked && currentRawLls && !_osrmCache.has(currentJourneyID)) {
+      matchCtrl.setAvailable(false);
+      try {
+        await mapMatchTrack(currentRawLls, currentJourneyID);
+      } catch(e) {
+        console.warn('Map matching unavailable:', e);
+      }
+      matchCtrl.setAvailable(_osrmCache.has(currentJourneyID) ? true : null);
+    }
+    if (matchDrawFn) matchDrawFn();
+  });
+
+  // Shared state for lazy OSRM
+  let currentRawLls    = null;
+  let currentJourneyID = null;
+  function drawCurrentTrack() {
+    const matchedLls = _osrmCache.get(currentJourneyID) ?? null;
+    drawLayersFn?.(
+      (S.mapMatchEnabled && matchedLls) ? matchedLls : currentRawLls,
+      !!(S.mapMatchEnabled && matchedLls)
+    );
+  }
+  let drawLayersFn = null;
+
+  const matchCtrl = {
+    setAvailable(ok) {
+      const cb   = document.getElementById('mm-checkbox');
+      const txt  = document.querySelector('.mm-toggle-text');
+      if (cb)  cb.disabled = false; // always clickable
+      if (txt) txt.textContent = ok ? 'Map match ✓' : (ok === false && currentJourneyID ? 'Map match (unavailable)' : 'Map match');
+    },
+    reset() {
+      const cb  = document.getElementById('mm-checkbox');
+      const txt = document.querySelector('.mm-toggle-text');
+      if (cb)  cb.disabled = false;
+      if (txt) txt.textContent = 'Map match';
+    }
+  };
+
+  // Track layers for current journey
+  let trackLayers    = [];   // route + speed dots — cleared on map-match toggle
+  let behaviorLayers = [];   // behavior markers   — survive map-match toggles
+
+  // Clear route lines/dots and then re-add stored behavior markers on top
+  function clearTrack() {
+    trackLayers.forEach(l => map.removeLayer(l));
+    trackLayers = [];
+    behaviorLayers.forEach(l => map.removeLayer(l)); // temporarily remove
+    // behaviorLayers array is NOT reset here — reAddBehaviorLayers will re-add them
+  }
+  // Clear everything including behavior markers (new journey selected)
+  function clearAll() {
+    trackLayers.forEach(l => map.removeLayer(l));
+    trackLayers = [];
+    behaviorLayers.forEach(l => map.removeLayer(l));
+    behaviorLayers = [];
+  }
+  function reAddBehaviorLayers() {
+    behaviorLayers.forEach(l => { trackLayers.push(l); l.addTo(map); });
+  }
+
+  const df = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  async function selectJourney(journey, rowEl) {
+    panel.querySelectorAll('.jlp-row').forEach(r => r.classList.remove('active'));
+    rowEl.classList.add('active');
+    clearAll();   // new journey: remove everything
+    matchDrawFn = null;
+    matchCtrl.reset();
+
+    try {
+      const events  = await loadJourneyTrack(journey.journeyID);
+      const pts     = events.filter(e => e.latitude != null && e.longitude != null);
+      if (!pts.length) return;
+      const rawLls  = pts
+        .map(e => [e.latitude, e.longitude])
+        .filter(([lat, lon]) => isFinite(lat) && isFinite(lon) && !(lat === 0 && lon === 0))
+        .filter(([lat, lon], i, arr) => i === 0 || lat !== arr[i-1][0] || lon !== arr[i-1][1]);
+
+      const _mkJourneyIcon = (svgPaths, fillIcon, color) => L.divIcon({
+        className: '', iconSize: [32, 28], iconAnchor: [16, 14], popupAnchor: [0, -20],
+        html: `<div style="padding:6px 8px;border-radius:99px;background:color-mix(in srgb,${color} 18%,#fff);border:1.5px solid color-mix(in srgb,${color} 45%,transparent);color:${color};display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.18)"><svg width="15" height="15" viewBox="0 0 24 24" fill="${fillIcon ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/>${svgPaths}</svg></div>`,
+      });
+      const _flagPaths = '<path d="M5 14h14v-9h-14v16"/>';
+      const startIcon = _mkJourneyIcon(_flagPaths, false, '#34d399');
+      const endIcon   = _mkJourneyIcon(_flagPaths, true,  '#f87171');
+
+      function drawLayers(displayLls, isMatched) {
+        clearTrack();
+        const lineColor = isMatched ? '#3b82f6' : '#f59e0b';
+        // Raw GPS underlay when showing matched route
+        if (isMatched) {
+          const rawLine = L.polyline(rawLls, { color: '#94a3b8', weight: 2, opacity: 0.4, dashArray: '5 6' });
+          trackLayers.push(rawLine);
+          rawLine.addTo(map);
+        }
+        const line = L.polyline(displayLls, { color: lineColor, weight: 3.5, opacity: 0.9 });
+        trackLayers.push(line);
+        line.addTo(map);
+        // Start / End markers always on raw GPS positions
+        const sm = L.marker(rawLls[0],      { icon: startIcon }).bindPopup('<b>Start</b>');
+        const em = L.marker(rawLls.at(-1),  { icon: endIcon   }).bindPopup('<b>End</b>');
+        trackLayers.push(sm, em);
+        sm.addTo(map); em.addTo(map);
+        // Speed dot markers on raw positions
+        pts.forEach(e => {
+          if (e.speedKmh == null) return;
+          const m = L.circleMarker([e.latitude, e.longitude], { radius: 4, fillColor: lineColor, color: 'transparent', fillOpacity: 0.5 });
+          m.bindPopup(`${new Date(e.timestamp).toLocaleTimeString()} \u2013 ${e.speedKmh.toFixed(0)} km/h`);
+          trackLayers.push(m);
+          m.addTo(map);
+        });
+        // Re-add behavior markers on top (persisted across map-match toggles)
+        reAddBehaviorLayers();
+      }
+
+      // Draw raw GPS immediately
+      currentRawLls    = rawLls;
+      currentJourneyID = journey.journeyID;
+      drawLayersFn     = drawLayers;
+      matchDrawFn = () => drawCurrentTrack();
+      matchCtrl.setAvailable(false);
+      matchDrawFn();
+      try { map.fitBounds(rawLls, { padding: [30, 30], maxZoom: 16 }); } catch(_) {}
+
+      // If map match is already enabled, trigger OSRM now
+      if (S.mapMatchEnabled) {
+        let matchedLls = null;
+        try {
+          matchedLls = await mapMatchTrack(rawLls, journey.journeyID);
+        } catch(e) {
+          console.warn('Map matching unavailable:', e);
+        }
+        matchCtrl.setAvailable(!!matchedLls);
+        matchDrawFn();
+      }
+
+      // ── Driver behavior markers ─────────────────────────────────────────
+      const behaviors = await loadDriverBehavior(journey.journeyID);
+      behaviorLayers = []; // fresh list for this journey
+
+      // Count alerts for the badge and update the row
+      const alertCount = behaviors.length;
+      const alertBadge = rowEl.querySelector('.jlp-alert-badge');
+      if (alertBadge) alertBadge.textContent = alertCount > 0 ? `⚠\uFE0E ${alertCount}` : '';
+
+      behaviors.forEach(b => {
+        if (b.latitude == null || b.longitude == null) return;
+        const cfg  = BEHAVIOR_CONFIG[b.alertType] || BEHAVIOR_CONFIG.unknown;
+        const icon = behaviorIcon(b.alertType);
+        const ts   = new Date(b.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const durS = b.alertDurationMs != null ? (b.alertDurationMs / 1000).toFixed(1) : '?';
+        const val  = b.alertValueMax != null ? b.alertValueMax : null;
+        const valStr = val != null ? (cfg.unit ? `${val.toFixed(2)} ${cfg.unit}` : val.toFixed(2)) : '—';
+        const spdStr = b.speedKmh != null ? `<br><span style="color:#94a3b8">${b.speedKmh.toFixed(0)} km/h</span>` : '';
+        const popup = `<div style="font-size:13px;min-width:140px">
+          <div style="font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cfg.color};flex-shrink:0"></span>${cfg.label}</div>
+          <div style="color:#94a3b8;font-size:11px">${ts}</div>
+          <hr style="border:none;border-top:1px solid rgba(255,255,255,.1);margin:6px 0">
+          <div>Peak: <b>${valStr}</b></div>
+          <div>Duration: <b>${durS}s</b></div>
+          ${spdStr}
+        </div>`;
+        const m = L.marker([b.latitude, b.longitude], { icon }).bindPopup(popup, { maxWidth: 220 });
+        behaviorLayers.push(m);
+        trackLayers.push(m);
+        m.addTo(map);
+      });
+
+      // Warn about GPS-less alerts in console (not silent)
+      const noGps = behaviors.filter(b => b.latitude == null || b.longitude == null);
+      if (noGps.length) console.debug(`[behavior] ${noGps.length} alert(s) have no GPS position — not shown on map.`);
+    } catch(e) { console.error('selectJourney:', e); }
+  }
+
+  // ── Fetch journeys and render panel ─────────────────────────────────────
+  try {
+    const journeys = await loadJourneys(sensor.vehicleID ?? sensor.sensorID);
+    const body = panel.querySelector('.jlp-body');
+    if (!journeys.length) {
+      body.innerHTML = '<div class="jlp-empty">No journeys recorded yet.</div>';
+      return;
+    }
+    body.innerHTML = '';
+    journeys.forEach((j, idx) => {
+      const row = document.createElement('div');
+      row.className = 'jlp-row';
+      const date   = j.startedAt ? df.format(new Date(j.startedAt)) : 'Unknown date';
+      const dist   = j.totalDistanceKm != null && j.totalDistanceKm > 0 ? `${j.totalDistanceKm.toFixed(1)} km` : '';
+      const fuelL  = j.totalFuelConsumedL;
+      let fuel = '';
+      if (fuelL != null && fuelL > 0) {
+        fuel = `${fuelL.toFixed(2)} L`;
+        if (j.totalDistanceKm > 0)
+          fuel += ` <span style="color:var(--fg3)">(${(fuelL / j.totalDistanceKm * 100).toFixed(1)} L/100km)</span>`;
+      }
+      const driver = j.driverID ? `<span class="jlp-driver">${j.driverID}</span>` : '';
+      const meta   = [dist, fuel].filter(Boolean).join(' · ');
+      row.innerHTML = `
+        <div class="jlp-row-main">
+          <div class="jlp-row-info">
+            <div class="jlp-row-date">${date}${driver}</div>
+            ${meta ? `<div class="jlp-row-meta">${meta}</div>` : ''}
+          </div>
+          <span class="jlp-alert-badge"></span>
+          <button class="jlp-delete-btn" title="Delete this journey">\uD83D\uDDD1\uFE0E</button>
+        </div>`;
+      row.querySelector('.jlp-delete-btn').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const label = date + (dist ? ` · ${dist}` : '');
+        if (!confirm(`Delete journey "${label}"?\nThis cannot be undone.`)) return;
+        try {
+          const res = await fetch(`/api/vehicle-events/journeys/${encodeURIComponent(j.journeyID)}`,
+            { method: 'DELETE', headers: authHeaders() });
+          if (!res.ok) throw new Error(await res.text());
+          row.remove();
+          clearTrack();
+          // If deleted row was selected, auto-select next remaining row
+          const rows = [...body.querySelectorAll('.jlp-row')];
+          if (!rows.length) { clearTrack(); return; }
+          const next = rows[Math.min(idx, rows.length - 1)];
+          next?.click();
+        } catch (err) { alert(err.message); }
+      });
+      row.addEventListener('click', () => selectJourney(j, row));
+      body.appendChild(row);
+      // Auto-select first journey
+      if (idx === 0) selectJourney(j, row);
+    });
+  } catch(e) {
+    panel.querySelector('.jlp-body').innerHTML = '<div class="jlp-empty">Failed to load journeys.</div>';
+    console.error('renderTrackerMap:', e);
+  }
+}
+
 // ─── Map ──────────────────────────────────────────────────────────────────────
 function renderMap() {
-  D.mapCont.innerHTML = '';
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
+  if (isTracker(sensor)) { renderTrackerMap(sensor); return; }
+
+  D.mapCont.innerHTML = '';
   const target = sensor?.targetPressureBar ?? null;
   const gps    = S.records.filter(r => r.latitude != null && r.longitude != null);
 
@@ -854,11 +1858,130 @@ function renderMap() {
 }
 
 // ─── Table ────────────────────────────────────────────────────────────────────
-function renderTable() {
+async function renderTable() {
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
   const target = sensor?.targetPressureBar ?? null;
   const df     = new Intl.DateTimeFormat([], { dateStyle: 'short', timeStyle: 'medium' });
   const rows   = [...S.records].reverse().slice(0, 2000);
+
+  if (isTracker(sensor)) {
+    // Skeleton while loading
+    $('table-head').innerHTML = '<tr><th colspan="11"></th></tr>';
+    D.tableBody.innerHTML = skeletonRows(11);
+
+    let events = [];
+    try {
+      const { from, to } = getRange();
+      events = await apiFetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&limit=2000`);
+      const fromMs = from.getTime(), toMs = to.getTime();
+      events = events.filter(e => {
+        const t = new Date(e.timestamp).getTime();
+        return t >= fromMs && t <= toMs;
+      }).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).reverse();
+    } catch(err) {
+      D.tableBody.innerHTML = `<tr><td colspan="11" style="color:var(--danger)">${err.message}</td></tr>`;
+      return;
+    }
+
+    if (!events.length) {
+      $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
+      D.tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--fg3)">No events in this period</td></tr>';
+    } else {
+      // Auto-detect which optional columns have data
+      const hasSats  = events.some(e => e.gpsSatellites != null);
+      const hasSpeed = events.some(e => e.speedKmh != null);
+      const hasOdo   = events.some(e => e.odometerKm != null);
+      const hasDist  = events.some(e => e.journeyDistanceKm != null);
+      const hasRpm   = events.some(e => e.engineRpm != null);
+      const hasJFuel = events.some(e => e.journeyFuelConsumedL != null);
+      const hasFuel  = events.some(e => e.fuelLevelPct != null);
+
+      const hdrs = ['Time', 'Event', 'GPS / Fix'];
+      if (hasSats)  hdrs.push('Sats');
+      if (hasSpeed) hdrs.push('Speed');
+      if (hasOdo)   hdrs.push('Odometer');
+      if (hasDist)  hdrs.push('Journey dist.');
+      if (hasRpm)   hdrs.push('Engine RPM');
+      if (hasJFuel) hdrs.push('Journey fuel');
+      if (hasFuel)  hdrs.push('Fuel level');
+      hdrs.push('');
+      const colCount = hdrs.length;
+      $('table-head').innerHTML = `<tr>${hdrs.map(h => `<th>${h}</th>`).join('')}</tr>`;
+
+      const EVENT_LABELS = {
+        journey_start: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 14h14v-9h-14v16"/></svg>',   label: 'Journey start', color: '#34d399' },
+        driving:       { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M12 14l0 7"/><path d="M10 12l-6.75 -2"/><path d="M14 12l6.75 -2"/></svg>', label: 'Driving',       color: '#60a5fa' },
+        journey_end:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 14h14v-9h-14v16"/></svg>',    label: 'Journey end',   color: '#f87171' },
+        idle_start:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idle start',    color: '#a78bfa' },
+        idle_end:      { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idle end',      color: '#a78bfa' },
+        idling:        { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idling',        color: '#a78bfa' },
+      };
+
+      // Journey group separators
+      let lastJID = null;
+      D.tableBody.innerHTML = events.map((e, idx) => {
+        let sep = '';
+        if (e.journeyID && e.journeyID !== lastJID) {
+          if (idx > 0) sep = `<tr class="journey-sep-row"><td colspan="${colCount}"></td></tr>`;
+          lastJID = e.journeyID;
+        }
+        const ev      = EVENT_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType ?? '–', color: 'var(--fg2)' };
+        const fuelCol = e.fuelLevelPct != null
+          ? (e.fuelLevelPct > 50 ? '#34d399' : e.fuelLevelPct > 20 ? '#fbbf24' : '#f87171') : '';
+        let cells = `<td class="td-ts-compact">${fmtTs(e.timestamp)}</td>`;
+        cells += `<td><span class="ev-badge" style="--ev-color:${ev.color}">${ev.icon} ${ev.label}</span></td>`;
+        cells += `<td>${gpsCell(e)}</td>`;
+        if (hasSats)  cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
+        if (hasSpeed) cells += `<td>${e.speedKmh != null ? e.speedKmh.toFixed(0) + ' km/h' : '–'}</td>`;
+        if (hasOdo)   cells += `<td>${e.odometerKm != null ? (e.odometerKm / 1000).toFixed(1) + ' km' : '–'}</td>`;
+        if (hasDist)  cells += `<td>${e.journeyDistanceKm != null ? (e.journeyDistanceKm / 1000).toFixed(2) + ' km' : '–'}</td>`;
+        if (hasRpm)   cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + ' rpm' : '–'}</td>`;
+        if (hasJFuel) cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + ' L' : '–'}</td>`;
+        if (hasFuel)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
+        cells += `<td><button class="row-delete-btn" data-id="${e.id}" title="Delete">🗑︎</button></td>`;
+        return sep + `<tr>${cells}</tr>`;
+      }).join('');
+
+      D.tableBody.querySelectorAll('.row-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async evClick => {
+          const row = evClick.target.closest('tr');
+          const id  = btn.dataset.id;
+          if (!id) return;
+          const res = await fetch(`/api/vehicle-events/${id}`, { method: 'DELETE', headers: authHeaders() });
+          if (res.ok || res.status === 204) { row.remove(); showToast('Event deleted'); }
+          else showToast('Delete failed', 'error');
+        });
+      });
+
+      // Delete period toolbar
+      D.tableCont.querySelector('#events-period-toolbar')?.remove();
+      const evToolbar = document.createElement('div');
+      evToolbar.id = 'events-period-toolbar';
+      evToolbar.className = 'tab-action-toolbar';
+      const { from: evFrom, to: evTo } = getRange();
+      const dfShortEv = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      evToolbar.innerHTML = `<span>Period: <b>${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)}</b> · ${events.length} event${events.length !== 1 ? 's' : ''}</span><button class="modal-btn-danger admin-small-btn">🗑︎ Delete all</button>`;
+      D.tableCont.prepend(evToolbar);
+      evToolbar.querySelector('button').addEventListener('click', () => {
+        showDeleteModal({
+          title: 'Delete all events?',
+          body: `Permanently delete <b>${events.length} event${events.length !== 1 ? 's' : ''}</b> for this period.<br><span style="color:var(--fg3);font-size:11px">${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)}</span>`,
+          confirmLabel: `Delete ${events.length} events`,
+          onConfirm: async () => {
+            const res = await fetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&from=${evFrom.toISOString()}&to=${evTo.toISOString()}`, { method: 'DELETE', headers: authHeaders() });
+            if (res.ok) {
+              const data = await res.json().catch(() => ({}));
+              showToast(`Deleted ${data.deleted ?? events.length} events`);
+              D.tableCont.querySelector('#events-period-toolbar')?.remove();
+              renderTable();
+            } else showToast('Delete failed', 'error');
+          }
+        });
+      });
+    }
+
+    return;
+  }
 
   if (isTpms(sensor)) {
     $('table-head').innerHTML = '<tr><th>Time</th><th>Pressure</th><th>Status</th><th>Target</th><th>Temp</th><th>Battery</th><th>Wheel</th><th>GPS</th></tr>';
@@ -866,7 +1989,7 @@ function renderTable() {
       const status = pStatus(r.pressureBar, target);
       const color  = SC[status];
       const gpsLink = r.latitude != null
-        ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue)">📍</a>` : '–';
+        ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
       return `<tr>
         <td class="td-ts">${df.format(new Date(r.timestamp))}</td>
         <td class="td-pres" style="color:${color}">${r.pressureBar?.toFixed(3) ?? '–'} bar</td>
@@ -879,34 +2002,315 @@ function renderTable() {
       </tr>`;
     }).join('');
   } else if (sensor?.brand === 'airtag') {
-    $('table-head').innerHTML = '<tr><th>Time</th><th>GPS</th></tr>';
+    $('table-head').innerHTML = '<tr><th>Time</th><th>Battery</th><th>Status</th><th>GPS</th></tr>';
     D.tableBody.innerHTML = rows.map(r => {
+      const bPct   = r.batteryPct;
+      const bLabel = bPct != null ? (bPct >= 100 ? 'Full' : bPct >= 60 ? 'Medium' : bPct >= 25 ? 'Low' : 'Critical') : '\u2013';
+      const bCol   = bPct != null ? (bPct >= 60 ? '#34d399' : bPct >= 25 ? '#fbbf24' : '#f87171') : '';
+      const stateCell = r.chargeState === 'Separated' ? `<span style="color:#f87171">Separated</span>` : '\u2013';
       const gpsLink = r.latitude != null
         ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue)">${r.latitude.toFixed(5)}, ${r.longitude.toFixed(5)}</a>` : '–';
-      return `<tr><td class="td-ts">${df.format(new Date(r.timestamp))}</td><td>${gpsLink}</td></tr>`;
+      return `<tr><td class="td-ts">${df.format(new Date(r.timestamp))}</td><td style="color:${bCol}">${bLabel}</td><td>${stateCell}</td><td>${gpsLink}</td></tr>`;
     }).join('');
   } else {
-    // STIHL / ELA / autres
-    $('table-head').innerHTML = '<tr><th>Time</th><th>Battery</th><th>State</th><th>Health</th><th>Total time</th><th>Temp</th><th>Vbatt</th><th>GPS</th></tr>';
-    D.tableBody.innerHTML = rows.map(r => {
-      const bPct = r.batteryPct;
-      const bCol = bPct != null ? (bPct > 50 ? '#34d399' : bPct > 20 ? '#fbbf24' : '#f87171') : '';
-      const hPct = r.healthPct;
-      const hCol = hPct != null ? (hPct > 70 ? '#34d399' : hPct > 40 ? '#fbbf24' : '#f87171') : '';
-      const gpsLink = r.latitude != null
-        ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue)">📍</a>` : '–';
-      return `<tr>
-        <td class="td-ts">${df.format(new Date(r.timestamp))}</td>
-        <td style="color:${bCol}">${bPct != null ? bPct + '%' : '–'}</td>
-        <td>${r.chargeState ?? '–'}</td>
-        <td style="color:${hCol}">${hPct != null ? hPct + '%' : '–'}</td>
-        <td>${fmtDuration(r.totalSeconds)}</td>
-        <td>${r.temperatureC != null ? r.temperatureC.toFixed(1) + ' °C' : '–'}</td>
-        <td>${r.vbattVolts   != null ? r.vbattVolts.toFixed(2) + ' V' : '–'}</td>
-        <td>${gpsLink}</td>
-      </tr>`;
-    }).join('');
+    // STIHL Connector: STIHL-XXXX  →  batteryPct (vbatt), vbattVolts, temp, totalSeconds — no chargeState/health/cycles
+    // STIHL Battery:   STIHLBATT-X →  batteryPct (chargePercent), chargeState, healthPct, chargingCycles, totalSeconds
+    // ELA / autres: mixed
+    const isStihlConnector = sensor?.sensorID?.startsWith('STIHL-') && !sensor?.sensorID?.startsWith('STIHLBATT-');
+    const isStihlBattery   = sensor?.sensorID?.startsWith('STIHLBATT-');
+
+    if (isStihlConnector) {
+      $('table-head').innerHTML = '<tr><th>Time</th><th>Battery</th><th>Total time</th><th>Temp</th><th>Vbatt</th><th>GPS</th></tr>';
+      D.tableBody.innerHTML = rows.map(r => {
+        const bPct = r.batteryPct;
+        const bCol = bPct != null ? (bPct > 50 ? '#34d399' : bPct > 20 ? '#fbbf24' : '#f87171') : '';
+        const gpsLink = r.latitude != null
+          ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
+        return `<tr>
+          <td class="td-ts">${df.format(new Date(r.timestamp))}</td>
+          <td style="color:${bCol}">${bPct != null ? bPct + '%' : '–'}</td>
+          <td>${fmtDuration(r.totalSeconds)}</td>
+          <td>${r.temperatureC != null ? r.temperatureC.toFixed(1) + ' °C' : '–'}</td>
+          <td>${r.vbattVolts   != null ? r.vbattVolts.toFixed(2) + ' V' : '–'}</td>
+          <td>${gpsLink}</td>
+        </tr>`;
+      }).join('');
+    } else if (isStihlBattery) {
+      $('table-head').innerHTML = '<tr><th>Time</th><th>Charge</th><th>State</th><th>Health</th><th>Cycles</th><th>Total discharge</th><th>GPS</th></tr>';
+      D.tableBody.innerHTML = rows.map(r => {
+        const bPct = r.batteryPct;
+        const bCol = bPct != null ? (bPct > 50 ? '#34d399' : bPct > 20 ? '#fbbf24' : '#f87171') : '';
+        const hPct = r.healthPct;
+        const hCol = hPct != null ? (hPct > 70 ? '#34d399' : hPct > 40 ? '#fbbf24' : '#f87171') : '';
+        const gpsLink = r.latitude != null
+          ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
+        return `<tr>
+          <td class="td-ts">${df.format(new Date(r.timestamp))}</td>
+          <td style="color:${bCol}">${bPct != null ? bPct + '%' : '–'}</td>
+          <td>${r.chargeState ? `<span style="color:${chargeStateColor(r.chargeState)}">${r.chargeState}</span>` : '–'}</td>
+          <td style="color:${hCol}">${hPct != null ? hPct + '%' : '–'}</td>
+          <td>${r.chargingCycles != null ? r.chargingCycles.toLocaleString() : '–'}</td>
+          <td>${fmtDuration(r.totalSeconds)}</td>
+          <td>${gpsLink}</td>
+        </tr>`;
+      }).join('');
+    } else {
+      // ELA / autres
+      $('table-head').innerHTML = '<tr><th>Time</th><th>Battery</th><th>State</th><th>Total time</th><th>Temp</th><th>GPS</th></tr>';
+      D.tableBody.innerHTML = rows.map(r => {
+        const bPct = r.batteryPct;
+        const bCol = bPct != null ? (bPct > 50 ? '#34d399' : bPct > 20 ? '#fbbf24' : '#f87171') : '';
+        const gpsLink = r.latitude != null
+          ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
+        return `<tr>
+          <td class="td-ts">${df.format(new Date(r.timestamp))}</td>
+          <td style="color:${bCol}">${bPct != null ? bPct + '%' : '–'}</td>
+          <td>${r.chargeState ?? '–'}</td>
+          <td>${fmtDuration(r.totalSeconds)}</td>
+          <td>${r.temperatureC != null ? r.temperatureC.toFixed(1) + ' °C' : '–'}</td>
+          <td>${gpsLink}</td>
+        </tr>`;
+      }).join('');
+    }
   }
+}
+
+// ─── Errors: lifecycle events with invalid timestamp (< 2026) ─────────────────
+async function renderErrors() {
+  const sensor = S.sensors.find(s => s.sensorID === S.selected);
+  if (!sensor) return;
+
+  const THRESHOLD = new Date('2026-01-01T00:00:00Z').getTime();
+  const LIFECYCLE_LABELS = {
+    boot:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4l0 8"/></svg>',   label: 'Boot',    color: '#a78bfa' },
+    sleep:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 12h6l-6 8h6"/><path d="M14 4h6l-6 8h6"/></svg>',     label: 'Sleep',   color: '#94a3b8' },
+    wake_up: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up', color: '#fbbf24' },
+  };
+
+  D.errorsCont.innerHTML = `<div class="bat-box"><div class="bat-header">Events with invalid timestamp</div><table class="bat-table"><thead><tr><th>Bad timestamp (from device)</th><th>Received at (real time)</th><th>Event</th><th>Reset reason</th></tr></thead><tbody>${skeletonRows(5)}</tbody></table></div>`;
+
+  let events = [];
+  try {
+    events = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&limit=2000`);
+  } catch (err) {
+    D.errorsCont.innerHTML = `<div class="bat-loading-full" style="color:var(--danger)">Failed to load device events.</div>`;
+    return;
+  }
+
+  const invalid = events.filter(e => new Date(e.timestamp).getTime() < THRESHOLD);
+
+  if (!invalid.length) {
+    D.errorsCont.innerHTML = '<div class="bat-loading-full"><span style="font-size:2rem">✅︎</span><br>No invalid timestamps found.</div>';
+    return;
+  }
+
+  D.errorsCont.innerHTML = `
+    <div class="bat-box">
+      <div class="bat-header">Events with invalid timestamp <span class="bat-count">${invalid.length}</span></div>
+      <table class="bat-table">
+        <thead><tr><th>Bad timestamp (from device)</th><th>Received at (real time)</th><th>Event</th><th>Reset reason</th></tr></thead>
+        <tbody>${invalid.map(e => {
+          const ev = LIFECYCLE_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType, color: 'var(--fg2)' };
+          return `<tr>
+            <td class="td-ts-compact" style="color:var(--danger)">${fmtTs(e.timestamp)}</td>
+            <td class="td-ts-compact">${fmtTs(e.receivedAt)}</td>
+            <td><span class="ev-badge" style="--ev-color:${ev.color}">${ev.icon} ${ev.label}</span></td>
+            <td>${e.resetReason ?? '–'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+
+  // Delete-all toolbar
+  const errToolbar = document.createElement('div');
+  errToolbar.className = 'tab-action-toolbar';
+  errToolbar.innerHTML = `<span>${invalid.length} invalid event${invalid.length !== 1 ? 's' : ''} (timestamp before 2026)</span><button class="modal-btn-danger admin-small-btn">🗑︎ Delete all</button>`;
+  D.errorsCont.prepend(errToolbar);
+  errToolbar.querySelector('button').addEventListener('click', () => {
+    showDeleteModal({
+      title: 'Delete all invalid events?',
+      body: `Permanently delete <b>${invalid.length} event${invalid.length !== 1 ? 's' : ''}</b> with invalid timestamps (before 2026).`,
+      confirmLabel: `Delete ${invalid.length} events`,
+      onConfirm: async () => {
+        const res = await fetch(
+          `/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&from=1970-01-01T00:00:00Z&to=2025-12-31T23:59:59Z`,
+          { method: 'DELETE', headers: authHeaders() }
+        );
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          showToast(`Deleted ${data.deleted ?? invalid.length} events`);
+          renderErrors();
+        } else showToast('Delete failed', 'error');
+      }
+    });
+  });
+}
+
+// ─── Alerts ───────────────────────────────────────────────────────────────────
+// ─── Device lifecycle ────────────────────────────────────────────────────────
+async function renderDevice() {
+  const sensor = S.sensors.find(s => s.sensorID === S.selected);
+  if (!sensor) return;
+  const LIFECYCLE_LABELS = {
+    boot:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4l0 8"/></svg>',   label: 'Boot',    color: '#a78bfa' },
+    sleep:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 12h6l-6 8h6"/><path d="M14 4h6l-6 8h6"/></svg>',     label: 'Sleep',   color: '#94a3b8' },
+    wake_up: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up', color: '#fbbf24' },
+  };
+
+  D.deviceCont.innerHTML = `<div class="bat-box"><div class="bat-header">Device events</div><table class="bat-table"><thead><tr><th>Time</th><th>Event</th><th>Reset reason</th><th>Wake source</th><th>Battery</th><th>GPS</th><th></th></tr></thead><tbody>${skeletonRows(6)}</tbody></table></div>`;
+  let events = [];
+  try {
+    events = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&limit=500`);
+  } catch (err) {
+    D.deviceCont.innerHTML = `<div class="bat-loading-full" style="color:var(--danger)">Failed to load device events.</div>`;
+    return;
+  }
+  if (!events.length) {
+    D.deviceCont.innerHTML = '<div class="bat-loading-full"><span style="font-size:2rem">✅︎</span><br>No device lifecycle events recorded.</div>';
+    return;
+  }
+  // API already returns events descending (most recent first)
+  D.deviceCont.innerHTML = `
+    <div class="bat-box">
+      <div class="bat-header">Device events <span class="bat-count">${events.length}</span></div>
+      <table class="bat-table">
+        <thead><tr><th>Time</th><th>Event</th><th>Reset reason</th><th>Wake source</th><th>Battery</th><th>GPS</th><th></th></tr></thead>
+        <tbody>${events.map(e => {
+          const ev = LIFECYCLE_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType, color: 'var(--fg2)' };
+          return `<tr data-id="${e.id}">
+            <td class="td-ts-compact">${fmtTs(e.timestamp)}</td>
+            <td><span class="ev-badge" style="--ev-color:${ev.color}">${ev.icon} ${ev.label}</span></td>
+            <td>${e.resetReason  ?? '–'}</td>
+            <td>${e.wakeupSource ?? '–'}</td>
+            <td>${e.batteryVoltageV != null ? e.batteryVoltageV.toFixed(2) + ' V' : '–'}</td>
+            <td>${gpsCell(e)}</td>
+            <td><button class="row-delete-btn" title="Delete">🗑︎</button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+
+  D.deviceCont.querySelectorAll('.row-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async evClick => {
+      const row = evClick.target.closest('tr');
+      const id  = row?.dataset.id;
+      if (!id) return;
+      const res = await fetch(`/api/device-lifecycle/${id}`, { method: 'DELETE', headers: authHeaders() });
+      if (res.ok || res.status === 204) { row.remove(); showToast('Event deleted'); }
+      else showToast('Delete failed', 'error');
+    });
+  });
+
+  // Delete period toolbar
+  const { from: dvFrom, to: dvTo } = getRange();
+  const dfShortDv = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const dvToolbar = document.createElement('div');
+  dvToolbar.className = 'tab-action-toolbar';
+  dvToolbar.innerHTML = `<span>Period: <b>${dfShortDv.format(dvFrom)} – ${dfShortDv.format(dvTo)}</b> · ${events.length} event${events.length !== 1 ? 's' : ''}</span><button class="modal-btn-danger admin-small-btn">🗑︎ Delete all</button>`;
+  D.deviceCont.prepend(dvToolbar);
+  dvToolbar.querySelector('button').addEventListener('click', () => {
+    showDeleteModal({
+      title: 'Delete all device events?',
+      body: `Permanently delete <b>${events.length} event${events.length !== 1 ? 's' : ''}</b> for this period.<br><span style="color:var(--fg3);font-size:11px">${dfShortDv.format(dvFrom)} – ${dfShortDv.format(dvTo)}</span>`,
+      confirmLabel: `Delete ${events.length} events`,
+      onConfirm: async () => {
+        const res = await fetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&from=${dvFrom.toISOString()}&to=${dvTo.toISOString()}`, { method: 'DELETE', headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          showToast(`Deleted ${data.deleted ?? events.length} events`);
+          renderDevice();
+        } else showToast('Delete failed', 'error');
+      }
+    });
+  });
+}
+
+async function renderAlerts() {
+  const sensor = S.sensors.find(s => s.sensorID === S.selected);
+  if (!sensor) return;
+
+  D.alertsCont.innerHTML = `<div class="bat-box"><div class="bat-header">Driver behaviour alerts</div><table class="bat-table"><thead><tr><th>Time</th><th>Type</th><th>Peak</th><th>Duration</th><th>Speed</th><th>Journey</th><th>Position</th><th></th></tr></thead><tbody>${skeletonRows(8)}</tbody></table></div>`;
+
+  let behaviors = [];
+  try { behaviors = await apiFetch(`/api/driver-behavior?imei=${encodeURIComponent(sensor.sensorID)}&limit=1000`); }
+  catch(e) {
+    D.alertsCont.innerHTML = `<div class="bat-loading-full" style="color:var(--danger)">Failed to load alerts.</div>`;
+    console.warn('behavior fetch:', e);
+    return;
+  }
+
+  behaviors.reverse(); // most recent first
+
+  if (!behaviors.length) {
+    D.alertsCont.innerHTML = `<div class="bat-loading-full"><span style="font-size:2rem">✅\uFE0E</span><br>No driver behaviour alerts recorded.</div>`;
+    return;
+  }
+
+  D.alertsCont.innerHTML = `
+    <div class="bat-box">
+      <div class="bat-header">Driver behaviour alerts <span class="bat-count">${behaviors.length}</span></div>
+      <table class="bat-table">
+        <thead><tr>
+          <th>Time</th><th>Type</th><th>Peak</th><th>Duration</th><th>Speed</th><th>Journey</th><th>Position</th><th></th>
+        </tr></thead>
+        <tbody>${behaviors.map(b => {
+        const cfg    = BEHAVIOR_CONFIG[b.alertType] || BEHAVIOR_CONFIG.unknown;
+        const durS   = b.alertDurationMs != null ? (b.alertDurationMs / 1000).toFixed(1) + ' s' : '\u2014';
+        const val    = b.alertValueMax != null ? b.alertValueMax : null;
+        const valStr = val != null ? (cfg.unit ? `${val.toFixed(2)}\u00a0${cfg.unit}` : val.toFixed(2)) : '\u2014';
+        const spd    = b.speedKmh != null ? `${b.speedKmh.toFixed(0)}\u00a0km/h` : '\u2014';
+        const journey = b.journeyID ? `<span style="font-family:monospace;font-size:10px;color:var(--fg3)">${b.journeyID.slice(0,8)}\u2026</span>` : '\u2014';
+        const gps    = (b.latitude != null && b.longitude != null)
+          ? `<a href="https://www.openstreetmap.org/?mlat=${b.latitude}&mlon=${b.longitude}&zoom=16" target="_blank" class="bat-gps-yes">\ud83d\udccd map</a>`
+          : `<span class="bat-gps-no">no GPS</span>`;
+        const svgIco = BEHAVIOR_SVG[b.alertType] || BEHAVIOR_SVG.unknown;
+        return `<tr data-id="${b.id}">
+          <td class="td-ts-compact">${fmtTs(b.timestamp)}</td>
+          <td><span class="ev-badge" style="--ev-color:${cfg.color}">${svgIco} ${cfg.label}</span></td>
+          <td>${valStr}</td>
+          <td>${durS}</td>
+          <td>${spd}</td>
+          <td>${journey}</td>
+          <td>${gps}</td>
+          <td><button class="row-delete-btn" title="Delete">🗑︎</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+      </table>
+    </div>`;
+
+  D.alertsCont.querySelectorAll('.row-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async evClick => {
+      const row = evClick.target.closest('tr');
+      const id  = row?.dataset.id;
+      if (!id) return;
+      const res = await fetch(`/api/driver-behavior/${id}`, { method: 'DELETE', headers: authHeaders() });
+      if (res.ok || res.status === 204) { row.remove(); showToast('Alert deleted'); }
+      else showToast('Delete failed', 'error');
+    });
+  });
+
+  // Delete period toolbar
+  const { from: alFrom, to: alTo } = getRange();
+  const dfShortAl = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const alToolbar = document.createElement('div');
+  alToolbar.className = 'tab-action-toolbar';
+  alToolbar.innerHTML = `<span>Period: <b>${dfShortAl.format(alFrom)} – ${dfShortAl.format(alTo)}</b> · ${behaviors.length} alert${behaviors.length !== 1 ? 's' : ''}</span><button class="modal-btn-danger admin-small-btn">🗑︎ Delete all</button>`;
+  D.alertsCont.prepend(alToolbar);
+  alToolbar.querySelector('button').addEventListener('click', () => {
+    showDeleteModal({
+      title: 'Delete all alerts?',
+      body: `Permanently delete <b>${behaviors.length} alert${behaviors.length !== 1 ? 's' : ''}</b> for this period.<br><span style="color:var(--fg3);font-size:11px">${dfShortAl.format(alFrom)} – ${dfShortAl.format(alTo)}</span>`,
+      confirmLabel: `Delete ${behaviors.length} alerts`,
+      onConfirm: async () => {
+        const res = await fetch(`/api/driver-behavior?imei=${encodeURIComponent(sensor.sensorID)}&from=${alFrom.toISOString()}&to=${alTo.toISOString()}`, { method: 'DELETE', headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          showToast(`Deleted ${data.deleted ?? behaviors.length} alerts`);
+          renderAlerts();
+        } else showToast('Delete failed', 'error');
+      }
+    });
+  });
 }
 
 // ─── Master render ────────────────────────────────────────────────────────────
@@ -917,22 +2321,40 @@ function renderAll() {
 
   // Show/hide Chart tab depending on sensor brand
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
-  const hasChart = sensor && sensor.brand !== 'airtag';
-  const chartBtn = document.querySelector('.mode-btn[data-mode="chart"]');
-  if (chartBtn) chartBtn.style.display = hasChart ? '' : 'none';
-  // If current mode is chart but no chart available, switch to map
-  if (!hasChart && S.mode === 'chart') {
-    S.mode = 'map';
+  const hasChart   = sensor && sensor.brand !== 'airtag' && sensor.brand !== 'tracker';
+  const hasAlerts  = isTracker(sensor);
+  const hasDevice  = isTracker(sensor);
+  // Has wheels overview: current selected sensor is TPMS and vehicle has ≥2 TPMS
+  const _wovGroups = groupByVehicle();
+  const _wovEntry  = S.vehicleFilter ? _wovGroups[S.vehicleFilter] : null;
+  const hasWheels  = isTpms(sensor) && (_wovEntry?.sensors ?? []).filter(s => isTpms(s)).length >= 2;
+  const chartBtn   = document.querySelector('.mode-btn[data-mode="chart"]');
+  const wheelsBtn  = document.querySelector('.mode-btn[data-mode="wheels"]');
+  const alertsBtn  = document.querySelector('.mode-btn[data-mode="alerts"]');
+  const deviceBtn  = document.querySelector('.mode-btn[data-mode="device"]');
+  if (chartBtn)  chartBtn.style.display  = hasChart  ? '' : 'none';
+  if (wheelsBtn) wheelsBtn.style.display = hasWheels ? '' : 'none';
+  if (alertsBtn) alertsBtn.style.display = hasAlerts ? '' : 'none';
+  if (deviceBtn) deviceBtn.style.display = hasDevice ? '' : 'none';
+  // Fallback if current mode is no longer valid
+  if (!hasChart  && S.mode === 'chart')  { S.mode = 'map'; _fixModeBtn(); }
+  if (!hasWheels && S.mode === 'wheels') { S.mode = 'map'; _fixModeBtn(); }
+  if (!hasAlerts && (S.mode === 'alerts' || S.mode === 'device')) { S.mode = 'map'; _fixModeBtn(); }
+  function _fixModeBtn() {
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-    const mapBtn = document.querySelector('.mode-btn[data-mode="map"]');
-    if (mapBtn) mapBtn.classList.add('active');
+    const btn = document.querySelector(`.mode-btn[data-mode="${S.mode}"]`);
+    if (btn) btn.classList.add('active');
   }
 
   showMode(S.mode);
-  if (!S.records.length) return;
-  if (S.mode === 'chart') renderChart();
-  if (S.mode === 'map')   renderMap();
-  if (S.mode === 'table') renderTable();
+  if (!S.records.length && S.mode !== 'alerts' && S.mode !== 'device' && S.mode !== 'errors') return;
+  if (S.mode === 'chart')  renderChart();
+  if (S.mode === 'map')    renderMap();
+  if (S.mode === 'table')  renderTable();
+  if (S.mode === 'alerts') renderAlerts();
+  if (S.mode === 'device') renderDevice();
+  if (S.mode === 'wheels') renderWheels();
+  if (S.mode === 'errors') renderErrors();
 }
 
 // ─── Select sensor ────────────────────────────────────────────────────────────
@@ -953,11 +2375,14 @@ async function selectSensor(sensorID) {
 
 // ─── Refresh ──────────────────────────────────────────────────────────────────
 async function refresh() {
+  if (S.loading) return;           // prevent concurrent refresh calls
+  S.loading = true;
   try {
     await Promise.all([loadSensors(), loadServerVehicles()]);
     renderSidebar();
     if (S.selected) { await loadRecords(); renderAll(); }
   } catch (e) { console.error('refresh:', e); }
+  finally { S.loading = false; }
 }
 
 function setAutoRefresh(on) {
@@ -973,12 +2398,29 @@ function setup() {
   // Asset type selector change (show/hide vehicle vs tool fields)
   $('vf-type').addEventListener('change', () => updateModalFields($('vf-type').value));
 
-  // Admin panel
+  // Admin drawer
   const adminBtn = $('admin-btn');
-  if (adminBtn) adminBtn.addEventListener('click', openAdminPanel);
-  $('admin-modal-close').addEventListener('click', closeAdminPanel);
-  $('admin-modal').addEventListener('click', e => { if (e.target === $('admin-modal')) closeAdminPanel(); });
-  $('admin-add-user-btn').addEventListener('click', () => $('new-user-modal').style.display = 'flex');
+  if (adminBtn) adminBtn.addEventListener('click', () => openAdminPanel());
+  $('admin-drawer-close').addEventListener('click', closeAdminPanel);
+  $('admin-backdrop').addEventListener('click', closeAdminPanel);
+  document.querySelectorAll('.admin-tab-btn').forEach(btn =>
+    btn.addEventListener('click', () => switchAdminTab(btn.dataset.tab))
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && $('logs-overlay').style.display !== 'none') { closeLogsViewer(); return; }
+    if (e.key === 'Escape' && $('admin-drawer').classList.contains('open')) closeAdminPanel();
+  });
+  // Logs viewer
+  const logsBtn = $('logs-btn');
+  if (logsBtn) logsBtn.addEventListener('click', openLogsViewer);
+  $('logs-close-btn')?.addEventListener('click', closeLogsViewer);
+  $('logs-overlay')?.addEventListener('click', e => { if (e.target === $('logs-overlay')) closeLogsViewer(); });
+  $('logs-clear-btn')?.addEventListener('click', () => { $('logs-output').innerHTML = ''; /* _logsLastIndex unchanged: only fetch new lines from this point */ });
+  document.querySelectorAll('.logs-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => _toggleLogFilter(btn.dataset.cat));
+  });
+  // Tab action buttons
+  $('admin-add-user-btn').addEventListener('click',  () => $('new-user-modal').style.display = 'flex');
   $('admin-add-asset-btn').addEventListener('click', () => openVehicleModal());
   $('new-user-modal-close').addEventListener('click', () => $('new-user-modal').style.display = 'none');
   $('new-user-cancel-btn').addEventListener('click',  () => $('new-user-modal').style.display = 'none');
@@ -1000,7 +2442,7 @@ Email: ${result.email}
 Temporary password: ${result.password}
 
 Share this with the user — it is only shown once.`);
-      await renderAdminPanel();
+      await renderUsersPanel(); renderAdminPanel();
     } catch (err) {
       errEl.textContent = err.message; errEl.style.display = 'block';
     } finally { btn.disabled = false; }
@@ -1009,15 +2451,6 @@ Share this with the user — it is only shown once.`);
   // Vehicle dropdown
   D.vehicleSelect.addEventListener('change', () => {
     S.vehicleFilter = D.vehicleSelect.value || null;
-    // Refresh edit button visibility
-    const editBtn = $('edit-vehicle-btn');
-    if (editBtn) {
-      const groups = groupByVehicle();
-      const g  = S.vehicleFilter ? groups[S.vehicleFilter] : null;
-      const sv = g?.serverVehicle;
-      editBtn.style.display = (AUTH.isAdmin && sv) ? '' : 'none';
-      editBtn.onclick = sv ? () => openVehicleModal(sv) : null;
-    }
     renderSensors();
     // Auto-select first sensor of chosen vehicle
     const first = S.sensors.find(s => s.vehicleID === S.vehicleFilter);
@@ -1048,6 +2481,7 @@ Share this with the user — it is only shown once.`);
       vin:          $('vf-vin').value.trim()        || null,
       serialNumber: $('vf-serial').value.trim()    || null,
       toolType:     $('vf-tool-type').value.trim() || null,
+      iconKey:      $('vf-icon-key').value              || null,
     };
     const errEl = $('modal-error');
     const saveB = $('modal-save-btn');
@@ -1057,7 +2491,7 @@ Share this with the user — it is only shown once.`);
       closeVehicleModal();
       await loadServerVehicles();
       renderSidebar();
-      if ($('admin-modal').style.display !== 'none') await renderAdminPanel();
+      if ($('admin-drawer').classList.contains('open')) { await renderAssetsPanel(); renderAdminPanel(); }
     } catch (err) {
       errEl.textContent = err.message; errEl.style.display = 'block';
     } finally { saveB.disabled = false; }
@@ -1073,7 +2507,7 @@ Share this with the user — it is only shown once.`);
       await loadServerVehicles();
       S.vehicleFilter = null; S.selected = null; S.records = [];
       renderSidebar(); renderAll();
-      if ($('admin-modal').style.display !== 'none') await renderAdminPanel();
+      if ($('admin-drawer').classList.contains('open')) { await renderAssetsPanel(); renderAdminPanel(); }
     } catch (err) { errEl.textContent = err.message; errEl.style.display = 'block'; }
   });
 
@@ -1114,7 +2548,10 @@ Share this with the user — it is only shown once.`);
   // Sensor click
   D.sensorList.addEventListener('click', e => {
     const row = e.target.closest('[data-sid]');
-    if (row) selectSensor(row.dataset.sid);
+    if (!row) return;
+    const fromTpmsCard = !!e.target.closest('.tpms-group-card');
+    if (fromTpmsCard) S.mode = 'wheels';
+    selectSensor(row.dataset.sid);
   });
 
   // Period buttons
@@ -1140,11 +2577,13 @@ Share this with the user — it is only shown once.`);
     btn.classList.add('active');
     S.mode = btn.dataset.mode;
     showMode(S.mode);
-    if (S.records.length) {
-      if (S.mode === 'chart') renderChart();
-      if (S.mode === 'map')   renderMap();
-      if (S.mode === 'table') renderTable();
-    }
+    if (S.mode === 'chart')  renderChart();
+    if (S.mode === 'map')    renderMap();
+    if (S.mode === 'table')  renderTable();
+    if (S.mode === 'alerts') renderAlerts();
+    if (S.mode === 'device') renderDevice();
+    if (S.mode === 'wheels') renderWheels();
+    if (S.mode === 'errors') renderErrors();
   });
 
   $('refresh-btn').addEventListener('click', refresh);
@@ -1152,9 +2591,13 @@ Share this with the user — it is only shown once.`);
 
   // Theme toggle
   $('theme-btn').addEventListener('click', () => {
-    const light = !document.documentElement.hasAttribute('data-theme');
-    document.documentElement.setAttribute('data-theme', light ? 'light' : '');
-    localStorage.setItem('netmap-theme', light ? 'light' : 'dark');
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'dark';
+    if (isDark) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    localStorage.setItem('netmap-theme', isDark ? 'dark' : 'light');
   });
 
   // Init custom date inputs
@@ -1180,6 +2623,43 @@ async function adminDeleteVehicle(id) {
   const res = await fetch(`/api/vehicles/${id}`, { method: 'DELETE', headers: authHeaders() });
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
 }
+async function adminCreateTracker(imei, vehicleID, sensorName) {
+  const res = await fetch('/api/admin/trackers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ imei, vehicleID, sensorName: sensorName || undefined }),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+}
+async function adminDeleteTracker(imei) {
+  const res = await fetch(`/api/admin/trackers/${encodeURIComponent(imei)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+}
+async function adminPairTracker(imei, vehicleID) {
+  const res = await fetch('/api/admin/trackers/pair', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ imei, vehicleID }),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+}
+async function adminUpdateTracker(imei, sensorName) {
+  const res = await fetch(`/api/admin/trackers/${encodeURIComponent(imei)}`, {
+    method: 'PATCH',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sensorName: sensorName || null }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+async function adminUnpairTracker(imei) {
+  const res = await fetch(`/api/admin/trackers/${encodeURIComponent(imei)}/pair`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+}
 async function adminLinkAsset(userID, assetID) {
   const res = await fetch(`/api/admin/users/${userID}/assets`, {
     method: 'POST',
@@ -1194,17 +2674,29 @@ async function adminUnlinkAsset(userID, assetID) {
 }
 
 async function renderAdminPanel() {
+  // Hub: just update count badges
+  try {
+    const [users, assets, trackers] = await Promise.all([
+      apiFetch('/api/admin/users'),
+      apiFetch('/api/vehicles'),
+      apiFetch('/api/admin/trackers'),
+    ]);
+    const cu = $('admin-count-users');    if (cu) cu.textContent = users.length;
+    const ca = $('admin-count-assets');   if (ca) ca.textContent = assets.length;
+    const ct = $('admin-count-trackers'); if (ct) ct.textContent = trackers.length;
+  } catch (_) { /* counts unavailable */ }
+}
+
+async function renderUsersPanel() {
   const list = $('admin-users-list');
-  list.innerHTML = '<p class="admin-loading">Loading…</p>';
+  if (!list) return;
+  list.innerHTML = '<p class="admin-loading">Loading\u2026</p>';
   try {
     const [users, assets] = await Promise.all([
       apiFetch('/api/admin/users'),
       apiFetch('/api/vehicles'),
     ]);
-    if (!users.length) {
-      list.innerHTML = '<p class="sidebar-hint">No users.</p>';
-      return;
-    }
+    if (!users.length) { list.innerHTML = '<p class="sidebar-hint">No users.</p>'; return; }
     list.innerHTML = users.map(u => {
       const linked = new Set(u.assetIDs || []);
       const checks = assets.length
@@ -1222,12 +2714,11 @@ async function renderAdminPanel() {
               ${u.displayName ? `<span class="admin-user-dname">${u.displayName}</span>` : ''}
               <span class="role-badge ${u.role}">${u.role}</span>
             </div>
-            <button class="modal-btn-danger admin-small-btn" data-delete-user="${u.id}" title="Delete user">🗑</button>
+            <button class="modal-btn-danger admin-small-btn" data-delete-user="${u.id}" title="Delete user">\uD83D\uDDD1</button>
           </div>
           <div class="admin-user-assets">${checks}</div>
         </div>`;
     }).join('');
-
     list.querySelectorAll('input[type=checkbox][data-user]').forEach(cb => {
       cb.addEventListener('change', async () => {
         try {
@@ -1238,24 +2729,340 @@ async function renderAdminPanel() {
     });
     list.querySelectorAll('[data-delete-user]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const uid  = btn.dataset.deleteUser;
-        const user = users.find(u => u.id === uid);
-        if (!confirm(`Delete user ${user?.email}? This action is irreversible.`)) return;
-        try { await adminDeleteUser(uid); await renderAdminPanel(); }
+        const uid = btn.dataset.deleteUser;
+        const usr = users.find(u => u.id === uid);
+        if (!confirm(`Delete user ${usr?.email}? This action is irreversible.`)) return;
+        try { await adminDeleteUser(uid); await renderUsersPanel(); renderAdminPanel(); }
         catch (err) { alert(err.message); }
       });
     });
+  } catch (err) { list.innerHTML = `<p class="auth-error">${err.message}</p>`; }
+}
+
+async function renderAssetsPanel() {
+  const assetsList = $('admin-assets-list');
+  if (!assetsList) return;
+  assetsList.innerHTML = '<p class="admin-loading">Loading\u2026</p>';
+  try {
+    const assets = await apiFetch('/api/vehicles');
+    if (!assets.length) {
+      assetsList.innerHTML = '<p class="sidebar-hint">No assets yet. Click \u00ab + New Asset \u00bb to create one.</p>';
+      return;
+    }
+    assetsList.innerHTML = assets.map(a => {
+      const atype = S.assetTypes.find(t => t.id === a.assetTypeID)
+                 ?? S.assetTypes.find(t => t.name.toLowerCase() === a.assetTypeID?.toLowerCase());
+      const typeName = atype?.name ?? (a.assetTypeID === 'tool' ? 'Tool' : 'Vehicle');
+      const pictoSvg = (a.iconKey && PICTO_ICONS[a.iconKey])
+        ? PICTO_ICONS[a.iconKey]
+        : ((atype?.systemImage ?? '').includes('wrench') || typeName.toLowerCase() === 'tool' ? PICTO_ICONS.tool : PICTO_ICONS.car);
+      const sub = [a.brand, a.modelName, a.year, a.vrn].filter(Boolean).join(' \u00b7 ');
+      return `
+        <div class="admin-asset-row" data-asset-id="${a.id}">
+          <div class="admin-asset-picto">${pictoSvg}</div>
+          <div class="admin-asset-info">
+            <span class="admin-asset-name">${a.name}</span>
+            <span class="admin-asset-meta">${typeName}${sub ? ' \u00b7 ' + sub : ''}</span>
+          </div>
+          <div class="admin-asset-controls">
+            <button class="modal-btn-secondary admin-small-btn" data-edit-asset="${a.id}" title="Edit">\u270e</button>
+            <button class="modal-btn-danger admin-small-btn" data-delete-asset="${a.id}" title="Delete">\uD83D\uDDD1</button>
+          </div>
+        </div>`;
+    }).join('');
+    assetsList.querySelectorAll('[data-edit-asset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const asset = assets.find(a => a.id === btn.dataset.editAsset);
+        if (asset) openVehicleModal(asset);
+      });
+    });
+    assetsList.querySelectorAll('[data-delete-asset]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const asset = assets.find(a => a.id === btn.dataset.deleteAsset);
+        if (!confirm(`Delete asset "${asset?.name}"? This cannot be undone.`)) return;
+        try {
+          await deleteVehicle(btn.dataset.deleteAsset);
+          await Promise.all([loadServerVehicles(), loadAssetTypes()]);
+          renderSidebar();
+          await renderAssetsPanel(); renderAdminPanel();
+        } catch (err) { alert(err.message); }
+      });
+    });
+  } catch (err) { assetsList.innerHTML = `<p class="auth-error">${err.message}</p>`; }
+}
+
+async function renderTrackersPanel() {
+  const container = $('admin-trackers-list');
+  if (!container) return;
+
+  const addBtn    = $('admin-add-tracker-btn');
+  const formEl    = $('admin-new-tracker-form');
+  const imeiEl    = $('nt-imei');
+  const vehicleEl = $('nt-vehicle');
+  const nameEl    = $('nt-name');
+  const saveBtn   = $('nt-save-btn');
+  const cancelBt  = $('nt-cancel-btn');
+  const errEl     = $('nt-error');
+
+  const assets = await apiFetch('/api/vehicles').catch(() => []);
+  vehicleEl.innerHTML = assets.length
+    ? assets.map(a => `<option value="${a.id}">${a.name}</option>`).join('')
+    : '<option value="">No assets</option>';
+
+  if (addBtn && !addBtn._wired) {
+    addBtn._wired = true;
+    addBtn.addEventListener('click', () => {
+      const shown = formEl.style.display !== 'none';
+      formEl.style.display = shown ? 'none' : 'flex';
+      if (!shown) { imeiEl.value = ''; nameEl.value = ''; errEl.style.display = 'none'; imeiEl.focus(); }
+    });
+    cancelBt.addEventListener('click', () => { formEl.style.display = 'none'; });
+    saveBtn.addEventListener('click', async () => {
+      const imei = imeiEl.value.trim();
+      const vid  = vehicleEl.value;
+      const name = nameEl.value.trim();
+      errEl.style.display = 'none';
+      if (!imei) { errEl.textContent = 'IMEI is required.'; errEl.style.display = 'block'; return; }
+      if (!vid)  { errEl.textContent = 'Select a vehicle.'; errEl.style.display = 'block'; return; }
+      saveBtn.disabled = true;
+      try {
+        await adminCreateTracker(imei, vid, name || null);
+        formEl.style.display = 'none';
+        await loadSensors();
+        await renderTrackersPanel(); renderAdminPanel();
+      } catch (err) {
+        errEl.textContent = err.message; errEl.style.display = 'block';
+      } finally { saveBtn.disabled = false; }
+    });
+  }
+
+  container.innerHTML = '<p class="admin-loading">Loading\u2026</p>';
+  try {
+    const trackers = await apiFetch('/api/admin/trackers');
+    if (!trackers.length) {
+      container.innerHTML = '<p class="sidebar-hint">No trackers yet. Click \u00ab + New Tracker \u00bb to register one.</p>';
+      return;
+    }
+    const vehicleOptions = assets.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+    container.innerHTML = trackers.map(t => {
+      const pairedVehicle = assets.find(a => a.id?.toUpperCase() === t.vehicleID?.toUpperCase());
+      const selectedOptions = assets.map(a =>
+        `<option value="${a.id}"${a.id?.toUpperCase() === t.vehicleID?.toUpperCase() ? ' selected' : ''}>${a.name}</option>`
+      ).join('');
+      return `<div class="admin-tracker-row" data-imei="${t.imei}">
+        <div class="admin-tracker-info">
+          <div class="admin-tracker-top">
+            <span class="admin-tracker-imei">${t.imei}</span>
+            <button class="admin-tracker-edit-btn" title="Edit name">&#x270F;&#xFE0E;</button>
+          </div>
+          <div class="admin-tracker-display">
+            ${t.sensorName ? `<span class="admin-tracker-sname">${t.sensorName}</span>` : '<span class="admin-tracker-sname" style="opacity:.4">No name</span>'}
+            ${pairedVehicle
+              ? `<span class="admin-tracker-paired">\u2713 ${pairedVehicle.name}</span>`
+              : `<span class="admin-tracker-unpaired">Unpaired</span>`}
+          </div>
+          <div class="admin-tracker-edit-form" style="display:none">
+            <input class="tracker-name-input" type="text" placeholder="Tracker name\u2026" value="${t.sensorName ?? ''}">
+            <button class="modal-btn-primary admin-small-btn tracker-name-save-btn">Save</button>
+            <button class="modal-btn admin-small-btn tracker-name-cancel-btn">Cancel</button>
+          </div>
+        </div>
+        <div class="admin-tracker-controls">
+          <select class="tracker-vehicle-select">${selectedOptions || vehicleOptions}</select>
+          <button class="modal-btn-primary admin-small-btn tracker-pair-btn">Pair</button>
+          ${pairedVehicle ? '<button class="modal-btn-danger admin-small-btn tracker-unpair-btn">Unlink</button>' : ''}
+          <button class="modal-btn-danger admin-small-btn tracker-delete-btn" title="Delete tracker">\uD83D\uDDD1</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    container.querySelectorAll('.admin-tracker-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row  = btn.closest('[data-imei]');
+        const disp = row.querySelector('.admin-tracker-display');
+        const form = row.querySelector('.admin-tracker-edit-form');
+        disp.style.display = 'none';
+        form.style.display = 'flex';
+        form.querySelector('.tracker-name-input').focus();
+      });
+    });
+    container.querySelectorAll('.tracker-name-cancel-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row  = btn.closest('[data-imei]');
+        row.querySelector('.admin-tracker-display').style.display = '';
+        row.querySelector('.admin-tracker-edit-form').style.display = 'none';
+      });
+    });
+    container.querySelectorAll('.tracker-name-save-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row  = btn.closest('[data-imei]');
+        const imei = row.dataset.imei;
+        const name = row.querySelector('.tracker-name-input').value.trim();
+        btn.disabled = true;
+        try {
+          await adminUpdateTracker(imei, name || null);
+          await loadSensors();
+          await renderTrackersPanel(); renderAdminPanel();
+        } catch (err) { alert(err.message); btn.disabled = false; }
+      });
+    });
+
+    container.querySelectorAll('.tracker-pair-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('[data-imei]');
+        const imei = row.dataset.imei;
+        const vehicleID = row.querySelector('.tracker-vehicle-select').value;
+        if (!vehicleID) { alert('Select a vehicle first.'); return; }
+        try {
+          btn.disabled = true;
+          await adminPairTracker(imei, vehicleID);
+          await loadSensors();
+          await renderTrackersPanel(); renderAdminPanel();
+        } catch (err) { alert(err.message); btn.disabled = false; }
+      });
+    });
+    container.querySelectorAll('.tracker-unpair-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('[data-imei]');
+        const imei = row.dataset.imei;
+        if (!confirm(`Unlink tracker ${imei} from its vehicle?`)) return;
+        try {
+          btn.disabled = true;
+          await adminUnpairTracker(imei);
+          await loadSensors();
+          await renderTrackersPanel(); renderAdminPanel();
+        } catch (err) { alert(err.message); btn.disabled = false; }
+      });
+    });
+    container.querySelectorAll('.tracker-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('[data-imei]');
+        const imei = row.dataset.imei;
+        if (!confirm(`Delete tracker ${imei}?`)) return;
+        try {
+          btn.disabled = true;
+          await adminDeleteTracker(imei);
+          await loadSensors();
+          await renderTrackersPanel(); renderAdminPanel();
+        } catch (err) { alert(err.message); btn.disabled = false; }
+      });
+    });
   } catch (err) {
-    list.innerHTML = `<p class="auth-error">${err.message}</p>`;
+    container.innerHTML = `<p class="auth-error">${err.message}</p>`;
   }
 }
 
-function openAdminPanel()  { $('admin-modal').style.display = 'flex'; renderAdminPanel(); }
-function closeAdminPanel() { $('admin-modal').style.display = 'none'; }
+function switchAdminTab(tab) {
+  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.admin-tab-pane').forEach(p => p.classList.toggle('active', p.id === 'admin-tab-' + tab));
+  if (tab === 'users')    renderUsersPanel();
+  if (tab === 'assets')   renderAssetsPanel();
+  if (tab === 'trackers') renderTrackersPanel();
+}
+function openAdminPanel(tab = 'users') {
+  $('admin-backdrop').style.display = '';
+  $('admin-drawer').classList.add('open');
+  switchAdminTab(tab);
+  renderAdminPanel();
+}
+function closeAdminPanel()    { $('admin-backdrop').style.display = 'none'; $('admin-drawer').classList.remove('open'); }
+function openUsersPanel()    { openAdminPanel('users');    }
+function closeUsersPanel()   {}
+function openAssetsPanel()   { openAdminPanel('assets');   }
+function closeAssetsPanel()  {}
+function openTrackersPanel() { openAdminPanel('trackers'); }
+function closeTrackersPanel(){}
+
+// ─── Log viewer ───────────────────────────────────────────────────────────────
+let _logsInterval  = null;
+let _logsLastIndex = 0;
+let _logsHiddenCats = new Set(); // categories toggled OFF
+
+function _logCategory(text) {
+  const t = text.toLowerCase();
+  if (/\[airtag\]/.test(t)) return 'airtag';
+  if (/\[tms\]/.test(t))    return 'tms';
+  if (/\[tracker\]|\[behavior\]|\[lifecycle\]/.test(t)) return 'tracker';
+  // Vapor framework / server internals: request logs, routing, boot, DB...
+  if (/vapor|post \/api|get \/api|request|response|routing|middleware|application|migrat|server started|listening|boot/.test(t)) return 'internal';
+  return 'other';
+}
+
+function _applyLogFilters() {
+  const out = $('logs-output');
+  for (const el of out.querySelectorAll('.log-line')) {
+    const cat = el.dataset.cat || 'other';
+    el.style.display = _logsHiddenCats.has(cat) ? 'none' : '';
+  }
+}
+
+function _toggleLogFilter(cat) {
+  if (_logsHiddenCats.has(cat)) {
+    _logsHiddenCats.delete(cat);
+  } else {
+    _logsHiddenCats.add(cat);
+  }
+  // sync button states
+  document.querySelectorAll('.logs-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', !_logsHiddenCats.has(btn.dataset.cat));
+  });
+  _applyLogFilters();
+}
+
+function openLogsViewer() {
+  $('logs-overlay').style.display = 'flex';
+  _logsLastIndex = 0;
+  $('logs-output').innerHTML = '';
+  _startLogPolling();
+}
+function closeLogsViewer() {
+  $('logs-overlay').style.display = 'none';
+  _stopLogPolling();
+}
+function _startLogPolling() {
+  _stopLogPolling();
+  pollLogs();
+  _logsInterval = setInterval(pollLogs, 1500);
+}
+function _stopLogPolling() {
+  if (_logsInterval) { clearInterval(_logsInterval); _logsInterval = null; }
+}
+async function pollLogs() {
+  try {
+    const lines = await apiFetch(`/api/admin/logs?since=${_logsLastIndex}`);
+    if (!lines.length) return;
+    _logsLastIndex = lines.at(-1).index;
+    const out = $('logs-output');
+    const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 60;
+    lines.forEach(({ text }) => {
+      const el = document.createElement('span');
+      const cat = _logCategory(text);
+      el.className = 'log-line ' + _logLevel(text);
+      el.dataset.cat = cat;
+      if (_logsHiddenCats.has(cat)) el.style.display = 'none';
+      el.textContent = text;
+      out.appendChild(el);
+      out.appendChild(document.createTextNode('\n'));
+    });
+    // Keep last 2000 lines rendered
+    while (out.children.length > 4000) out.removeChild(out.firstChild);
+    if ($('logs-autoscroll').checked && atBottom) out.scrollTop = out.scrollHeight;
+    $('logs-status').textContent = `${_logsLastIndex} lines`;
+  } catch(e) { console.warn('log poll:', e); }
+}
+function _logLevel(text) {
+  if (/\bCRITICAL\b/.test(text)) return 'log-critical';
+  if (/\bERROR\b/.test(text))    return 'log-error';
+  if (/\bWARNING\b/.test(text))  return 'log-warning';
+  if (/\bNOTICE\b/.test(text))   return 'log-notice';
+  if (/\bDEBUG\b/.test(text))    return 'log-debug';
+  return 'log-info';
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function main() {
-  if (localStorage.getItem('netmap-theme') === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
+  if (localStorage.getItem('netmap-theme') === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
   }
   setup();  // register all event listeners first (auth form needs to be live)
 

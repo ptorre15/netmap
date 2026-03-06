@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audit Cybersécurité RED — NetMap 2026</title>
+  <style>
+    :root {
+      --navy:    #003189;
+      --yellow:  #FFD900;
+      --red:     #d32f2f;
+      --orange:  #e65100;
+      --amber:   #f9a825;
+      --green:   #2e7d32;
+      --bg:      #f5f6fa;
+      --card:    #ffffff;
+      --border:  #e0e3eb;
+      --text:    #1a1a2e;
+      --muted:   #6b7280;
+      --font:    'Segoe UI', Roboto, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--navy);
+      color: #fff;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header-top {
+      background: var(--yellow);
+      height: 6px;
+    }
+
+    .header-body {
+      padding: 36px 48px 28px;
+    }
+
+    .header-body .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: #fff;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+    }
+
+    .header-body h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 8px;
+    }
+
+    .header-body h1 span {
+      color: var(--yellow);
+    }
+
+    .header-body .subtitle {
+      font-size: 14px;
+      color: rgba(255,255,255,0.75);
+      margin-bottom: 24px;
+    }
+
+    .header-meta {
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+
+    .header-meta .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .header-meta .meta-label {
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+    }
+
+    .header-meta .meta-value {
+      font-size: 13px;
+      color: #fff;
+      font-weight: 500;
+    }
+
+    /* ── LAYOUT ── */
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    /* ── SECTION TITLES ── */
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--navy);
+      border-bottom: 2px solid var(--yellow);
+      padding-bottom: 6px;
+      margin: 40px 0 20px;
+    }
+
+    /* ── DIRECTIVE BOX ── */
+    .directive-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--navy);
+      border-radius: 6px;
+      padding: 20px 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .dir-item strong {
+      display: block;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .dir-item p {
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    /* ── SUMMARY TABLE ── */
+    .summary-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    }
+
+    .summary-table thead th {
+      background: var(--navy);
+      color: #fff;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 10px 14px;
+      text-align: left;
+    }
+
+    .summary-table tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .15s;
+    }
+
+    .summary-table tbody tr:last-child { border-bottom: none; }
+    .summary-table tbody tr:hover { background: #f0f4ff; }
+
+    .summary-table td {
+      padding: 10px 14px;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    .summary-table td:first-child { width: 32px; text-align: center; }
+    .summary-table td:nth-child(2) { width: 120px; }
+    .summary-table td:nth-child(3) { width: 100px; font-size: 11px; color: var(--muted); }
+
+    /* ── SEVERITY BADGES ── */
+    .sev {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .sev-critique { background: #fdecea; color: var(--red); }
+    .sev-haute    { background: #fff3e0; color: var(--orange); }
+    .sev-moyenne  { background: #fffde7; color: #b45309; }
+    .sev-faible   { background: #e8f5e9; color: var(--green); }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .dot-critique { background: var(--red); }
+    .dot-haute    { background: var(--orange); }
+    .dot-moyenne  { background: var(--amber); }
+    .dot-faible   { background: var(--green); }
+
+    /* ── FINDING CARDS ── */
+    .finding-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 20px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    }
+
+    .finding-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .finding-header:hover { background: #f8f9fc; }
+
+    .finding-num {
+      min-width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .num-critique { background: var(--red); }
+    .num-haute    { background: var(--orange); }
+    .num-moyenne  { background: var(--amber); }
+    .num-faible   { background: var(--green); }
+
+    .finding-title {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .finding-articles {
+      font-size: 11px;
+      color: var(--muted);
+      background: #f0f4ff;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+
+    .toggle-icon {
+      font-size: 18px;
+      color: var(--muted);
+      transition: transform .2s;
+    }
+
+    .finding-body {
+      padding: 20px 24px;
+    }
+
+    .finding-body.hidden { display: none; }
+
+    .finding-body h4 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin: 16px 0 8px;
+    }
+
+    .finding-body h4:first-child { margin-top: 0; }
+
+    .finding-body p {
+      font-size: 14px;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+
+    .finding-body ul {
+      padding-left: 20px;
+      margin-bottom: 10px;
+    }
+
+    .finding-body li {
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    /* ── CODE BLOCKS ── */
+    pre {
+      background: #1a1a2e;
+      color: #e8eaf6;
+      border-radius: 6px;
+      padding: 14px 16px;
+      font-size: 12.5px;
+      line-height: 1.55;
+      overflow-x: auto;
+      margin: 10px 0;
+      font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    }
+
+    code {
+      background: #eef1f8;
+      color: var(--navy);
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 12.5px;
+      font-family: 'Fira Code', 'Consolas', monospace;
+    }
+
+    pre code {
+      background: none;
+      color: inherit;
+      padding: 0;
+    }
+
+    /* ── ALERT BLOCKS ── */
+    .alert {
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 12px 0;
+      font-size: 13.5px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .alert-icon { font-size: 17px; flex-shrink: 0; margin-top: 1px; }
+
+    .alert-critical { background: #fdecea; border-left: 4px solid var(--red); }
+    .alert-warning  { background: #fff3e0; border-left: 4px solid var(--orange); }
+    .alert-info     { background: #e8f0fe; border-left: 4px solid var(--navy); }
+
+    /* ── EFFORT TABLE ── */
+    .effort-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    }
+
+    .effort-table thead th {
+      background: var(--navy);
+      color: #fff;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 10px 14px;
+      text-align: left;
+    }
+
+    .effort-table td {
+      padding: 10px 14px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .effort-table tr:last-child td { border-bottom: none; }
+    .effort-table tr:hover td { background: #f0f4ff; }
+
+    /* ── ARCH OVERVIEW ── */
+    .arch-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .arch-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .arch-card .arch-icon { font-size: 28px; margin-bottom: 8px; }
+    .arch-card .arch-name { font-size: 13px; font-weight: 600; color: var(--navy); }
+    .arch-card .arch-desc { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    /* ── RISK SCORE VISUAL ── */
+    .risk-bars {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+    }
+
+    .risk-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .risk-row:last-child { margin-bottom: 0; }
+
+    .risk-label { width: 90px; font-size: 12px; font-weight: 600; color: var(--text); }
+
+    .risk-bar-bg {
+      flex: 1;
+      height: 10px;
+      background: #e8eaf6;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .risk-bar-fill {
+      height: 100%;
+      border-radius: 5px;
+    }
+
+    .risk-count { width: 30px; font-size: 12px; font-weight: 700; text-align: right; }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--navy);
+      color: rgba(255,255,255,0.6);
+      text-align: center;
+      padding: 16px;
+      font-size: 12px;
+      margin-top: 60px;
+    }
+
+    footer span { color: var(--yellow); }
+
+    /* ── PRINT ── */
+    @media print {
+      .finding-body.hidden { display: block !important; }
+      header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-top"></div>
+  <div class="header-body">
+    <div class="badge">Confidentiel — Usage interne</div>
+    <h1>Audit Cybersécurité <span>RED</span></h1>
+    <p class="subtitle">Directive UE 2014/53/EU — Article 3(3)(d)(e)(f) — Amendement cybersécurité applicable depuis août 2025</p>
+    <div class="header-meta">
+      <div class="meta-item">
+        <span class="meta-label">Système</span>
+        <span class="meta-value">NetMap — GPS Fleet Tracker</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Date audit</span>
+        <span class="meta-value">3 mars 2026</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Auditeur</span>
+        <span class="meta-value">GitHub Copilot / Analyse statique</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Statut</span>
+        <span class="meta-value">⚠ Non conforme — 3 points bloquants</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── CONTEXTE RÉGLEMENTAIRE ── -->
+  <h2 class="section-title">Contexte réglementaire</h2>
+
+  <div class="directive-box">
+    <div class="dir-item">
+      <strong>Article 3(3)(d)</strong>
+      <p>Ne pas nuire au réseau ni à son fonctionnement. Exige l'authentification des appareils et l'intégrité des communications.</p>
+    </div>
+    <div class="dir-item">
+      <strong>Article 3(3)(e)</strong>
+      <p>Garantir la protection des données personnelles et de la vie privée des utilisateurs et abonnés.</p>
+    </div>
+    <div class="dir-item">
+      <strong>Article 3(3)(f)</strong>
+      <p>Se protéger contre la fraude. Assurer l'authenticité des communications et le contrôle d'accès.</p>
+    </div>
+    <div class="dir-item">
+      <strong>Périmètre audité</strong>
+      <p>Module BLE iOS (CoreBluetooth), GPS tracker cellulaire (IMEI 867280066365446), serveur Vapor 4 / SQLite, tableau de bord web.</p>
+    </div>
+  </div>
+
+  <!-- ── ARCHITECTURE ── -->
+  <h2 class="section-title">Architecture du système</h2>
+
+  <div class="arch-grid">
+    <div class="arch-card">
+      <div class="arch-icon">📱</div>
+      <div class="arch-name">App iOS (NetMap)</div>
+      <div class="arch-desc">CoreBluetooth scan passif BLE<br>Upload HTTP POST /api/records/batch<br>Token Bearer en localStorage</div>
+    </div>
+    <div class="arch-card">
+      <div class="arch-icon">📡</div>
+      <div class="arch-name">Capteurs BLE</div>
+      <div class="arch-desc">TPMS Michelin / Steelmate<br>ELA Innovation<br>AirTag Apple<br>Trames broadcast non chiffrées</div>
+    </div>
+    <div class="arch-card">
+      <div class="arch-icon">🛰</div>
+      <div class="arch-name">GPS Tracker</div>
+      <div class="arch-desc">Cellulaire HTTP plain text<br>X-API-Key partagée<br>IMEI + coordonnées GPS</div>
+    </div>
+    <div class="arch-card">
+      <div class="arch-icon">🖥</div>
+      <div class="arch-name">Serveur Vapor 4</div>
+      <div class="arch-desc">Swift / SQLite non chiffré<br>HTTP port 8092, 0.0.0.0<br>Pas de TLS configuré</div>
+    </div>
+    <div class="arch-card">
+      <div class="arch-icon">🌐</div>
+      <div class="arch-name">Tableau de bord web</div>
+      <div class="arch-desc">HTML/JS/CSS statique<br>4 dépendances CDN externes<br>Pas de CSP, pas de SRI</div>
+    </div>
+    <div class="arch-card">
+      <div class="arch-icon">🗺</div>
+      <div class="arch-name">Services tiers</div>
+      <div class="arch-desc">OSRM router.project-osrm.org<br>OpenStreetMap tiles<br>Google Fonts / jsDelivr / unpkg</div>
+    </div>
+  </div>
+
+  <!-- ── DISTRIBUTION DES RISQUES ── -->
+  <h2 class="section-title">Distribution des risques</h2>
+
+  <div class="risk-bars">
+    <div class="risk-row">
+      <div class="risk-label"><span class="sev sev-critique"><span class="dot dot-critique"></span>Critique</span></div>
+      <div class="risk-bar-bg"><div class="risk-bar-fill" style="width:25%; background:var(--red);"></div></div>
+      <div class="risk-count" style="color:var(--red)">3</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label"><span class="sev sev-haute"><span class="dot dot-haute"></span>Haute</span></div>
+      <div class="risk-bar-bg"><div class="risk-bar-fill" style="width:25%; background:var(--orange);"></div></div>
+      <div class="risk-count" style="color:var(--orange)">3</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label"><span class="sev sev-moyenne"><span class="dot dot-moyenne"></span>Moyenne</span></div>
+      <div class="risk-bar-bg"><div class="risk-bar-fill" style="width:25%; background:var(--amber);"></div></div>
+      <div class="risk-count" style="color:var(--amber)">3</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label"><span class="sev sev-faible"><span class="dot dot-faible"></span>Faible</span></div>
+      <div class="risk-bar-bg"><div class="risk-bar-fill" style="width:25%; background:var(--green);"></div></div>
+      <div class="risk-count" style="color:var(--green)">3</div>
+    </div>
+  </div>
+
+  <!-- ── SYNTHÈSE ── -->
+  <h2 class="section-title">Synthèse des findings</h2>
+
+  <table class="summary-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Criticité</th>
+        <th>Articles RED</th>
+        <th>Finding</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><span class="sev sev-critique"><span class="dot dot-critique"></span>Critique</span></td>
+        <td>(d)(e)(f)</td>
+        <td>Absence totale de chiffrement en transit (HTTP plain)</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><span class="sev sev-critique"><span class="dot dot-critique"></span>Critique</span></td>
+        <td>(e)</td>
+        <td>Historique de géolocalisation accessible sans authentification</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><span class="sev sev-critique"><span class="dot dot-critique"></span>Critique</span></td>
+        <td>(e)</td>
+        <td>Coordonnées GPS transmises à un serveur OSRM public tiers</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td><span class="sev sev-haute"><span class="dot dot-haute"></span>Haute</span></td>
+        <td>(f)</td>
+        <td>Aucune protection brute-force sur /api/auth/login</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td><span class="sev sev-haute"><span class="dot dot-haute"></span>Haute</span></td>
+        <td>(e)(f)</td>
+        <td>Token d'authentification stocké en localStorage (XSS)</td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td><span class="sev sev-haute"><span class="dot dot-haute"></span>Haute</span></td>
+        <td>(e)(f)</td>
+        <td>Absence de CSP + absence de SRI sur les dépendances CDN</td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td><span class="sev sev-moyenne"><span class="dot dot-moyenne"></span>Moyenne</span></td>
+        <td>(d)(f)</td>
+        <td>Clé API unique partagée pour tous les appareils traceurs</td>
+      </tr>
+      <tr>
+        <td>8</td>
+        <td><span class="sev sev-moyenne"><span class="dot dot-moyenne"></span>Moyenne</span></td>
+        <td>(e)</td>
+        <td>Base de données SQLite non chiffrée au repos</td>
+      </tr>
+      <tr>
+        <td>9</td>
+        <td><span class="sev sev-moyenne"><span class="dot dot-moyenne"></span>Moyenne</span></td>
+        <td>(e)</td>
+        <td>Scan BLE permanent avec allowDuplicatesKey: true</td>
+      </tr>
+      <tr>
+        <td>10</td>
+        <td><span class="sev sev-faible"><span class="dot dot-faible"></span>Faible</span></td>
+        <td>(f)</td>
+        <td>Politique de mots de passe insuffisante (6 car. min.)</td>
+      </tr>
+      <tr>
+        <td>11</td>
+        <td><span class="sev sev-faible"><span class="dot dot-faible"></span>Faible</span></td>
+        <td>(e)(f)</td>
+        <td>Absence de journal d'audit des accès</td>
+      </tr>
+      <tr>
+        <td>12</td>
+        <td><span class="sev sev-faible"><span class="dot dot-faible"></span>Faible</span></td>
+        <td>(d)</td>
+        <td>Serveur exposé sur toutes les interfaces réseau (0.0.0.0)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ── FINDINGS DÉTAILLÉS ── -->
+  <h2 class="section-title">Findings détaillés</h2>
+
+  <!-- F1 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-critique">1</div>
+      <span class="sev sev-critique"><span class="dot dot-critique"></span>Critique</span>
+      <span class="finding-title">Absence totale de chiffrement en transit (HTTP)</span>
+      <span class="finding-articles">Art. 3(3)(d)(e)(f)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <div class="alert alert-critical">
+        <span class="alert-icon">🚨</span>
+        <span>Ce finding est <strong>bloquant</strong> pour toute conformité RED. Aucune des exigences de confidentialité ou d'intégrité ne peut être satisfaite sans transport chiffré.</span>
+      </div>
+
+      <h4>Constat</h4>
+      <p>Le serveur Vapor est configuré en HTTP pur sur le port 8092 avec <code>hostname = "0.0.0.0"</code>. Aucune configuration TLS n'est présente dans <code>configure.swift</code>.</p>
+      <p>Les flux suivants transitent intégralement en clair :</p>
+      <ul>
+        <li><strong>GPS tracker → serveur</strong> : IMEI, coordonnées GPS, données TPMS (réseau cellulaire)</li>
+        <li><strong>App iOS → serveur</strong> : token Bearer, données capteurs BLE</li>
+        <li><strong>Navigateur → serveur</strong> : mot de passe à la connexion, token Bearer</li>
+        <li><strong>Serveur → navigateur</strong> : historique complet de géolocalisation</li>
+      </ul>
+      <p>Un attaquant en position MITM (réseau Wi-Fi public, point d'accès rogue, interception cellulaire) peut capturer l'intégralité des données sans effort.</p>
+
+      <h4>Recommandation — Reverse proxy Caddy (Let's Encrypt automatique)</h4>
+      <pre><code># Caddyfile — renouvellement automatique, zéro configuration TLS
+netmap.votredomaine.com {
+    reverse_proxy localhost:8092
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+}</code></pre>
+
+      <h4>Recommandation — Lier Vapor à localhost uniquement</h4>
+      <pre><code>// configure.swift — après mise en place du reverse proxy
+app.http.server.configuration.hostname = "127.0.0.1"
+app.http.server.configuration.port     = 8092</code></pre>
+
+      <h4>Alternative — TLS natif Vapor (sans reverse proxy)</h4>
+      <pre><code>// Package.swift — ajouter la dépendance NIO SSL
+.package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.0.0")
+
+// configure.swift
+import NIOSSL
+let tlsConfig = TLSConfiguration.makeServerConfiguration(
+    certificateChain: try NIOSSLCertificate.fromPEMFile("/etc/ssl/certs/cert.pem").map { .certificate($0) },
+    privateKey: .file("/etc/ssl/private/key.pem")
+)
+app.http.server.configuration.tlsConfiguration = tlsConfig</code></pre>
+    </div>
+  </div>
+
+  <!-- F2 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-critique">2</div>
+      <span class="sev sev-critique"><span class="dot dot-critique"></span>Critique</span>
+      <span class="finding-title">Historique de géolocalisation accessible sans authentification</span>
+      <span class="finding-articles">Art. 3(3)(e)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <div class="alert alert-critical">
+        <span class="alert-icon">🚨</span>
+        <span>Les données de position constituent des <strong>données personnelles</strong> au sens du RGPD (art. 4.1). Leur exposition publique constitue une violation par défaut de l'article 3(3)(e) RED.</span>
+      </div>
+
+      <h4>Constat</h4>
+      <p>Les endpoints suivants dans <code>RecordController.swift</code> n'exigent aucune authentification :</p>
+      <pre><code>GET /api/records                      // toutes les locations de tous les véhicules
+GET /api/records/by-sensor/:id        // historique GPS d'un capteur spécifique
+GET /api/records/by-vehicle/:id       // historique GPS d'un véhicule
+GET /api/sensors/:id/puncture-risk    // données TPMS détaillées</code></pre>
+      <p>N'importe quelle entité connaissant l'IP du serveur peut extraire l'intégralité des données de localisation et des données TPMS sans aucun identifiant.</p>
+
+      <h4>Recommandation</h4>
+      <pre><code>// routes.swift — protéger les endpoints de lecture
+let recordsProtected = app.grouped("api", "records")
+    .grouped(BearerAuthMiddleware())
+recordsProtected.get(use: recordController.index)
+recordsProtected.get("by-sensor",  ":id", use: recordController.bySensor)
+recordsProtected.get("by-vehicle", ":id", use: recordController.byVehicle)
+
+let sensorsProtected = app.grouped("api", "sensors")
+    .grouped(BearerAuthMiddleware())
+sensorsProtected.get(":id", "puncture-risk", use: sensorController.punctureRisk)</code></pre>
+
+      <div class="alert alert-info">
+        <span class="alert-icon">ℹ</span>
+        <span>Les middlewares <code>BearerAuthMiddleware</code> et <code>OptionalBearerAuthMiddleware</code> sont déjà implémentés dans <code>UserAuth.swift</code> — il suffit de les appliquer sur ces routes.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- F3 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-critique">3</div>
+      <span class="sev sev-critique"><span class="dot dot-critique"></span>Critique</span>
+      <span class="finding-title">Coordonnées GPS transmises à un serveur OSRM public tiers</span>
+      <span class="finding-articles">Art. 3(3)(e)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <div class="alert alert-critical">
+        <span class="alert-icon">🚨</span>
+        <span>Transfert de données personnelles (localisation) vers une tierce partie non identifiée sans base légale explicite — violation directe du RGPD article 28 et RED article 3(3)(e).</span>
+      </div>
+
+      <h4>Constat</h4>
+      <p>Le code JavaScript dans <code>app.js</code> appelle <code>https://router.project-osrm.org</code> pour le map-matching des trajets, en transmettant les coordonnées GPS brutes de chaque trajet. Ce serveur est public, opéré par une communauté open-source, sans DPA (Data Processing Agreement) possible.</p>
+
+      <h4>Option A — Auto-hébergement OSRM (recommandé)</h4>
+      <pre><code># Télécharger la carte de la région (ex. Île-de-France)
+wget https://download.geofabrik.de/europe/france/ile-de-france-latest.osm.pbf
+
+# Préparer les données OSRM
+docker run -t -v $(pwd):/data osrm/osrm-backend \
+  osrm-extract -p /opt/car.lua /data/ile-de-france-latest.osm.pbf
+docker run -t -v $(pwd):/data osrm/osrm-backend osrm-partition /data/ile-de-france-latest.osrm
+docker run -t -v $(pwd):/data osrm/osrm-backend osrm-customize /data/ile-de-france-latest.osrm
+
+# Lancer le service
+docker run -d -p 5000:5000 -v $(pwd):/data osrm/osrm-backend \
+  osrm-routed --algorithm mld /data/ile-de-france-latest.osrm</code></pre>
+      <pre><code>// app.js — pointer vers le serveur local
+const OSRM_BASE = "http://localhost:5000"  // au lieu de router.project-osrm.org</code></pre>
+
+      <h4>Option B — Désactiver le map-matching</h4>
+      <p>Supprimer l'appel OSRM et afficher la trace GPS brute sur la carte. Solution immédiate sans infrastructure supplémentaire.</p>
+
+      <h4>Option C — Valhalla auto-hébergé</h4>
+      <p>Alternative plus légère pour les cartes régionales, avec support du routing matriciel et des isochrones.</p>
+    </div>
+  </div>
+
+  <!-- F4 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-haute">4</div>
+      <span class="sev sev-haute"><span class="dot dot-haute"></span>Haute</span>
+      <span class="finding-title">Aucune protection brute-force sur /api/auth/login</span>
+      <span class="finding-articles">Art. 3(3)(f)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <h4>Constat</h4>
+      <p>L'endpoint <code>POST /api/auth/login</code> dans <code>AuthController.swift</code> ne limite pas le nombre de tentatives d'authentification. Aucun compteur de tentatives, aucun délai, aucun verrouillage de compte. Un attaquant peut tester des millions de combinaisons email/mot de passe sans friction.</p>
+
+      <h4>Recommandation — Middleware anti brute-force</h4>
+      <pre><code>// Sources/App/Middleware/BruteForceMiddleware.swift
+import Vapor
+
+actor BruteForceStore {
+    var attempts: [String: (count: Int, resetAt: Date)] = [:]
+
+    func check(ip: String, maxAttempts: Int = 5, windowSeconds: Double = 900) throws {
+        let now = Date()
+        if let e = attempts[ip], now < e.resetAt {
+            if e.count >= maxAttempts {
+                let retry = Int(e.resetAt.timeIntervalSince(now))
+                throw Abort(.tooManyRequests,
+                    reason: "Trop de tentatives. Réessayez dans \(retry)s",
+                    headers: ["Retry-After": "\(retry)"])
+            }
+            attempts[ip] = (e.count + 1, e.resetAt)
+        } else {
+            attempts[ip] = (1, now.addingTimeInterval(windowSeconds))
+        }
+    }
+
+    func reset(ip: String) { attempts.removeValue(forKey: ip) }
+}
+
+struct BruteForceMiddleware: AsyncMiddleware {
+    static let store = BruteForceStore()
+
+    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        let ip = request.headers["CF-Connecting-IP"].first
+               ?? request.remoteAddress?.ipAddress ?? "unknown"
+        try await Self.store.check(ip: ip)
+        let response = try await next.respond(to: request)
+        // Succès → réinitialiser le compteur
+        if response.status == .ok { await Self.store.reset(ip: ip) }
+        return response
+    }
+}
+
+// routes.swift — appliquer uniquement sur la route login
+let loginRoute = app.grouped(BruteForceMiddleware())
+loginRoute.post("api", "auth", "login", use: authController.login)</code></pre>
+    </div>
+  </div>
+
+  <!-- F5 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-haute">5</div>
+      <span class="sev sev-haute"><span class="dot dot-haute"></span>Haute</span>
+      <span class="finding-title">Token Bearer stocké en localStorage (vulnérable XSS)</span>
+      <span class="finding-articles">Art. 3(3)(e)(f)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <h4>Constat</h4>
+      <p>Le token d'authentification est stocké dans <code>localStorage</code>. Tout script JavaScript injecté par XSS (CDN compromise, contenu tiers, injection) peut le lire et l'exfiltrer instantanément. Sans TLS (F1), le token est également visible en clair sur le réseau.</p>
+
+      <h4>Recommandation — Migrer vers un cookie httpOnly</h4>
+      <pre><code>// AuthController.swift — réponse de connexion
+func login(req: Request) async throws -> Response {
+    // ... validation identifiants ...
+    let token = try await createToken(for: user, on: req.db)
+
+    let response = Response(status: .ok)
+    // Sérialiser les infos non-sensibles dans le body JSON
+    response.body = try .init(data: JSONEncoder().encode(LoginResponse(
+        userID: user.id!, email: user.email, role: user.role
+    )))
+    response.headers.contentType = .json
+
+    // Token dans un cookie inaccessible à JavaScript
+    response.cookies["netmap_token"] = HTTPCookies.Value(
+        string: token.value,
+        expires: token.expiresAt,
+        maxAge: Int(token.expiresAt.timeIntervalSinceNow),
+        isHTTPOnly: true,   // ← inaccessible via JS
+        isSecure: true,     // ← HTTPS uniquement (nécessite F1)
+        sameSite: .strict   // ← protection CSRF
+    )
+    return response
+}
+
+// BearerAuthMiddleware.swift — lire le cookie en priorité
+let tokenValue = request.headers.bearerAuthorization?.token
+               ?? request.cookies["netmap_token"]?.string</code></pre>
+
+      <pre><code>// app.js — supprimer le stockage localStorage
+// Avant :
+localStorage.setItem('netmap_token', data.token)
+// Après :
+// Le cookie est géré automatiquement par le navigateur
+// Toutes les requêtes fetch incluent credentials: 'include'
+const res = await fetch('/api/data', {
+    credentials: 'include',  // ← envoyer le cookie httpOnly
+    headers: { 'Content-Type': 'application/json' }
+})</code></pre>
+    </div>
+  </div>
+
+  <!-- F6 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-haute">6</div>
+      <span class="sev sev-haute"><span class="dot dot-haute"></span>Haute</span>
+      <span class="finding-title">Absence de CSP et de SRI sur les dépendances CDN</span>
+      <span class="finding-articles">Art. 3(3)(e)(f)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <h4>Constat</h4>
+      <p>Le fichier <code>index.html</code> charge 4 ressources depuis des CDN externes sans attribut <code>integrity</code> (SRI) :</p>
+      <pre><code>&lt;!-- Actuellement — aucune vérification d'intégrité --&gt;
+&lt;script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"&gt;&lt;/script&gt;
+&lt;script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"&gt;&lt;/script&gt;
+&lt;script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/..."&gt;&lt;/script&gt;
+&lt;link href="https://fonts.googleapis.com/css2?family=Roboto..." rel="stylesheet"&gt;</code></pre>
+      <p>Si un CDN est compromis (incident de supply chain), du code malveillant est exécuté dans le navigateur avec accès complet à la page. Absence de <code>Content-Security-Policy</code> pour limiter les sources autorisées.</p>
+
+      <h4>Recommandation A — Ajouter les attributs SRI</h4>
+      <pre><code>&lt;!-- Générer les hashes : curl -s URL | openssl dgst -sha384 -binary | base64 --&gt;
+&lt;script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha384-[HASH_SHA384]"
+  crossorigin="anonymous"&gt;&lt;/script&gt;</code></pre>
+
+      <h4>Recommandation B — Content-Security-Policy dans Vapor</h4>
+      <pre><code>// Middleware/SecurityHeadersMiddleware.swift
+struct SecurityHeadersMiddleware: AsyncMiddleware {
+    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        let response = try await next.respond(to: request)
+        guard request.url.path.hasSuffix(".html") ||
+              !request.url.path.contains(".") else { return response }
+
+        response.headers.replaceOrAdd(name: "Content-Security-Policy", value: """
+            default-src 'self';
+            script-src 'self' https://unpkg.com https://cdn.jsdelivr.net;
+            style-src 'self' https://fonts.googleapis.com 'unsafe-inline';
+            font-src https://fonts.gstatic.com;
+            img-src 'self' https://*.tile.openstreetmap.org data: blob:;
+            connect-src 'self';
+            frame-ancestors 'none';
+        """)
+        response.headers.replaceOrAdd(name: "X-Frame-Options", value: "DENY")
+        response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+        response.headers.replaceOrAdd(name: "Referrer-Policy", value: "strict-origin-when-cross-origin")
+        return response
+    }
+}</code></pre>
+
+      <h4>Recommandation C — Auto-héberger les assets (solution idéale)</h4>
+      <pre><code>Public/
+  vendor/
+    leaflet/           # copier la distribution Leaflet 1.9.4
+    chartjs/           # copier Chart.js 4.4.2
+    fonts/             # télécharger Roboto localement</code></pre>
+    </div>
+  </div>
+
+  <!-- F7 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-moyenne">7</div>
+      <span class="sev sev-moyenne"><span class="dot dot-moyenne"></span>Moyenne</span>
+      <span class="finding-title">Clé API unique partagée pour tous les appareils</span>
+      <span class="finding-articles">Art. 3(3)(d)(f)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <h4>Constat</h4>
+      <p>Tous les GPS trackers utilisent la même clé API (valeur dans <code>app_settings</code> ou fallback <code>"netmap-dev"</code>). Si un appareil est compromis ou volé, la révocation touche <strong>tous</strong> les appareils simultanément. Aucune traçabilité par appareil n'est possible.</p>
+
+      <h4>Recommandation — Table des clés par appareil</h4>
+      <pre><code>// Models/DeviceKey.swift
+final class DeviceKey: Model, @unchecked Sendable {
+    static let schema = "device_keys"
+
+    @ID(key: .id)               var id:         UUID?
+    @Field(key: "value")        var value:      String  // 64 octets hex aléatoires
+    @Field(key: "imei")         var imei:       String?
+    @Field(key: "label")        var label:      String  // "Tracker camion 01"
+    @Field(key: "is_active")    var isActive:   Bool
+    @Field(key: "last_used_at") var lastUsedAt: Date?
+    @Timestamp(key: "created_at", on: .create) var createdAt: Date?
+
+    init() {}
+}
+
+// Middleware/APIKeyMiddleware.swift — requêter la table au lieu du singleton
+struct APIKeyMiddleware: AsyncMiddleware {
+    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        guard let key = request.headers.first(name: "X-API-Key"),
+              let _ = try await DeviceKey.query(on: request.db)
+                  .filter(\.$value == key)
+                  .filter(\.$isActive == true)
+                  .first()
+        else { throw Abort(.unauthorized, reason: "API key invalide ou révoquée") }
+
+        // Mettre à jour last_used_at
+        // ...
+        return try await next.respond(to: request)
+    }
+}</code></pre>
+    </div>
+  </div>
+
+  <!-- F8 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-moyenne">8</div>
+      <span class="sev sev-moyenne"><span class="dot dot-moyenne"></span>Moyenne</span>
+      <span class="finding-title">Base de données SQLite non chiffrée au repos</span>
+      <span class="finding-articles">Art. 3(3)(e)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <h4>Constat</h4>
+      <p>La base SQLite est stockée en clair à <code>netmap_data.db</code>. Elle contient :</p>
+      <ul>
+        <li>Coordonnées GPS horodatées (données de localisation personnelle)</li>
+        <li>IMEI du tracker cellulaire (identifiant d'équipement unique)</li>
+        <li>Données TPMS (pression, température — proxies de comportement de conduite)</li>
+        <li>Hachages de mots de passe utilisateurs</li>
+      </ul>
+      <p>En cas d'accès physique ou de fuite de backup, toutes ces données sont lisibles sans effort.</p>
+
+      <h4>Recommandations</h4>
+      <ul>
+        <li><strong>Niveau OS immédiat :</strong> activer FileVault sur macOS (System Preferences → Security → FileVault)</li>
+        <li><strong>Niveau applicatif :</strong> migrer vers SQLCipher (AES-256 transparent)</li>
+        <li><strong>Backups :</strong> chiffrer avec <code>age</code> ou GPG avant tout transfert distant</li>
+      </ul>
+      <pre><code># Chiffrer un backup existant avec age
+age -r "ssh-ed25519 AAAA..." netmap_data.db > netmap_data.db.age</code></pre>
+    </div>
+  </div>
+
+  <!-- F9 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-moyenne">9</div>
+      <span class="sev sev-moyenne"><span class="dot dot-moyenne"></span>Moyenne</span>
+      <span class="finding-title">Scan BLE permanent avec allowDuplicatesKey: true</span>
+      <span class="finding-articles">Art. 3(3)(e)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <h4>Constat</h4>
+      <p>Dans <code>BLEScanner.swift</code>, le scan CoreBluetooth est lancé avec <code>CBCentralManagerScanOptionAllowDuplicatesKey: true</code>. Ce flag traite chaque advertisement reçu sans dédoublonnage, augmentant :</p>
+      <ul>
+        <li>La surface de fingerprinting BLE (flux continu d'observations par MAC address)</li>
+        <li>La consommation énergétique (batterie iPhone)</li>
+        <li>Le volume de données inutilement traitées et potentiellement loggées</li>
+      </ul>
+      <p>Note : les trames TPMS broadcast (Michelin, Steelmate) sont non chiffrées par conception du fabricant — ce risque résiduel est hors du périmètre de contrôle de l'application et doit être documenté dans la déclaration de conformité RED.</p>
+
+      <h4>Recommandation</h4>
+      <pre><code>// BLEScanner.swift
+centralManager.scanForPeripherals(
+    withServices: nil,
+    options: [
+        CBCentralManagerScanOptionAllowDuplicatesKey: false  // ← désactiver
+    ]
+)
+// Implémenter un throttle applicatif si mise à jour fréquente nécessaire :
+private var lastSeenByPeripheral: [UUID: Date] = [:]
+private let throttleInterval: TimeInterval = 2.0
+
+func centralManager(_ central: CBCentralManager,
+                    didDiscover peripheral: CBPeripheral,
+                    advertisementData: [String: Any],
+                    rssi RSSI: NSNumber) {
+    let now = Date()
+    if let last = lastSeenByPeripheral[peripheral.identifier],
+       now.timeIntervalSince(last) < throttleInterval { return }
+    lastSeenByPeripheral[peripheral.identifier] = now
+    // ... traitement normal ...
+}</code></pre>
+    </div>
+  </div>
+
+  <!-- F10 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-faible">10</div>
+      <span class="sev sev-faible"><span class="dot dot-faible"></span>Faible</span>
+      <span class="finding-title">Politique de mots de passe insuffisante</span>
+      <span class="finding-articles">Art. 3(3)(f)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <h4>Constat</h4>
+      <p>Minimum de 6 caractères dans <code>AuthController.swift</code>. Mots de passe temporaires au format <code>"Kx3-Bm7-Rp2"</code> (~42 bits d'entropie). bcrypt sans vérification du facteur de coût configuré.</p>
+
+      <h4>Recommandation</h4>
+      <pre><code>// AuthController.swift
+func validatePassword(_ password: String) throws {
+    guard password.count >= 12 else {
+        throw Abort(.badRequest, reason: "Minimum 12 caractères requis")
+    }
+    guard password.contains(where: \.isUppercase) else {
+        throw Abort(.badRequest, reason: "Au moins une majuscule requise")
+    }
+    guard password.contains(where: \.isNumber) else {
+        throw Abort(.badRequest, reason: "Au moins un chiffre requis")
+    }
+    let specials = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
+    guard password.contains(where: { specials.contains($0) }) else {
+        throw Abort(.badRequest, reason: "Au moins un caractère spécial requis")
+    }
+}
+
+// Mots de passe temporaires — 128 bits d'entropie minimum
+func generateTemporaryPassword() -> String {
+    var bytes = [UInt8](repeating: 0, count: 16)
+    _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+    return bytes.map { String(format: "%02x", $0) }.joined()
+}</code></pre>
+    </div>
+  </div>
+
+  <!-- F11 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-faible">11</div>
+      <span class="sev sev-faible"><span class="dot dot-faible"></span>Faible</span>
+      <span class="finding-title">Absence de journal d'audit des accès</span>
+      <span class="finding-articles">Art. 3(3)(e)(f)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <h4>Constat</h4>
+      <p>Aucun événement de sécurité n'est consigné : tentatives de connexion échouées, révocations de token, changements de clé API, accès aux données de géolocalisation. L'absence de logs rend toute investigation post-incident impossible.</p>
+
+      <h4>Recommandation</h4>
+      <pre><code>// Models/SecurityEvent.swift
+final class SecurityEvent: Model, @unchecked Sendable {
+    static let schema = "security_events"
+
+    @ID(key: .id)              var id:         UUID?
+    @Field(key: "event")       var event:      String  // "login.success", "login.failure",
+                                                       // "token.expired", "api_key.used"
+    @Field(key: "actor")       var actor:      String  // email ou IP
+    @Field(key: "ip_address")  var ipAddress:  String
+    @OptionalField(key: "detail") var detail:  String?
+    @Timestamp(key: "occurred_at", on: .create) var occurredAt: Date?
+}
+
+// Utilisation dans AuthController
+app.logger.info("[AUDIT] login.failure ip=\(ip) email=\(email)")
+try await SecurityEvent(
+    event: "login.failure",
+    actor: email,
+    ipAddress: ip
+).save(on: req.db)</code></pre>
+      <div class="alert alert-info">
+        <span class="alert-icon">ℹ</span>
+        <span>La table <code>security_events</code> doit être en append-only : aucun endpoint DELETE ne doit permettre sa purge via l'API.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- F12 -->
+  <div class="finding-card">
+    <div class="finding-header" onclick="toggle(this)">
+      <div class="finding-num num-faible">12</div>
+      <span class="sev sev-faible"><span class="dot dot-faible"></span>Faible</span>
+      <span class="finding-title">Serveur exposé sur toutes les interfaces réseau</span>
+      <span class="finding-articles">Art. 3(3)(d)</span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="finding-body">
+      <h4>Constat</h4>
+      <p><code>hostname = "0.0.0.0"</code> dans <code>configure.swift</code> expose le service Vapor sur toutes les interfaces réseau de la machine (Wi-Fi, Ethernet, VPN, loopback). Sans TLS ni firewall applicatif, toute machine sur un réseau accessible peut atteindre directement le serveur applicatif.</p>
+
+      <h4>Recommandation</h4>
+      <pre><code>// configure.swift — après mise en place du reverse proxy (F1)
+// Lier uniquement à l'interface locale
+app.http.server.configuration.hostname = "127.0.0.1"
+app.http.server.configuration.port     = 8092
+// Le reverse proxy (Caddy/nginx) est la seule porte d'entrée publique</code></pre>
+
+      <div class="alert alert-warning">
+        <span class="alert-icon">⚠</span>
+        <span>Ce finding est conditionnel au déploiement d'un reverse proxy (F1). En l'absence de reverse proxy, garder <code>0.0.0.0</code> pour maintenir l'accessibilité, mais mettre TLS en priorité absolue.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PLAN D'IMPLÉMENTATION ── -->
+  <h2 class="section-title">Plan d'implémentation recommandé</h2>
+
+  <table class="effort-table">
+    <thead>
+      <tr>
+        <th>Ordre</th>
+        <th>Criticité</th>
+        <th>Action</th>
+        <th>Effort estimé</th>
+        <th>Prérequis</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>1</strong></td>
+        <td><span class="sev sev-critique"><span class="dot dot-critique"></span>Critique</span></td>
+        <td>Mettre en place Caddy + TLS (F1 + F12)</td>
+        <td>2h</td>
+        <td>Domaine DNS + port 443 ouvert</td>
+      </tr>
+      <tr>
+        <td><strong>2</strong></td>
+        <td><span class="sev sev-critique"><span class="dot dot-critique"></span>Critique</span></td>
+        <td>Protéger les endpoints de lecture (F2)</td>
+        <td>1h</td>
+        <td>Aucun</td>
+      </tr>
+      <tr>
+        <td><strong>3</strong></td>
+        <td><span class="sev sev-critique"><span class="dot dot-critique"></span>Critique</span></td>
+        <td>Désactiver appel OSRM public / auto-héberger (F3)</td>
+        <td>4h</td>
+        <td>Docker disponible</td>
+      </tr>
+      <tr>
+        <td><strong>4</strong></td>
+        <td><span class="sev sev-haute"><span class="dot dot-haute"></span>Haute</span></td>
+        <td>Anti brute-force sur /api/auth/login (F4)</td>
+        <td>2h</td>
+        <td>Aucun</td>
+      </tr>
+      <tr>
+        <td><strong>5</strong></td>
+        <td><span class="sev sev-haute"><span class="dot dot-haute"></span>Haute</span></td>
+        <td>Migrer token → cookie httpOnly (F5)</td>
+        <td>3h</td>
+        <td>F1 (TLS requis pour Secure flag)</td>
+      </tr>
+      <tr>
+        <td><strong>6</strong></td>
+        <td><span class="sev sev-haute"><span class="dot dot-haute"></span>Haute</span></td>
+        <td>Ajouter CSP + SRI + auto-héberger assets CDN (F6)</td>
+        <td>2h</td>
+        <td>Aucun</td>
+      </tr>
+      <tr>
+        <td><strong>7</strong></td>
+        <td><span class="sev sev-moyenne"><span class="dot dot-moyenne"></span>Moyenne</span></td>
+        <td>Clés API par appareil avec révocation fine (F7)</td>
+        <td>4h</td>
+        <td>Aucun</td>
+      </tr>
+      <tr>
+        <td><strong>8</strong></td>
+        <td><span class="sev sev-moyenne"><span class="dot dot-moyenne"></span>Moyenne</span></td>
+        <td>Activer FileVault macOS (F8 — niveau OS)</td>
+        <td>15 min</td>
+        <td>Accès admin machine</td>
+      </tr>
+      <tr>
+        <td><strong>9</strong></td>
+        <td><span class="sev sev-moyenne"><span class="dot dot-moyenne"></span>Moyenne</span></td>
+        <td>Désactiver allowDuplicatesKey BLE + throttle (F9)</td>
+        <td>30 min</td>
+        <td>Aucun</td>
+      </tr>
+      <tr>
+        <td><strong>10</strong></td>
+        <td><span class="sev sev-faible"><span class="dot dot-faible"></span>Faible</span></td>
+        <td>Renforcer politique mots de passe (F10)</td>
+        <td>1h</td>
+        <td>Aucun</td>
+      </tr>
+      <tr>
+        <td><strong>11</strong></td>
+        <td><span class="sev sev-faible"><span class="dot dot-faible"></span>Faible</span></td>
+        <td>Implémenter journal d'audit (F11)</td>
+        <td>3h</td>
+        <td>Aucun</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top: 20px; padding: 16px 20px; background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--yellow); border-radius: 6px;">
+    <strong>Effort total estimé :</strong> ~23 heures de développement pour atteindre la conformité RED complète.<br>
+    <strong>Conformité minimale (3 points bloquants) :</strong> F1 + F2 + F3 — environ 7 heures.
+  </div>
+
+</main>
+
+<footer>
+  Rapport généré le 3 mars 2026 — <span>NetMap RED Cybersecurity Audit</span> — GitHub Copilot / Analyse statique de code source
+</footer>
+
+<script>
+  function toggle(header) {
+    const body = header.nextElementSibling;
+    const icon = header.querySelector('.toggle-icon');
+    if (body.classList.contains('hidden')) {
+      body.classList.remove('hidden');
+      icon.style.transform = 'rotate(0deg)';
+    } else {
+      body.classList.add('hidden');
+      icon.style.transform = 'rotate(-90deg)';
+    }
+  }
+
+  // Tous les panneaux ouverts par défaut
+  document.querySelectorAll('.finding-body').forEach(b => b.classList.remove('hidden'));
+</script>
+
+</body>
+</html>

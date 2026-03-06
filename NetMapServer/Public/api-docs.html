@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetMapServer — API Reference</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg0:   #0d0d0f;
+      --bg1:   #1c1c1e;
+      --bg2:   #252527;
+      --bg3:   #2e2e30;
+      --sep:   rgba(255,255,255,.08);
+      --fg1:   #f5f5f7;
+      --fg2:   #aeaeb2;
+      --fg3:   #6e6e73;
+      --blue:  #3b82f6;
+      --green: #34d399;
+      --amber: #fbbf24;
+      --red:   #f87171;
+      --purple:#a78bfa;
+      --teal:  #22d3ee;
+      --r:     8px;
+    }
+
+    body {
+      background: var(--bg0); color: var(--fg1);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px; line-height: 1.5;
+      display: flex; min-height: 100vh;
+    }
+
+    /* ── Sidebar nav ── */
+    #sidebar {
+      width: 220px; flex-shrink: 0; position: sticky; top: 0; height: 100vh;
+      overflow-y: auto; background: var(--bg1);
+      border-right: 1px solid var(--sep); padding: 24px 0 40px;
+    }
+    #sidebar h1 {
+      font-size: 14px; font-weight: 700; letter-spacing: .04em;
+      color: var(--blue); padding: 0 18px 18px;
+      border-bottom: 1px solid var(--sep); text-transform: uppercase;
+    }
+    .nav-group { padding: 14px 0 4px; }
+    .nav-group-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--fg3); padding: 0 18px 4px;
+    }
+    .nav-item {
+      display: block; padding: 5px 18px; font-size: 12px; color: var(--fg2);
+      text-decoration: none; transition: color .12s, background .12s;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .nav-item:hover { color: var(--fg1); background: var(--bg3); }
+    .nav-item .method { font-size: 10px; font-weight: 700; margin-right: 5px; font-family: monospace; }
+    .m-GET    { color: var(--green); }
+    .m-POST   { color: var(--blue);  }
+    .m-PATCH  { color: var(--amber); }
+    .m-DELETE { color: var(--red);   }
+
+    /* ── Main content ── */
+    #main { flex: 1; padding: 48px 48px 80px; max-width: 900px; }
+
+    h2.section-title {
+      font-size: 22px; font-weight: 700; margin-bottom: 6px;
+      padding-bottom: 10px; border-bottom: 1px solid var(--sep);
+    }
+    .section-desc { color: var(--fg2); margin-bottom: 28px; font-size: 13px; }
+
+    /* ── Endpoint card ── */
+    .endpoint {
+      background: var(--bg1); border: 1px solid var(--sep);
+      border-radius: var(--r); margin-bottom: 20px; overflow: hidden;
+    }
+    .ep-header {
+      display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+      border-bottom: 1px solid var(--sep); cursor: pointer;
+      user-select: none;
+    }
+    .ep-header:hover { background: var(--bg2); }
+    .method-badge {
+      font-family: monospace; font-size: 11px; font-weight: 700;
+      padding: 3px 7px; border-radius: 5px; flex-shrink: 0;
+    }
+    .GET    { background: rgba(52,211,153,.15); color: var(--green); }
+    .POST   { background: rgba(59,130,246,.15); color: var(--blue);  }
+    .PATCH  { background: rgba(251,191,36,.15); color: var(--amber); }
+    .DELETE { background: rgba(248,113,113,.15);color: var(--red);   }
+    .ep-path {
+      font-family: "SF Mono", "Fira Mono", monospace; font-size: 13px;
+      color: var(--fg1); flex: 1;
+    }
+    .ep-summary { font-size: 12px; color: var(--fg2); margin-left: auto; text-align: right; flex-shrink: 0; max-width: 260px; }
+    .auth-badge {
+      font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .auth-apikey  { background: rgba(251,191,36,.15); color: var(--amber); }
+    .auth-bearer  { background: rgba(167,139,250,.15);color: var(--purple);}
+    .auth-admin   { background: rgba(248,113,113,.15);color: var(--red);   }
+    .auth-public  { background: rgba(110,110,115,.12); color: var(--fg3);  }
+    .auth-optbearer { background: rgba(34,211,238,.12); color: var(--teal);}
+
+    .ep-body { padding: 16px 18px; display: none; }
+    .ep-body.open { display: block; }
+    .ep-body p { color: var(--fg2); font-size: 13px; margin-bottom: 12px; }
+
+    /* ── Params / fields table ── */
+    table {
+      width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 14px;
+    }
+    th {
+      text-align: left; color: var(--fg3); font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+      padding: 6px 10px; border-bottom: 1px solid var(--sep);
+    }
+    td { padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    .field-name { font-family: monospace; color: var(--fg1); white-space: nowrap; }
+    .field-type { font-family: monospace; color: var(--teal); white-space: nowrap; }
+    .required   { color: var(--red); font-size: 10px; font-weight: 700; }
+    .optional   { color: var(--fg3); font-size: 10px; }
+    td:last-child { color: var(--fg2); }
+
+    /* ── Code blocks ── */
+    .code-block {
+      background: var(--bg3); border: 1px solid var(--sep);
+      border-radius: 6px; padding: 12px 14px; font-family: monospace;
+      font-size: 12px; color: var(--fg1); overflow-x: auto;
+      white-space: pre; margin-bottom: 14px; line-height: 1.7;
+    }
+    .code-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--fg3); margin-bottom: 4px;
+    }
+    .hl-key   { color: var(--teal); }
+    .hl-str   { color: var(--green); }
+    .hl-num   { color: var(--amber); }
+    .hl-bool  { color: var(--purple); }
+    .hl-null  { color: var(--fg3); }
+    .hl-cmt   { color: var(--fg3); font-style: italic; }
+
+    .sub-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--fg3); margin: 16px 0 6px;
+    }
+    .note {
+      background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.2);
+      border-radius: 6px; padding: 10px 14px; font-size: 12px; color: var(--fg2);
+      margin-bottom: 12px;
+    }
+    .note strong { color: var(--blue); }
+    .divider { border: none; border-top: 1px solid var(--sep); margin: 40px 0; }
+
+    /* ── Auth legend ── */
+    #auth-legend {
+      background: var(--bg1); border: 1px solid var(--sep); border-radius: var(--r);
+      padding: 16px 18px; margin-bottom: 32px;
+    }
+    #auth-legend h3 { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+    .legend-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 12px; color: var(--fg2); }
+    .legend-row:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ Sidebar ════════════════════════════════════════════════════════════ -->
+<nav id="sidebar">
+  <h1>NetMap API</h1>
+
+  <div class="nav-group">
+    <div class="nav-group-label">General</div>
+    <a class="nav-item" href="#health"><span class="method m-GET">GET</span>/health</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Authentication</div>
+    <a class="nav-item" href="#auth-login"><span class="method m-POST">POST</span>/api/auth/login</a>
+    <a class="nav-item" href="#auth-logout"><span class="method m-POST">POST</span>/api/auth/logout</a>
+    <a class="nav-item" href="#auth-setup"><span class="method m-POST">POST</span>/api/auth/setup</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Sensors / Records</div>
+    <a class="nav-item" href="#sensors-latest"><span class="method m-GET">GET</span>/api/sensors/latest</a>
+    <a class="nav-item" href="#sensors-puncture"><span class="method m-GET">GET</span>/api/sensors/:id/puncture-risk</a>
+    <a class="nav-item" href="#sensors-pair"><span class="method m-POST">POST</span>/api/sensors/pair</a>
+    <a class="nav-item" href="#records-list"><span class="method m-GET">GET</span>/api/records</a>
+    <a class="nav-item" href="#records-by-sensor"><span class="method m-GET">GET</span>/api/records/by-sensor/:id</a>
+    <a class="nav-item" href="#records-by-vehicle"><span class="method m-GET">GET</span>/api/records/by-vehicle/:id</a>
+    <a class="nav-item" href="#records-single"><span class="method m-POST">POST</span>/api/records</a>
+    <a class="nav-item" href="#records-batch"><span class="method m-POST">POST</span>/api/records/batch</a>
+    <a class="nav-item" href="#records-purge"><span class="method m-DELETE">DEL</span>/api/records/purge</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Vehicles / Assets</div>
+    <a class="nav-item" href="#vehicles-list"><span class="method m-GET">GET</span>/api/vehicles</a>
+    <a class="nav-item" href="#vehicles-get"><span class="method m-GET">GET</span>/api/vehicles/:id</a>
+    <a class="nav-item" href="#vehicles-create"><span class="method m-POST">POST</span>/api/vehicles</a>
+    <a class="nav-item" href="#vehicles-update"><span class="method m-PATCH">PATCH</span>/api/vehicles/:id</a>
+    <a class="nav-item" href="#vehicles-delete"><span class="method m-DELETE">DEL</span>/api/vehicles/:id</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Tracker / Journeys</div>
+    <a class="nav-item" href="#ve-push"><span class="method m-POST">POST</span>/api/vehicle-events</a>
+    <a class="nav-item" href="#ve-list"><span class="method m-GET">GET</span>/api/vehicle-events</a>
+    <a class="nav-item" href="#ve-journeys"><span class="method m-GET">GET</span>/api/vehicle-events/journeys</a>
+    <a class="nav-item" href="#ve-delete-journey"><span class="method m-DELETE">DEL</span>/api/vehicle-events/journeys/:id</a>
+    <a class="nav-item" href="#ve-delete-period"><span class="method m-DELETE">DEL</span>/api/vehicle-events</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Admin — API Key</div>
+    <a class="nav-item" href="#admin-apikey-get"><span class="method m-GET">GET</span>/api/admin/api-key</a>
+    <a class="nav-item" href="#admin-apikey-rotate"><span class="method m-POST">POST</span>/api/admin/api-key/rotate</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Admin — Users</div>
+    <a class="nav-item" href="#admin-users-list"><span class="method m-GET">GET</span>/api/admin/users</a>
+    <a class="nav-item" href="#admin-users-create"><span class="method m-POST">POST</span>/api/admin/users</a>
+    <a class="nav-item" href="#admin-users-update"><span class="method m-PATCH">PATCH</span>/api/admin/users/:id</a>
+    <a class="nav-item" href="#admin-users-delete"><span class="method m-DELETE">DEL</span>/api/admin/users/:id</a>
+    <a class="nav-item" href="#admin-assets-list"><span class="method m-GET">GET</span>/api/admin/users/:id/assets</a>
+    <a class="nav-item" href="#admin-assets-link"><span class="method m-POST">POST</span>/api/admin/users/:id/assets</a>
+    <a class="nav-item" href="#admin-assets-unlink"><span class="method m-DELETE">DEL</span>/api/admin/users/:id/assets/:assetID</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Admin — Trackers</div>
+    <a class="nav-item" href="#admin-trackers-list"><span class="method m-GET">GET</span>/api/admin/trackers</a>
+    <a class="nav-item" href="#admin-trackers-create"><span class="method m-POST">POST</span>/api/admin/trackers</a>
+    <a class="nav-item" href="#admin-trackers-rename"><span class="method m-PATCH">PATCH</span>/api/admin/trackers/:imei</a>
+    <a class="nav-item" href="#admin-trackers-pair"><span class="method m-POST">POST</span>/api/admin/trackers/pair</a>
+    <a class="nav-item" href="#admin-trackers-unpair"><span class="method m-DELETE">DEL</span>/api/admin/trackers/:imei/pair</a>
+    <a class="nav-item" href="#admin-trackers-delete"><span class="method m-DELETE">DEL</span>/api/admin/trackers/:imei</a>
+  </div>
+</nav>
+
+<!-- ═══ Main ════════════════════════════════════════════════════════════════ -->
+<main id="main">
+  <h2 class="section-title">NetMapServer — API Reference</h2>
+  <p class="section-desc">Base URL: <code style="color:var(--teal)">http://&lt;host&gt;:8092</code> &nbsp;·&nbsp; All bodies are <code>application/json</code> &nbsp;·&nbsp; Dates are ISO 8601 or Unix epoch (float)</p>
+
+  <!-- Auth legend -->
+  <div id="auth-legend">
+    <h3>Authentication schemes</h3>
+    <div class="legend-row"><span class="auth-badge auth-public">Public</span> No authentication required.</div>
+    <div class="legend-row"><span class="auth-badge auth-optbearer">Optional Bearer</span> Response filtered to user's vehicles when token provided; full data otherwise.</div>
+    <div class="legend-row"><span class="auth-badge auth-apikey">X-API-Key</span> Header <code>X-API-Key: &lt;key&gt;</code> — used by iOS app and tracker devices.</div>
+    <div class="legend-row"><span class="auth-badge auth-bearer">Bearer</span> Header <code>Authorization: Bearer &lt;token&gt;</code> — obtained from <code>/api/auth/login</code>.</div>
+    <div class="legend-row"><span class="auth-badge auth-admin">Admin</span> Bearer token with <code>role: "admin"</code>.</div>
+  </div>
+
+  <!-- ────────────────────── GENERAL ────────────────────── -->
+  <h2 class="section-title" id="general">General</h2>
+  <p class="section-desc">Health and liveness endpoints.</p>
+
+  <div class="endpoint" id="health">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/health</span>
+      <span class="auth-badge auth-public">Public</span>
+      <span class="ep-summary">Server liveness probe</span>
+    </div>
+    <div class="ep-body">
+      <p>Returns a JSON object confirming the server is running. Used by monitoring and deployment scripts.</p>
+      <div class="code-label">Response 200</div>
+      <div class="code-block">{
+  <span class="hl-key">"status"</span>:  <span class="hl-str">"ok"</span>,
+  <span class="hl-key">"server"</span>:  <span class="hl-str">"NetMapServer"</span>,
+  <span class="hl-key">"version"</span>: <span class="hl-str">"1.0.0"</span>
+}</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ────────────────────── AUTH ────────────────────── -->
+  <h2 class="section-title" id="auth">Authentication</h2>
+  <p class="section-desc">Session management for the web dashboard.</p>
+
+  <div class="endpoint" id="auth-login">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/auth/login</span>
+      <span class="auth-badge auth-public">Public</span>
+      <span class="ep-summary">Obtain a Bearer token</span>
+    </div>
+    <div class="ep-body">
+      <p>Authenticates with email + password and returns a session token.</p>
+      <div class="sub-title">Request body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
+        <tr><td class="field-name">email</td><td class="field-type">string</td><td class="required">✓</td><td>User email address</td></tr>
+        <tr><td class="field-name">password</td><td class="field-type">string</td><td class="required">✓</td><td>User password</td></tr>
+      </table>
+      <div class="code-label">Response 200</div>
+      <div class="code-block">{
+  <span class="hl-key">"token"</span>:       <span class="hl-str">"abc123…"</span>,
+  <span class="hl-key">"email"</span>:       <span class="hl-str">"user@example.com"</span>,
+  <span class="hl-key">"displayName"</span>: <span class="hl-str">"Alice"</span>,
+  <span class="hl-key">"role"</span>:        <span class="hl-str">"admin"</span>  <span class="hl-cmt">// "admin" | "user"</span>
+}</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="auth-logout">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/auth/logout</span>
+      <span class="auth-badge auth-bearer">Bearer</span>
+      <span class="ep-summary">Invalidate current token</span>
+    </div>
+    <div class="ep-body">
+      <p>Deletes the current session token. No body required. Returns <code>204 No Content</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="auth-setup">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/auth/setup</span>
+      <span class="auth-badge auth-public">Public (first-run only)</span>
+      <span class="ep-summary">Create the initial admin account</span>
+    </div>
+    <div class="ep-body">
+      <p>Only works when no users exist in the database. Creates the first admin and returns a Bearer token.</p>
+      <div class="code-label">Request body</div>
+      <div class="code-block">{
+  <span class="hl-key">"email"</span>:    <span class="hl-str">"admin@example.com"</span>,
+  <span class="hl-key">"password"</span>: <span class="hl-str">"secret"</span>
+}</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ────────────────────── SENSORS ────────────────────── -->
+  <h2 class="section-title" id="sensors">Sensors &amp; Records</h2>
+  <p class="section-desc">BLE sensor readings ingested from the iOS app (TMS, STIHL, ELA, AirTag, Tracker). All timestamps may be ISO 8601 or a Unix epoch float.</p>
+
+  <div class="endpoint" id="sensors-latest">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/sensors/latest</span>
+      <span class="auth-badge auth-optbearer">Optional Bearer</span>
+      <span class="ep-summary">One summary row per sensor</span>
+    </div>
+    <div class="ep-body">
+      <p>Returns the most recent reading for every known sensor. Non-admin authenticated users only see sensors linked to their vehicles.</p>
+      <div class="code-label">Response 200 — array of SensorStat</div>
+      <div class="code-block">[{
+  <span class="hl-key">"sensorID"</span>:             <span class="hl-str">"1B71F09D-…"</span>,
+  <span class="hl-key">"vehicleID"</span>:            <span class="hl-str">"UUID"</span>,
+  <span class="hl-key">"vehicleName"</span>:          <span class="hl-str">"Truck #1"</span>,
+  <span class="hl-key">"assetTypeID"</span>:          <span class="hl-str">"vehicle"</span>,
+  <span class="hl-key">"brand"</span>:                <span class="hl-str">"michelin"</span>,  <span class="hl-cmt">// michelin | stihl | ela | airtag | tracker</span>
+  <span class="hl-key">"wheelPosition"</span>:        <span class="hl-str">"FL"</span>,        <span class="hl-cmt">// nullable</span>
+  <span class="hl-key">"latestPressureBar"</span>:    <span class="hl-num">2.45</span>,
+  <span class="hl-key">"latestTemperatureC"</span>:   <span class="hl-num">24.3</span>,
+  <span class="hl-key">"latestVbattVolts"</span>:     <span class="hl-num">2.94</span>,
+  <span class="hl-key">"targetPressureBar"</span>:    <span class="hl-num">2.5</span>,
+  <span class="hl-key">"latestBatteryPct"</span>:     <span class="hl-num">88</span>,
+  <span class="hl-key">"latestChargeState"</span>:    <span class="hl-str">"Idle"</span>,
+  <span class="hl-key">"sensorName"</span>:           <span class="hl-str">"Front Left"</span>,
+  <span class="hl-key">"latestHealthPct"</span>:      <span class="hl-num">95</span>,           <span class="hl-cmt">// Stihl Smart Battery</span>
+  <span class="hl-key">"latestChargingCycles"</span>: <span class="hl-num">12</span>,
+  <span class="hl-key">"latestProductVariant"</span>: <span class="hl-str">"coin"</span>,      <span class="hl-cmt">// ELA beacon type</span>
+  <span class="hl-key">"latestTotalSeconds"</span>:   <span class="hl-num">3600</span>,
+  <span class="hl-key">"latestGpsSatellites"</span>:  <span class="hl-num">8</span>,
+  <span class="hl-key">"latestLatitude"</span>:       <span class="hl-num">45.999</span>,
+  <span class="hl-key">"latestLongitude"</span>:      <span class="hl-num">6.122</span>,
+  <span class="hl-key">"latestTimestamp"</span>:      <span class="hl-str">"2026-03-03T19:46:29Z"</span>,
+  <span class="hl-key">"readingCount"</span>:         <span class="hl-num">427</span>
+}]</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="sensors-puncture">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/sensors/:sensorID/puncture-risk</span>
+      <span class="auth-badge auth-public">Public</span>
+      <span class="ep-summary">Slow puncture detection</span>
+    </div>
+    <div class="ep-body">
+      <p>Analyses the last 60 pressure readings for a statistically significant downward trend. Requires ≥ 10 readings. Risk threshold: &gt;0.08 bar drop AND &gt;3% drop.</p>
+      <div class="code-label">Response 200</div>
+      <div class="code-block">{
+  <span class="hl-key">"sensorID"</span>:     <span class="hl-str">"1B71F09D-…"</span>,
+  <span class="hl-key">"hasRisk"</span>:      <span class="hl-bool">true</span>,
+  <span class="hl-key">"pressureDrop"</span>: <span class="hl-num">0.12</span>,       <span class="hl-cmt">// baseline − recent (bar)</span>
+  <span class="hl-key">"baseline"</span>:     <span class="hl-num">2.50</span>,
+  <span class="hl-key">"recent"</span>:       <span class="hl-num">2.38</span>,
+  <span class="hl-key">"readingCount"</span>: <span class="hl-num">60</span>,
+  <span class="hl-key">"message"</span>:      <span class="hl-str">"Pressure dropped 0.12 bar (4.8%)…"</span>
+}</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="sensors-pair">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/sensors/pair</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">Register a sensor pairing immediately</span>
+    </div>
+    <div class="ep-body">
+      <p>Creates or replaces a sensor↔vehicle link without requiring a live BLE reading. The sensor appears in <code>/api/sensors/latest</code> immediately.</p>
+      <div class="sub-title">Request body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
+        <tr><td class="field-name">sensorID</td><td class="field-type">string</td><td class="required">✓</td><td>BLE sensor UUID or IMEI</td></tr>
+        <tr><td class="field-name">vehicleID</td><td class="field-type">string (UUID)</td><td class="required">✓</td><td>Target vehicle UUID</td></tr>
+        <tr><td class="field-name">vehicleName</td><td class="field-type">string</td><td class="required">✓</td><td>Human-readable vehicle name</td></tr>
+        <tr><td class="field-name">brand</td><td class="field-type">string</td><td class="required">✓</td><td><code>michelin</code> · <code>stihl</code> · <code>ela</code> · <code>airtag</code> · <code>tracker</code></td></tr>
+        <tr><td class="field-name">assetTypeID</td><td class="field-type">string</td><td class="optional">opt</td><td>Default: <code>"vehicle"</code></td></tr>
+        <tr><td class="field-name">wheelPosition</td><td class="field-type">string</td><td class="optional">opt</td><td><code>FL</code> / <code>FR</code> / <code>RL</code> / <code>RR</code> / <code>S</code></td></tr>
+        <tr><td class="field-name">targetPressureBar</td><td class="field-type">number</td><td class="optional">opt</td><td>Target tyre pressure</td></tr>
+        <tr><td class="field-name">sensorName</td><td class="field-type">string</td><td class="optional">opt</td><td>Custom label</td></tr>
+      </table>
+      <p>Returns <code>201 Created</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="records-list">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/records</span>
+      <span class="auth-badge auth-public">Public</span>
+      <span class="ep-summary">List raw readings</span>
+    </div>
+    <div class="ep-body">
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td class="field-name">limit</td><td class="field-type">int</td><td>1000</td><td>Max rows returned</td></tr>
+        <tr><td class="field-name">vehicle</td><td class="field-type">string</td><td>–</td><td>Filter by vehicleID</td></tr>
+        <tr><td class="field-name">sensor</td><td class="field-type">string</td><td>–</td><td>Filter by sensorID</td></tr>
+        <tr><td class="field-name">brand</td><td class="field-type">string</td><td>–</td><td>Filter by brand</td></tr>
+      </table>
+      <p>Returns an array of raw <code>SensorReading</code> objects sorted descending by timestamp.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="records-by-sensor">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/records/by-sensor/:sensorID</span>
+      <span class="auth-badge auth-public">Public</span>
+      <span class="ep-summary">History for one sensor</span>
+    </div>
+    <div class="ep-body">
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td class="field-name">from</td><td class="field-type">ISO 8601</td><td>Start of range (inclusive)</td></tr>
+        <tr><td class="field-name">to</td><td class="field-type">ISO 8601</td><td>End of range (inclusive)</td></tr>
+      </table>
+      <p>Returns up to 100 000 readings sorted descending. Used by the chart view.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="records-by-vehicle">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/records/by-vehicle/:vehicleID</span>
+      <span class="auth-badge auth-public">Public</span>
+      <span class="ep-summary">All sensor history for a vehicle</span>
+    </div>
+    <div class="ep-body">
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td class="field-name">from</td><td class="field-type">ISO 8601</td><td>Start of range (inclusive)</td></tr>
+        <tr><td class="field-name">to</td><td class="field-type">ISO 8601</td><td>End of range (inclusive)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint" id="records-single">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/records</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">Ingest a single reading</span>
+    </div>
+    <div class="ep-body">
+      <p>Saves one <code>SensorReading</code>. Prefer the batch endpoint for efficiency.</p>
+      <div class="sub-title">Request body — SensorPayload</div>
+      <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
+        <tr><td class="field-name">sensorID</td><td class="field-type">string</td><td class="required">✓</td><td>BLE UUID or IMEI</td></tr>
+        <tr><td class="field-name">vehicleID</td><td class="field-type">string (UUID)</td><td class="required">✓</td><td>Associated vehicle UUID</td></tr>
+        <tr><td class="field-name">vehicleName</td><td class="field-type">string</td><td class="required">✓</td><td>Vehicle display name</td></tr>
+        <tr><td class="field-name">brand</td><td class="field-type">string</td><td class="required">✓</td><td><code>michelin</code> · <code>stihl</code> · <code>ela</code> · <code>airtag</code> · <code>tracker</code></td></tr>
+        <tr><td class="field-name">timestamp</td><td class="field-type">ISO 8601 / epoch</td><td class="required">✓</td><td>Reading time</td></tr>
+        <tr><td class="field-name">pressureBar</td><td class="field-type">number</td><td class="optional">opt</td><td>Tyre pressure (TMS)</td></tr>
+        <tr><td class="field-name">temperatureC</td><td class="field-type">number</td><td class="optional">opt</td><td>Temperature</td></tr>
+        <tr><td class="field-name">vbattVolts</td><td class="field-type">number</td><td class="optional">opt</td><td>Battery voltage</td></tr>
+        <tr><td class="field-name">batteryPct</td><td class="field-type">int</td><td class="optional">opt</td><td>Battery percentage 0–100</td></tr>
+        <tr><td class="field-name">chargeState</td><td class="field-type">string</td><td class="optional">opt</td><td><code>Idle</code> · <code>Charging</code> · <code>Discharging</code></td></tr>
+        <tr><td class="field-name">targetPressureBar</td><td class="field-type">number</td><td class="optional">opt</td><td>Target tyre pressure</td></tr>
+        <tr><td class="field-name">wheelPosition</td><td class="field-type">string</td><td class="optional">opt</td><td><code>FL/FR/RL/RR/S</code></td></tr>
+        <tr><td class="field-name">sensorName</td><td class="field-type">string</td><td class="optional">opt</td><td>Custom label</td></tr>
+        <tr><td class="field-name">latitude / longitude</td><td class="field-type">number</td><td class="optional">opt</td><td>GPS position</td></tr>
+        <tr><td class="field-name">gpsSatellites</td><td class="field-type">int</td><td class="optional">opt</td><td>Number of GPS satellites in view</td></tr>
+        <tr><td class="field-name">healthPct</td><td class="field-type">int</td><td class="optional">opt</td><td>Stihl Smart Battery health %</td></tr>
+        <tr><td class="field-name">chargingCycles</td><td class="field-type">int</td><td class="optional">opt</td><td>Stihl charge cycle count</td></tr>
+        <tr><td class="field-name">productVariant</td><td class="field-type">string</td><td class="optional">opt</td><td>ELA: <code>coin</code> · <code>puck</code> · <code>unknown</code></td></tr>
+        <tr><td class="field-name">totalSeconds</td><td class="field-type">int</td><td class="optional">opt</td><td>Stihl total operating seconds</td></tr>
+      </table>
+      <p>Returns <code>201 Created</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="records-batch">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/records/batch</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">Ingest multiple readings in one request</span>
+    </div>
+    <div class="ep-body">
+      <p>Body is a JSON array of <code>SensorPayload</code> objects (same fields as above). All rows are saved in a single database transaction. Returns <code>201 Created</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="records-purge">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge DELETE">DELETE</span>
+      <span class="ep-path">/api/records/purge</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">Delete old readings</span>
+    </div>
+    <div class="ep-body">
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td class="field-name">older_than_days</td><td class="field-type">int</td><td>30</td><td>Delete records older than this many days</td></tr>
+      </table>
+      <div class="code-label">Response 200</div>
+      <div class="code-block">{ <span class="hl-key">"deleted"</span>: <span class="hl-num">1024</span> }</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ────────────────────── VEHICLES ────────────────────── -->
+  <h2 class="section-title" id="vehicles">Vehicles / Assets</h2>
+  <p class="section-desc">Assets are auto-created from sensor payloads. These endpoints allow manual management. <code>/api/assets</code> is an alias for <code>/api/vehicles</code>.</p>
+
+  <div class="endpoint" id="vehicles-list">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/vehicles &nbsp; /api/assets</span>
+      <span class="auth-badge auth-optbearer">Optional Bearer</span>
+      <span class="ep-summary">List all vehicles / assets</span>
+    </div>
+    <div class="ep-body">
+      <p>Returns all assets. Non-admin authenticated users only see their linked assets.</p>
+      <div class="code-label">Response 200 — array of Vehicle</div>
+      <div class="code-block">[{
+  <span class="hl-key">"id"</span>:          <span class="hl-str">"UUID"</span>,
+  <span class="hl-key">"name"</span>:        <span class="hl-str">"Truck #1"</span>,
+  <span class="hl-key">"assetTypeID"</span>: <span class="hl-str">"vehicle"</span>,
+  <span class="hl-key">"createdBy"</span>:   <span class="hl-str">"system"</span>,
+  <span class="hl-key">"createdAt"</span>:   <span class="hl-str">"2026-01-15T08:00:00Z"</span>
+}]</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="vehicles-get">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/vehicles/:id &nbsp; /api/assets/:id</span>
+      <span class="auth-badge auth-public">Public</span>
+      <span class="ep-summary">Fetch one vehicle</span>
+    </div>
+    <div class="ep-body"><p>Returns the <code>Vehicle</code> object for the given UUID or <code>404</code> if not found.</p></div>
+  </div>
+
+  <div class="endpoint" id="vehicles-create">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/vehicles</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Create a vehicle / asset</span>
+    </div>
+    <div class="ep-body">
+      <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
+        <tr><td class="field-name">name</td><td class="field-type">string</td><td class="required">✓</td><td>Asset display name</td></tr>
+        <tr><td class="field-name">assetTypeID</td><td class="field-type">string</td><td class="optional">opt</td><td>Default: <code>"vehicle"</code></td></tr>
+      </table>
+      <p>Returns the created <code>Vehicle</code> with <code>201 Created</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="vehicles-update">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge PATCH">PATCH</span>
+      <span class="ep-path">/api/vehicles/:id</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Rename / retype a vehicle</span>
+    </div>
+    <div class="ep-body">
+      <table><tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td class="field-name">name</td><td class="field-type">string</td><td>New display name</td></tr>
+        <tr><td class="field-name">assetTypeID</td><td class="field-type">string</td><td>New asset type</td></tr>
+      </table>
+      <p>Returns <code>200 OK</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="vehicles-delete">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge DELETE">DELETE</span>
+      <span class="ep-path">/api/vehicles/:id</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Delete a vehicle and all its sensor data</span>
+    </div>
+    <div class="ep-body"><p>Permanently deletes the vehicle and cascades to all linked <code>sensor_readings</code>. Returns <code>204 No Content</code>.</p></div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ────────────────────── TRACKER / JOURNEYS ────────────────────── -->
+  <h2 class="section-title" id="tracker">Tracker &amp; Journeys</h2>
+  <p class="section-desc">GPS tracker telemetry ingestion and journey retrieval. Trackers push data via <code>POST /api/vehicle-events</code>. The server resolves the vehicle from the IMEI and auto-manages journey IDs.</p>
+
+  <div class="endpoint" id="ve-push">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/vehicle-events</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">Ingest tracker telemetry (single or array)</span>
+    </div>
+    <div class="ep-body">
+      <p>Accepts a single object or a JSON array. The server resolves <code>vehicleID</code> from the IMEI pairing and assigns a <code>journeyID</code> automatically (<code>journey_start</code> events create a new journey).</p>
+      <div class="note"><strong>Note:</strong> <code>journeyDistanceKm</code> is expected in <strong>metres</strong> (as sent by common GPS trackers). The server divides by 1000 for display.</div>
+      <div class="sub-title">Request body — VehicleEventPayload</div>
+      <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
+        <tr><td class="field-name">imei</td><td class="field-type">string</td><td class="required">✓</td><td>Tracker IMEI</td></tr>
+        <tr><td class="field-name">eventType</td><td class="field-type">string</td><td class="optional">opt</td><td><code>journey_start</code> · <code>driving</code> · <code>journey_end</code> (default: <code>driving</code>)</td></tr>
+        <tr><td class="field-name">timestamp</td><td class="field-type">ISO 8601 / epoch</td><td class="optional">opt</td><td>Default: server time</td></tr>
+        <tr><td class="field-name">latitude / longitude</td><td class="field-type">number</td><td class="optional">opt</td><td>GPS position</td></tr>
+        <tr><td class="field-name">headingDeg</td><td class="field-type">number</td><td class="optional">opt</td><td>Bearing in degrees</td></tr>
+        <tr><td class="field-name">speedKmh</td><td class="field-type">number</td><td class="optional">opt</td><td>Speed in km/h</td></tr>
+        <tr><td class="field-name">odometerKm</td><td class="field-type">number</td><td class="optional">opt</td><td>Total odometer reading in km</td></tr>
+        <tr><td class="field-name">distanceElapsedKm</td><td class="field-type">number</td><td class="optional">opt</td><td>Distance since last event (km)</td></tr>
+        <tr><td class="field-name">journeyDistanceKm</td><td class="field-type">number</td><td class="optional">opt</td><td>Cumulative journey distance (metres from tracker, stored as-is)</td></tr>
+        <tr><td class="field-name">fuelLevelPct</td><td class="field-type">int</td><td class="optional">opt</td><td>Fuel level 0–100 %</td></tr>
+        <tr><td class="field-name">fuelConsumedL</td><td class="field-type">number</td><td class="optional">opt</td><td>Fuel consumed this event (L)</td></tr>
+        <tr><td class="field-name">journeyFuelConsumedL</td><td class="field-type">number</td><td class="optional">opt</td><td>Cumulative journey fuel (L)</td></tr>
+        <tr><td class="field-name">engineRpm</td><td class="field-type">int</td><td class="optional">opt</td><td>Engine RPM</td></tr>
+        <tr><td class="field-name">engineTempC</td><td class="field-type">number</td><td class="optional">opt</td><td>Engine temperature (°C)</td></tr>
+        <tr><td class="field-name">driverID</td><td class="field-type">string</td><td class="optional">opt</td><td>Driver identifier</td></tr>
+        <tr><td class="field-name">obdCode</td><td class="field-type">string</td><td class="optional">opt</td><td>OBD fault code</td></tr>
+      </table>
+      <p>Returns <code>201 Created</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="ve-list">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/vehicle-events</span>
+      <span class="auth-badge auth-public">Public</span>
+      <span class="ep-summary">List raw tracker events</span>
+    </div>
+    <div class="ep-body">
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td class="field-name">journey</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by journey ID</td></tr>
+        <tr><td class="field-name">vehicle</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by vehicle ID</td></tr>
+        <tr><td class="field-name">imei</td><td class="field-type">string</td><td>–</td><td>Filter by IMEI</td></tr>
+        <tr><td class="field-name">event_type</td><td class="field-type">string</td><td>–</td><td>Filter by event type</td></tr>
+        <tr><td class="field-name">limit</td><td class="field-type">int</td><td>1000</td><td>Max events. Up to 2000 recommended for track display.</td></tr>
+      </table>
+      <p>Returns array sorted ascending by timestamp.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="ve-journeys">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/vehicle-events/journeys</span>
+      <span class="auth-badge auth-public">Public</span>
+      <span class="ep-summary">Journey summaries (one row per journey)</span>
+    </div>
+    <div class="ep-body">
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td class="field-name">vehicle</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by vehicle ID</td></tr>
+        <tr><td class="field-name">limit</td><td class="field-type">int</td><td>50</td><td>Max journeys returned</td></tr>
+      </table>
+      <div class="code-label">Response 200 — array of JourneySummary</div>
+      <div class="code-block">[{
+  <span class="hl-key">"journeyID"</span>:         <span class="hl-str">"UUID"</span>,
+  <span class="hl-key">"vehicleID"</span>:         <span class="hl-str">"UUID"</span>,
+  <span class="hl-key">"vehicleName"</span>:       <span class="hl-str">"Truck #1"</span>,
+  <span class="hl-key">"startedAt"</span>:         <span class="hl-str">"2026-03-03T19:46:29Z"</span>,
+  <span class="hl-key">"endedAt"</span>:           <span class="hl-str">"2026-03-03T20:10:01Z"</span>,  <span class="hl-cmt">// null if still in progress</span>
+  <span class="hl-key">"driverID"</span>:          <span class="hl-str">"DRV-001"</span>,
+  <span class="hl-key">"totalDistanceKm"</span>:   <span class="hl-num">1.2</span>,     <span class="hl-cmt">// metres converted to km</span>
+  <span class="hl-key">"totalFuelConsumedL"</span>: <span class="hl-num">0.06</span>,
+  <span class="hl-key">"eventCount"</span>:        <span class="hl-num">23</span>
+}]</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="ve-delete-journey">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge DELETE">DELETE</span>
+      <span class="ep-path">/api/vehicle-events/journeys/:journeyID</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">Delete all events of a journey</span>
+    </div>
+    <div class="ep-body"><p>Permanently deletes all <code>vehicle_events</code> rows for the given journey UUID. Returns <code>204 No Content</code> or <code>404</code> if not found.</p></div>
+  </div>
+
+  <div class="endpoint" id="ve-delete-period">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge DELETE">DELETE</span>
+      <span class="ep-path">/api/vehicle-events</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">Delete events for an IMEI within a time window</span>
+    </div>
+    <div class="ep-body">
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Req?</th><th>Description</th></tr>
+        <tr><td class="field-name">imei</td><td class="field-type">string</td><td class="required">✓</td><td>Tracker IMEI</td></tr>
+        <tr><td class="field-name">from</td><td class="field-type">ISO 8601</td><td class="required">✓</td><td>Start of deletion window</td></tr>
+        <tr><td class="field-name">to</td><td class="field-type">ISO 8601</td><td class="required">✓</td><td>End of deletion window</td></tr>
+      </table>
+      <div class="code-label">Response 200</div>
+      <div class="code-block">{ <span class="hl-key">"deleted"</span>: <span class="hl-num">47</span> }</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ────────────────────── ADMIN ────────────────────── -->
+  <h2 class="section-title" id="admin">Admin — API Key</h2>
+  <p class="section-desc">All <code>/api/admin/*</code> routes require a Bearer token with <code>role: "admin"</code>.</p>
+
+  <div class="endpoint" id="admin-apikey-get">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/admin/api-key</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Retrieve the current API key</span>
+    </div>
+    <div class="ep-body">
+      <div class="code-label">Response 200</div>
+      <div class="code-block">{ <span class="hl-key">"apiKey"</span>: <span class="hl-str">"abc123…"</span> }</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="admin-apikey-rotate">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/admin/api-key/rotate</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Generate a new API key</span>
+    </div>
+    <div class="ep-body"><p>Generates a new random API key, saves it in the database and returns it. The old key is immediately invalidated. Update all client configurations accordingly.</p></div>
+  </div>
+
+  <hr class="divider">
+
+  <h2 class="section-title">Admin — User Management</h2>
+
+  <div class="endpoint" id="admin-users-list">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/admin/users</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">List all users</span>
+    </div>
+    <div class="ep-body">
+      <div class="code-label">Response 200</div>
+      <div class="code-block">[{
+  <span class="hl-key">"id"</span>:          <span class="hl-str">"UUID"</span>,
+  <span class="hl-key">"email"</span>:       <span class="hl-str">"user@example.com"</span>,
+  <span class="hl-key">"displayName"</span>: <span class="hl-str">"Alice"</span>,
+  <span class="hl-key">"role"</span>:        <span class="hl-str">"user"</span>,
+  <span class="hl-key">"createdAt"</span>:   <span class="hl-str">"2026-01-15T08:00:00Z"</span>,
+  <span class="hl-key">"assetIDs"</span>:    [<span class="hl-str">"UUID1"</span>, <span class="hl-str">"UUID2"</span>]
+}]</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="admin-users-create">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/admin/users</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Create a new user</span>
+    </div>
+    <div class="ep-body">
+      <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
+        <tr><td class="field-name">email</td><td class="field-type">string</td><td class="required">✓</td><td>Email address (unique)</td></tr>
+        <tr><td class="field-name">displayName</td><td class="field-type">string</td><td class="optional">opt</td><td>Full name</td></tr>
+        <tr><td class="field-name">role</td><td class="field-type">string</td><td class="optional">opt</td><td><code>"admin"</code> or <code>"user"</code> (default)</td></tr>
+        <tr><td class="field-name">password</td><td class="field-type">string</td><td class="optional">opt</td><td>If omitted, a random password is generated</td></tr>
+      </table>
+      <div class="note"><strong>Tip:</strong> Omit <code>password</code> to let the server generate a human-readable one — it will be returned once in the response.</div>
+      <div class="code-label">Response 201</div>
+      <div class="code-block">{
+  <span class="hl-key">"id"</span>:          <span class="hl-str">"UUID"</span>,
+  <span class="hl-key">"email"</span>:       <span class="hl-str">"user@example.com"</span>,
+  <span class="hl-key">"role"</span>:        <span class="hl-str">"user"</span>,
+  <span class="hl-key">"password"</span>:    <span class="hl-str">"fleet247"</span>  <span class="hl-cmt">// shown once, store securely</span>
+}</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="admin-users-update">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge PATCH">PATCH</span>
+      <span class="ep-path">/api/admin/users/:userID</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Update name, role or password</span>
+    </div>
+    <div class="ep-body">
+      <table><tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td class="field-name">displayName</td><td class="field-type">string</td><td>New display name</td></tr>
+        <tr><td class="field-name">role</td><td class="field-type">string</td><td><code>"admin"</code> or <code>"user"</code></td></tr>
+        <tr><td class="field-name">password</td><td class="field-type">string</td><td>New password (bcrypt-hashed on server)</td></tr>
+      </table>
+      <p>Returns <code>200 OK</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="admin-users-delete">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge DELETE">DELETE</span>
+      <span class="ep-path">/api/admin/users/:userID</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Delete a user</span>
+    </div>
+    <div class="ep-body"><p>Deletes the user, their tokens and all asset links. Returns <code>204</code>. Cannot delete the last admin account.</p></div>
+  </div>
+
+  <div class="endpoint" id="admin-assets-list">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/admin/users/:userID/assets</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">List asset IDs linked to a user</span>
+    </div>
+    <div class="ep-body">
+      <div class="code-label">Response 200</div>
+      <div class="code-block">[<span class="hl-str">"UUID1"</span>, <span class="hl-str">"UUID2"</span>]</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="admin-assets-link">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/admin/users/:userID/assets</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Link an asset to a user</span>
+    </div>
+    <div class="ep-body">
+      <div class="code-block">{ <span class="hl-key">"assetID"</span>: <span class="hl-str">"UUID"</span> }</div>
+      <p>Idempotent — silently ignores duplicates. Returns <code>201 Created</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="admin-assets-unlink">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge DELETE">DELETE</span>
+      <span class="ep-path">/api/admin/users/:userID/assets/:assetID</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Unlink an asset from a user</span>
+    </div>
+    <div class="ep-body"><p>Returns <code>204 No Content</code>.</p></div>
+  </div>
+
+  <hr class="divider">
+
+  <h2 class="section-title">Admin — Tracker Management</h2>
+
+  <div class="endpoint" id="admin-trackers-list">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/admin/trackers</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">List all registered trackers</span>
+    </div>
+    <div class="ep-body">
+      <div class="code-label">Response 200</div>
+      <div class="code-block">[{
+  <span class="hl-key">"imei"</span>:         <span class="hl-str">"867280066365446"</span>,
+  <span class="hl-key">"vehicleID"</span>:    <span class="hl-str">"UUID"</span>,
+  <span class="hl-key">"vehicleName"</span>:  <span class="hl-str">"Truck #1"</span>,
+  <span class="hl-key">"sensorName"</span>:   <span class="hl-str">"Fleet Tracker"</span>,  <span class="hl-cmt">// nullable</span>
+  <span class="hl-key">"readingCount"</span>: <span class="hl-num">1250</span>
+}]</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="admin-trackers-create">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/admin/trackers</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Register a new tracker IMEI</span>
+    </div>
+    <div class="ep-body">
+      <p>Idempotent — if the IMEI already exists it updates the vehicle link.</p>
+      <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
+        <tr><td class="field-name">imei</td><td class="field-type">string</td><td class="required">✓</td><td>Tracker IMEI</td></tr>
+        <tr><td class="field-name">vehicleID</td><td class="field-type">string (UUID)</td><td class="required">✓</td><td>Vehicle to link to</td></tr>
+        <tr><td class="field-name">sensorName</td><td class="field-type">string</td><td class="optional">opt</td><td>Human-readable label</td></tr>
+      </table>
+      <p>Returns <code>201 Created</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="admin-trackers-rename">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge PATCH">PATCH</span>
+      <span class="ep-path">/api/admin/trackers/:imei</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Rename a tracker</span>
+    </div>
+    <div class="ep-body">
+      <div class="code-block">{ <span class="hl-key">"sensorName"</span>: <span class="hl-str">"Fleet Tracker"</span> }</div>
+      <p>Set <code>sensorName</code> to <code>null</code> to clear the label. Returns <code>200 OK</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="admin-trackers-pair">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge POST">POST</span>
+      <span class="ep-path">/api/admin/trackers/pair</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Reassign a tracker to a vehicle</span>
+    </div>
+    <div class="ep-body">
+      <p>Updates the vehicle link for both <code>sensor_readings</code> and all historical <code>vehicle_events</code>. Enforces 1 tracker per vehicle.</p>
+      <div class="code-block">{ <span class="hl-key">"imei"</span>: <span class="hl-str">"867280066365446"</span>, <span class="hl-key">"vehicleID"</span>: <span class="hl-str">"UUID"</span> }</div>
+      <p>Returns <code>200 OK</code> or <code>409 Conflict</code> if the vehicle already has a different tracker paired.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="admin-trackers-unpair">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge DELETE">DELETE</span>
+      <span class="ep-path">/api/admin/trackers/:imei/pair</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Remove a tracker's vehicle link</span>
+    </div>
+    <div class="ep-body"><p>Resets <code>vehicleID</code> to the IMEI itself (unlinked state) in <code>sensor_readings</code> and <code>vehicle_events</code>. Returns <code>204 No Content</code>.</p></div>
+  </div>
+
+  <div class="endpoint" id="admin-trackers-delete">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge DELETE">DELETE</span>
+      <span class="ep-path">/api/admin/trackers/:imei</span>
+      <span class="auth-badge auth-admin">Admin</span>
+      <span class="ep-summary">Delete all sensor_readings for a tracker</span>
+    </div>
+    <div class="ep-body"><p>Removes all <code>sensor_readings</code> rows for the given IMEI. Does <strong>not</strong> delete <code>vehicle_events</code> history. Returns <code>204 No Content</code>.</p></div>
+  </div>
+
+</main>
+
+<script>
+  function toggle(header) {
+    const body = header.nextElementSibling;
+    body.classList.toggle('open');
+  }
+  // Auto-open the endpoint targeted by URL hash
+  window.addEventListener('DOMContentLoaded', () => {
+    if (location.hash) {
+      const el = document.querySelector(location.hash + ' .ep-body');
+      if (el) el.classList.add('open');
+    }
+  });
+  // Smooth scroll for nav links
+  document.querySelectorAll('#sidebar a').forEach(a => {
+    a.addEventListener('click', e => {
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); history.pushState(null, '', a.getAttribute('href')); }
+    });
+  });
+</script>
+</body>
+</html>

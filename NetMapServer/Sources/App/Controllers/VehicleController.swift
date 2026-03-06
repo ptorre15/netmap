@@ -80,6 +80,7 @@ struct VehicleController: RouteCollection {
             vrn:          p.vrn,
             serialNumber: p.serialNumber,
             toolType:     p.toolType,
+            iconKey:      p.iconKey,
             createdBy:    user.email
         )
         try await v.save(on: req.db)
@@ -107,6 +108,7 @@ struct VehicleController: RouteCollection {
         v.vrn          = p.vrn
         v.serialNumber = p.serialNumber
         v.toolType     = p.toolType
+        v.iconKey      = p.iconKey
         try await v.save(on: req.db)
         return v
     }
