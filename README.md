@@ -9,7 +9,7 @@ Real-time tire pressure monitoring system (TPMS) for fleet management. A native 
 ```
 ┌───────────────────────────────────┐    HTTP/REST (batch)    ┌──────────────────────┐
 │   NetMap App (SwiftUI)            │◄───────────────────────►│  NetMapServer        │
-│                                   │   Port 8765 (default)   │  (Vapor 4, Swift)    │
+│                                   │   Port 8092 (default)   │  (Vapor 4, Swift)    │
 │  • CoreBluetooth (BLE scanning)   │                         │                      │
 │  • CoreLocation (GPS)             │  Auth: X-API-Key        │  SQLite database     │
 │  • Fleet & sensor management      │       + Bearer token    │  Web dashboard       │
@@ -44,8 +44,9 @@ Real-time tire pressure monitoring system (TPMS) for fleet management. A native 
 | **Stihl Smart Battery** | `0x03DD` | Charge %, health %, cycles, discharge time |
 | **ELA Innovation Beacons** | `0x0757` | Position (RSSI), temp, battery |
 | **Apple AirTag** | iBeacon | RSSI-based proximity tracking |
+| **GPS Tracker** | IMEI-based | Position, speed, satellites, journey events, driver behavior |
 
-Sensors are identified by a stable MAC address extracted from their BLE payload, stored as `TMS-AABBCC`. This survives app reinstalls since the CBPeripheral UUID rotates on iOS.
+BLE sensors are identified by a stable MAC address extracted from their payload, stored as `TMS-AABBCC`. GPS trackers are identified by their IMEI. Both survive app reinstalls.
 
 ---
 
@@ -79,7 +80,7 @@ cd NetMapServer
 swift run App
 
 # With custom config
-PORT=8765 DB_PATH=/var/lib/netmap/data.db API_KEY=your-key swift run App
+PORT=8092 DB_PATH=/var/lib/netmap/data.db API_KEY=your-key swift run App
 ```
 
 First run: set `ADMIN_USERNAME` and `ADMIN_PASSWORD` env vars to auto-create the admin account.
@@ -114,18 +115,53 @@ In the app's **Server Settings**, enter the server URL and API key.
 | `GET` | `/api/records/by-sensor/:id` | — | Sensor history (`from`/`to` ISO 8601) |
 | `GET` | `/api/records/by-vehicle/:id` | — | Vehicle history |
 | `GET` | `/api/sensors/latest` | — | Latest reading per sensor |
+| `GET` | `/api/sensors/:id/puncture-risk` | — | Slow puncture risk score for a sensor |
+| `POST` | `/api/sensors/pair` | X-API-Key | Register a sensor↔vehicle pairing |
+| `DELETE` | `/api/sensors/pair/:sensorID` | X-API-Key or Admin | Remove a sensor pairing |
 | `DELETE` | `/api/records/purge` | X-API-Key | Purge records (`?olderThanDays=90`) |
 
-### Vehicles
+### Vehicles & Assets
+
+`/api/assets` is an alias for `/api/vehicles`.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `GET` | `/api/vehicles` | — | List all vehicles |
+| `GET` | `/api/vehicles/:id` | — | Single vehicle detail |
 | `POST` | `/api/vehicles` | Bearer + Admin | Create vehicle |
 | `PATCH` | `/api/vehicles/:id` | Bearer + Admin | Update vehicle |
 | `DELETE` | `/api/vehicles/:id` | Bearer + Admin | Delete vehicle |
 | `GET` | `/api/asset-types` | — | Asset type catalog |
 | `GET` | `/api/paired-sensors` | — | Sensor-to-vehicle associations |
+
+### Vehicle Events & Journeys (GPS Trackers)
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/vehicle-events` | X-API-Key | Push event(s) from tracker (single or array) |
+| `GET` | `/api/vehicle-events` | — | List events (filters: `vehicle`, `journey`, `imei`, `event_type`, `limit`) |
+| `GET` | `/api/vehicle-events/journeys` | — | List journeys (`vehicle`, `limit`) |
+| `DELETE` | `/api/vehicle-events/:id` | X-API-Key or Admin | Delete a single event |
+| `DELETE` | `/api/vehicle-events/journeys/:journeyID` | X-API-Key or Admin | Delete all events in a journey |
+| `DELETE` | `/api/vehicle-events` | X-API-Key or Admin | Delete events in period (`imei`, `from`, `to`) |
+
+### Driver Behavior
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/driver-behavior` | — | List alerts (filters: `journey`, `vehicle`, `imei`, `alert_type`, `limit`) |
+| `GET` | `/api/driver-behavior/summary` | — | Aggregated score for a journey |
+| `DELETE` | `/api/driver-behavior/:id` | — | Delete single alert |
+| `DELETE` | `/api/driver-behavior` | — | Delete alerts in period (`imei`, `from`, `to`) |
+
+### Device Lifecycle
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/device-lifecycle` | — | List lifecycle events |
+| `GET` | `/api/device-lifecycle/summary` | — | Summary per device |
+| `DELETE` | `/api/device-lifecycle/:id` | — | Delete single event |
+| `DELETE` | `/api/device-lifecycle` | — | Delete events in period (`imei`, `from`, `to`) |
 
 ### Misc
 
@@ -140,7 +176,7 @@ In the app's **Server Settings**, enter the server URL and API key.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8765` | HTTP listen port |
+| `PORT` | `8092` | HTTP listen port |
 | `DB_PATH` | `netmap_data.db` | SQLite file path |
 | `API_KEY` | `netmap-dev` | X-API-Key for sensor writes |
 | `ADMIN_USERNAME` | — | Auto-seed admin username (first run) |
