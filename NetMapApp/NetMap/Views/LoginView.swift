@@ -1,4 +1,5 @@
 import SwiftUI
+import LocalAuthentication
 
 struct LoginView: View {
     @EnvironmentObject var serverClient: NetMapServerClient
@@ -8,6 +9,9 @@ struct LoginView: View {
     @State private var password    = ""
     @State private var isLoading   = false
     @State private var errorMsg:   String? = nil
+    @State private var biometricLoading = false
+
+    private let bioService = BiometricAuthService.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -73,6 +77,34 @@ struct LoginView: View {
                 }
                 .disabled(!canSubmit || isLoading)
                 .buttonStyle(.plain)
+
+                // ── Biometric button ─────────────────────────────────────
+                if bioService.isAvailable && bioService.hasSavedCredentials {
+                    Button {
+                        Task { await doBiometricLogin() }
+                    } label: {
+                        Group {
+                            if biometricLoading {
+                                ProgressView()
+                            } else {
+                                Label(
+                                    bioService.biometryType == .faceID
+                                        ? "Sign in with Face ID"
+                                        : "Sign in with Touch ID",
+                                    systemImage: bioService.biometryType == .faceID
+                                        ? "faceid" : "touchid"
+                                )
+                                .fontWeight(.medium)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(Color.secondary.opacity(0.12),
+                                    in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .disabled(biometricLoading || isLoading)
+                    .buttonStyle(.plain)
+                }
             }
             .padding(32)
             .background(.background, in: RoundedRectangle(cornerRadius: 20))
@@ -112,6 +144,12 @@ struct LoginView: View {
         .background(Color(.windowBackgroundColor))
         #endif
         .onSubmit { Task { await doLogin() } }
+        .onAppear {
+            // Auto-trigger biometric prompt if credentials are already saved
+            if bioService.isAvailable && bioService.hasSavedCredentials {
+                Task { await doBiometricLogin() }
+            }
+        }
     }
 
     // MARK: - Logic
@@ -134,6 +172,24 @@ struct LoginView: View {
             errorMsg = "Cannot reach the server — check host & port in Settings."
         } catch NetMapServerError.timedOut {
             errorMsg = "Server did not respond. Is it running?"
+        } catch {
+            errorMsg = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func doBiometricLogin() async {
+        errorMsg        = nil
+        biometricLoading = true
+        defer { biometricLoading = false }
+        do {
+            let creds = try await bioService.loadCredentials(reason: "Sign in to NetMap")
+            try await serverClient.login(email: creds.email, password: creds.password)
+            dismiss()
+        } catch let error as LAError where error.code == .userCancel
+                                        || error.code == .appCancel
+                                        || error.code == .systemCancel {
+            // User cancelled — no error shown
         } catch {
             errorMsg = error.localizedDescription
         }

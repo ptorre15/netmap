@@ -31,6 +31,10 @@
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>NetMap utilise le Bluetooth pour détecter les appareils BLE à proximité et afficher leurs informations d'advertising.</string>
 
+    <!-- Face ID usage (iOS) -->
+    <key>NSFaceIDUsageDescription</key>
+    <string>NetMap uses Face ID to sign you in securely without typing your password.</string>
+
     <!-- Localisation GPS pour géotagger les relevs de pression -->
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>NetMap enregistre votre position GPS avec chaque relevé de capteur afin d’afficher le parcours sur la carte.</string>

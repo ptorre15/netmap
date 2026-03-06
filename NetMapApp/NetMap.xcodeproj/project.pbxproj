@@ -25,6 +25,7 @@
 		A025 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B025 /* LoginView.swift */; };
 		A026 /* PairedSensorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B026 /* PairedSensorsView.swift */; };
 		A028 /* SensorPushService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B028 /* SensorPushService.swift */; };
+		A033 /* BiometricAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B033 /* BiometricAuthService.swift */; };
 		A029 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B029 /* AppEnvironment.swift */; };
 		A032 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B032 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
@@ -46,6 +47,7 @@
 		B025 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		B026 /* PairedSensorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairedSensorsView.swift; sourceTree = "<group>"; };
 		B028 /* SensorPushService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorPushService.swift; sourceTree = "<group>"; };
+		B033 /* BiometricAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricAuthService.swift; sourceTree = "<group>"; };
 		B029 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		B032 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B030 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -118,6 +120,7 @@
 				B023 /* NetMapServerClient.swift */,
 				B027 /* LaunchAgentManager.swift */,
 				B028 /* SensorPushService.swift */,
+				B033 /* BiometricAuthService.swift */,
 			);
 			name = Services;
 			path = NetMap/Services;
@@ -225,6 +228,7 @@
 				A025 /* LoginView.swift in Sources */,
 				A026 /* PairedSensorsView.swift in Sources */,
 				A028 /* SensorPushService.swift in Sources */,
+				A033 /* BiometricAuthService.swift in Sources */,
 				A029 /* AppEnvironment.swift in Sources */,
 				A032 /* AppDelegate.swift in Sources */,
 			);

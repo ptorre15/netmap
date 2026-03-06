@@ -438,6 +438,8 @@ final class NetMapServerClient: ObservableObject {
         saveAuth(token: auth.token, email: auth.email, role: auth.role)
         connectionStatus = .ok
         lastErrorMessage = nil
+        // Persist credentials in Keychain so Touch ID / Face ID can log in next time
+        BiometricAuthService.shared.saveCredentials(email: email, password: password)
     }
 
     /// Logs out — invalidates server token and clears local session.
@@ -450,9 +452,8 @@ final class NetMapServerClient: ObservableObject {
             _ = try? await URLSession.shared.data(for: req)
         }
         clearAuth()
+        BiometricAuthService.shared.removeCredentials()
     }
-
-    /// Validates the stored token with the server. Call on app launch.
     func validateStoredToken() async {
         guard let token = UserDefaults.standard.string(forKey: Keys.token), !token.isEmpty else {
             clearAuth(); return
