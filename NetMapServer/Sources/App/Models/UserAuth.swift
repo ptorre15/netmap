@@ -2,6 +2,8 @@ import Vapor
 import Fluent
 import SQLKit
 
+let sessionCookieNames = ["__Host-session", "session"]
+
 // MARK: - Auth context attached to each request
 
 struct AuthUser: Sendable {
@@ -71,13 +73,10 @@ final class UserToken: Model, @unchecked Sendable {
 /// Validates the Bearer token and attaches `AuthUser` to the request.
 struct BearerAuthMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
-        guard let bearer = request.headers.bearerAuthorization,
-              let token  = try await UserToken.query(on: request.db)
-                  .filter(\.$value     == bearer.token)
-                  .filter(\.$expiresAt >  Date())
-                  .first()
-        else { throw Abort(.unauthorized, reason: "Valid Bearer token required") }
-        request.authUser = AuthUser(userID: token.userID, email: token.email, role: token.role)
+        guard let auth = try await authUserFromBearerOrCookie(request) else {
+            throw Abort(.unauthorized, reason: "Valid Bearer token or session cookie required")
+        }
+        request.authUser = auth
         return try await next.respond(to: request)
     }
 }
@@ -86,15 +85,32 @@ struct BearerAuthMiddleware: AsyncMiddleware {
 /// Used on public routes that want to apply per-user filtering when authenticated.
 struct OptionalBearerAuthMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
-        if let bearer = request.headers.bearerAuthorization,
-           let token  = try await UserToken.query(on: request.db)
-                .filter(\.$value     == bearer.token)
-                .filter(\.$expiresAt >  Date())
-                .first() {
-            request.authUser = AuthUser(userID: token.userID, email: token.email, role: token.role)
+        if let auth = try await authUserFromBearerOrCookie(request) {
+            request.authUser = auth
         }
         return try await next.respond(to: request)
     }
+}
+
+func authUserFromBearerOrCookie(_ request: Request) async throws -> AuthUser? {
+    let tokenValue: String? = {
+        if let bearer = request.headers.bearerAuthorization {
+            return bearer.token
+        }
+        for name in sessionCookieNames {
+            if let cookie = request.cookies[name], !cookie.string.isEmpty {
+                return cookie.string
+            }
+        }
+        return nil
+    }()
+    guard let tokenValue else { return nil }
+    guard let token = try await UserToken.query(on: request.db)
+        .filter(\.$value == tokenValue)
+        .filter(\.$expiresAt > Date())
+        .first()
+    else { return nil }
+    return AuthUser(userID: token.userID, email: token.email, role: token.role)
 }
 
 /// Requires `authUser.role == "admin"`.
@@ -167,5 +183,3 @@ struct MigrateUsernameToEmail: AsyncMigration {
     }
     func revert(on db: Database) async throws { }
 }
-
-

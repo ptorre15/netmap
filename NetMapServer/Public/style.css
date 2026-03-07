@@ -31,7 +31,7 @@
   --danger:      #C0392B;
   --danger-bg:   #FDECEA;
   /* Misc */
-  --sidebar-w:   380px;
+  --sidebar-w:   290px;
   --header-h:    56px;
   --r:           6px;
   --r-sm:        4px;
@@ -307,9 +307,9 @@ body {
 #tracker-map-wrapper { flex: 1; display: flex; flex-direction: row; gap: 12px; min-height: 0; }
 #tracker-map-wrapper #leaflet-map { border-radius: var(--r); }
 #journey-list-panel {
-  width: 200px; flex-shrink: 0; display: flex; flex-direction: column;
+  width: 220px; flex-shrink: 0; display: flex; flex-direction: column;
   background: var(--bg2); border: 1px solid var(--sep); border-radius: var(--r);
-  box-shadow: var(--shadow); overflow: hidden;
+  box-shadow: var(--shadow); overflow: hidden; position: relative;
 }
 .jlp-header {
   padding: 10px 14px; font-size: 12px; font-weight: 700; text-transform: uppercase;
@@ -333,6 +333,75 @@ body {
   flex: 1; min-width: 0; background: var(--bg1); border: 1px solid var(--sep);
   border-radius: 5px; color: var(--fg1); padding: 3px 7px; font-size: 11px;
 }
+/* ── Config button (same pill style as rename) ──────────────────── */
+.jlp-admin-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-bottom: 1px solid var(--sep);
+  background: var(--bg3); flex-shrink: 0;
+}
+.jlp-config-btn {
+  flex-shrink: 0; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+  cursor: pointer; color: var(--fg2); font-size: 10px; font-weight: 600;
+  letter-spacing: .03em; text-transform: uppercase; padding: 3px 8px;
+  border-radius: 10px; transition: background .12s, color .12s; line-height: 1.4;
+  white-space: nowrap;
+}
+.jlp-config-btn:hover { background: rgba(255,255,255,.15); color: var(--fg1); }
+/* ── Tracker config modal ────────────────────────────────────────── */
+.tcm-section-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--fg3); margin-bottom: 8px;
+  padding-bottom: 4px; border-bottom: 1px solid var(--sep);
+}
+.tcm-input {
+  background: var(--bg1); border: 1px solid var(--sep);
+  border-radius: 5px; color: var(--fg1); padding: 5px 9px;
+  font-size: 12px; width: 100%; box-sizing: border-box;
+}
+.tcm-input:focus { border-color: var(--m-yellow); outline: none; box-shadow: 0 0 0 3px rgba(255,218,0,.18); }
+/* ── Config button in si-actions ─────────────────────────────────── */
+.si-config-btn {
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+  cursor: pointer; color: var(--fg2); font-size: 11px; font-weight: 600;
+  padding: 4px 10px; border-radius: 10px;
+  transition: background .12s, color .12s;
+}
+.si-config-btn:hover { background: rgba(255,255,255,.15); color: var(--fg1); }
+/* ── Config overlay (absolute, covers jlp-body) ─────────────────── */
+.jlp-config-overlay {
+  position: absolute; inset: 0; background: var(--bg2); overflow-y: auto;
+  z-index: 2; display: flex; flex-direction: column;
+}
+.jlp-config-form { padding: 10px 14px; font-size: 11px; color: var(--fg2); flex: 1; }
+.jlp-config-back {
+  background: none; border: none; cursor: pointer; color: var(--m-blue);
+  font-size: 11px; padding: 0; font-weight: 600; display: inline-block;
+  margin-bottom: 10px;
+}
+.jlp-config-back:hover { text-decoration: underline; }
+.jlp-config-section { margin-bottom: 12px; }
+.jlp-config-section-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--fg3); margin-bottom: 6px;
+  padding-bottom: 4px; border-bottom: 1px solid var(--sep);
+}
+.jlp-config-field { margin-bottom: 6px; }
+.jlp-config-label { display: block; font-size: 10px; color: var(--fg3); margin-bottom: 2px; }
+.jlp-config-input {
+  background: var(--bg1); border: 1px solid var(--sep);
+  border-radius: 5px; color: var(--fg1); padding: 3px 7px;
+  font-size: 11px; width: 100%; box-sizing: border-box;
+}
+.jlp-config-wake-sources { margin-top: 3px; display: flex; flex-direction: column; gap: 3px; }
+.jlp-config-checkbox-row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--fg2); cursor: pointer;
+}
+.jlp-config-actions { display: flex; gap: 6px; }
+.jlp-config-error {
+  color: #f87171; font-size: 11px; margin-top: 6px;
+  display: none; word-break: break-word;
+}
 .jlp-body { flex: 1; overflow-y: auto; }
 .jlp-row {
   padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--sep);
@@ -348,8 +417,9 @@ body {
 }
 .jlp-row-meta { font-size: 11px; color: var(--fg3); margin-top: 2px; }
 .jlp-alert-badge {
-  font-size: 10px; font-weight: 700; color: #f59e0b;
-  white-space: nowrap; min-width: 0; flex-shrink: 0;
+  font-size: 13px; font-weight: 700; color: #f59e0b;
+  background: rgba(245,158,11,.15); border-radius: 99px;
+  padding: 3px 9px; white-space: nowrap; flex-shrink: 0;
 }
 
 /* ── Behaviour alert table ─────────────────────────────────────── */
@@ -838,6 +908,36 @@ body {
   border-radius: var(--r); padding: 9px 14px;
 }
 .admin-vehicle-name { font-size: 13px; font-weight: 600; color: var(--fg1); }
+.admin-security-toolbar input {
+  font-size: 12px; background: var(--bg2); color: var(--fg1);
+  border: 1px solid var(--sep); border-radius: 6px; padding: 5px 8px;
+  min-width: 130px;
+}
+.admin-security-list {
+  padding: 10px 16px; display: flex; flex-direction: column; gap: 8px;
+  flex: 1; overflow-y: auto; min-height: 0;
+}
+.admin-sec-row {
+  background: var(--bg3); border: 1px solid var(--sep);
+  border-radius: var(--r); padding: 9px 11px;
+}
+.admin-sec-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.admin-sec-action { font-size: 12px; font-weight: 700; color: var(--fg1); font-family: var(--mono); }
+.admin-sec-when { font-size: 11px; color: var(--fg3); font-family: var(--mono); }
+.admin-sec-sub { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px; }
+.admin-sec-actor, .admin-sec-target, .admin-sec-ip { font-size: 11px; color: var(--fg2); }
+.admin-sec-meta {
+  margin: 7px 0 0; padding: 7px 8px;
+  border: 1px solid var(--sep); border-radius: 6px; background: var(--bg2);
+  color: var(--fg2); font-size: 11px; white-space: pre-wrap; word-break: break-word; font-family: var(--mono);
+}
+.admin-security-pager {
+  padding: 8px 16px 12px; border-top: 1px solid var(--sep);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+#sec-page-label { font-size: 12px; color: var(--fg2); }
 
 /* ─── Sensor Info Card ──────────────────────────────────────────────────────── */
 #sensor-info-card {
@@ -869,6 +969,43 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: var(--fg1);
+}
+.si-rename-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 4px;
+}
+.si-rename-input {
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--bg2);
+  color: var(--fg1);
+  border: 1px solid var(--sep);
+  border-radius: 5px;
+  padding: 3px 8px;
+  width: 180px;
+  outline: none;
+}
+.si-rename-input:focus { border-color: var(--accent); }
+.si-rename-save {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+.si-rename-save:hover { background: rgba(0,122,255,.1); }
+.si-rename-cancel {
+  font-size: 11px;
+  color: var(--fg3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
 }
 .si-live {
   font-size: 10px;
@@ -917,8 +1054,22 @@ body {
 .si-actions {
   padding: 10px 12px 6px;
   display: flex;
+  align-items: center;
+  gap: 8px;
   justify-content: flex-end;
 }
+.si-rename-action-btn {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg2);
+  background: none;
+  border: 1px solid var(--sep);
+  border-radius: 5px;
+  padding: 3px 9px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.si-rename-action-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1460,4 +1611,3 @@ tr.journey-sep-row td {
 .log-line.log-critical { color: #ff7b72; font-weight: 700; }
 .log-line.log-ts      { color: #6e7681; }
 .logs-empty { color: #6e7681; font-style: italic; font-size: 12px; }
-

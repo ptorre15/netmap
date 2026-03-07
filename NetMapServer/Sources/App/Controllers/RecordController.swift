@@ -23,17 +23,30 @@ struct APIKeyOrAdminMiddleware: AsyncMiddleware {
         if request.headers.first(name: "X-API-Key") == currentKey {
             return try await next.respond(to: request)
         }
-        // Accept admin Bearer token
-        if let bearer = request.headers.bearerAuthorization,
-           let token  = try await UserToken.query(on: request.db)
-               .filter(\.$value     == bearer.token)
-               .filter(\.$expiresAt >  Date())
-               .first(),
-           token.role == "admin" {
-            request.authUser = AuthUser(userID: token.userID, email: token.email, role: token.role)
+        // Accept admin auth via Bearer token or session cookie
+        if let auth = try await authUserFromBearerOrCookie(request), auth.isAdmin {
+            request.authUser = auth
             return try await next.respond(to: request)
         }
         throw Abort(.unauthorized, reason: "Valid API key or admin Bearer token required.")
+    }
+}
+
+/// Accepts either a valid X-API-Key header OR any valid Bearer token.
+/// Used for read endpoints that must not be publicly accessible.
+struct APIKeyOrBearerMiddleware: AsyncMiddleware {
+    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        // Accept valid API key
+        let currentKey = request.application.currentAPIKey
+        if request.headers.first(name: "X-API-Key") == currentKey {
+            return try await next.respond(to: request)
+        }
+        // Accept valid auth via Bearer token or session cookie (any role)
+        if let auth = try await authUserFromBearerOrCookie(request) {
+            request.authUser = auth
+            return try await next.respond(to: request)
+        }
+        throw Abort(.unauthorized, reason: "Valid API key or Bearer token required.")
     }
 }
 
@@ -62,6 +75,8 @@ struct SensorStat: Content {
     var latestGpsSatellites: Int?          // GPS tracker: satellites in view
     var latestLatitude:      Double?
     var latestLongitude:     Double?
+    var trackerServerConfigVersion:  Int?   // schemaVersion stored on server for this tracker
+    var trackerAppliedConfigVersion: Int?   // last configVersion reported by the tracker
 }
 
 struct PunctureRiskResponse: Content {
@@ -94,17 +109,20 @@ struct RecordController: RouteCollection {
               .grouped(APIKeyOrAdminMiddleware())
               .delete("pair", ":sensorID", use: unregisterPairing) // DELETE /api/sensors/pair/:sensorID
 
-        // Public reads
-        api.get(use: list)                                       // GET /api/records
-        api.get("by-sensor",  ":sensorID",  use: bySensor)      // GET /api/records/by-sensor/:sensorID
-        api.get("by-vehicle", ":vehicleID", use: byVehicle)     // GET /api/records/by-vehicle/:vehicleID
+        // Authenticated reads (API key or Bearer token)
+        let protectedRead = api.grouped(APIKeyOrBearerMiddleware())
+        protectedRead.get(use: list)                                       // GET /api/records
+        protectedRead.get("by-sensor",  ":sensorID",  use: bySensor)      // GET /api/records/by-sensor/:sensorID
+        protectedRead.get("by-vehicle", ":vehicleID", use: byVehicle)     // GET /api/records/by-vehicle/:vehicleID
 
         // Puncture risk analysis
-        routes.grouped("api", "sensors").get(":sensorID", "puncture-risk", use: punctureRisk)
-                                                                 // GET /api/sensors/:sensorID/puncture-risk
-        // Dashboard summary — optional auth for per-user filtering
         routes.grouped("api", "sensors")
-              .grouped(OptionalBearerAuthMiddleware())
+              .grouped(APIKeyOrBearerMiddleware())
+              .get(":sensorID", "puncture-risk", use: punctureRisk)
+                                                                 // GET /api/sensors/:sensorID/puncture-risk
+        // Dashboard summary — authenticated read; non-admin Bearer users are filtered to linked assets.
+        routes.grouped("api", "sensors")
+              .grouped(APIKeyOrBearerMiddleware())
               .get("latest", use: sensorsLatest)
     }
 
@@ -219,11 +237,13 @@ struct RecordController: RouteCollection {
             var charging_cycles:     Int?
             var product_variant:     String?
             var total_seconds:       Int?
-            var gps_satellites:      Int?
-            var timestamp:           String
-            var latitude:            Double?
-            var longitude:           Double?
-            var reading_count:       Int
+            var gps_satellites:                  Int?
+            var timestamp:                      String
+            var latitude:                       Double?
+            var longitude:                      Double?
+            var reading_count:                  Int
+            var server_config_version:          Int?
+            var last_applied_config_version:    Int?
         }
 
         // User filter clause (non-admin sees only their linked assets)
@@ -233,28 +253,93 @@ struct RecordController: RouteCollection {
                 .filter(\.$userID == auth.userID).all().map { $0.assetID.uuidString.uppercased() }
             if ids.isEmpty { return [] }
             let quoted = ids.map { "'\($0)'" }.joined(separator: ",")
-            vehicleFilter = "WHERE UPPER(sr.vehicle_id) IN (\(quoted))"
+            vehicleFilter = "WHERE UPPER(c.vehicle_id) IN (\(quoted))"
         }
 
         let rows = try await sql.raw("""
-            SELECT sr.sensor_id, sr.vehicle_id, sr.vehicle_name, sr.brand,
-                   sr.wheel_position, sr.pressure_bar, sr.temperature_c, sr.vbatt_volts,
-                   sr.target_pressure_bar, sr.battery_pct, sr.charge_state, sr.sensor_name,
-                   sr.health_pct, sr.charging_cycles, sr.product_variant,
-                   sr.total_seconds, sr.gps_satellites,
-                   sr.timestamp, sr.latitude, sr.longitude,
-                   grp.reading_count,
-                   COALESCE(v.asset_type_id, 'vehicle') AS asset_type_id
-            FROM sensor_readings sr
-            INNER JOIN (
-                SELECT sensor_id, MAX(timestamp) AS max_ts, COUNT(*) AS reading_count
-                FROM sensor_readings
-                GROUP BY sensor_id
-            ) grp ON sr.sensor_id = grp.sensor_id AND sr.timestamp = grp.max_ts
-            LEFT JOIN vehicles v ON sr.vehicle_id = v.id
+            WITH latest_sensor AS (
+                SELECT sr.sensor_id, sr.vehicle_id, sr.vehicle_name, sr.brand,
+                       sr.wheel_position, sr.pressure_bar, sr.temperature_c, sr.vbatt_volts,
+                       sr.target_pressure_bar, sr.battery_pct, sr.charge_state, sr.sensor_name,
+                       sr.health_pct, sr.charging_cycles, sr.product_variant,
+                       sr.total_seconds, sr.gps_satellites,
+                       CASE WHEN sr.brand = 'tracker'
+                            THEN MAX(sr.timestamp,
+                                     COALESCE(ve_max.max_ts, ''),
+                                     COALESCE(dle_max.max_ts, ''))
+                            ELSE sr.timestamp
+                       END AS timestamp,
+                       sr.latitude, sr.longitude,
+                       grp.reading_count,
+                       COALESCE(v.asset_type_id, 'vehicle') AS asset_type_id
+                FROM sensor_readings sr
+                INNER JOIN (
+                    SELECT sensor_id, MAX(timestamp) AS max_ts, COUNT(*) AS reading_count
+                    FROM sensor_readings
+                    GROUP BY sensor_id
+                ) grp ON sr.sensor_id = grp.sensor_id AND sr.timestamp = grp.max_ts
+                LEFT JOIN vehicles v ON sr.vehicle_id = v.id
+                LEFT JOIN (
+                    SELECT imei, MAX(timestamp) AS max_ts
+                    FROM vehicle_events
+                    WHERE imei IS NOT NULL AND imei != ''
+                    GROUP BY imei
+                ) ve_max ON ve_max.imei = sr.sensor_id
+                LEFT JOIN (
+                    SELECT imei, MAX(timestamp) AS max_ts
+                    FROM device_lifecycle_events
+                    WHERE imei IS NOT NULL AND imei != ''
+                    GROUP BY imei
+                ) dle_max ON dle_max.imei = sr.sensor_id
+                GROUP BY sr.sensor_id
+            ),
+            latest_orphan_tracker AS (
+                SELECT ve.imei AS sensor_id,
+                       ve.vehicle_id,
+                       ve.vehicle_name,
+                       'tracker' AS brand,
+                       NULL AS wheel_position,
+                       NULL AS pressure_bar,
+                       ve.engine_temp_c AS temperature_c,
+                       NULL AS vbatt_volts,
+                       NULL AS target_pressure_bar,
+                       NULL AS battery_pct,
+                       NULL AS charge_state,
+                       ve.sensor_name AS sensor_name,
+                       NULL AS health_pct,
+                       NULL AS charging_cycles,
+                       NULL AS product_variant,
+                       NULL AS total_seconds,
+                       ve.gps_satellites,
+                       ve.timestamp,
+                       ve.latitude,
+                       ve.longitude,
+                       stats.reading_count,
+                       COALESCE(v.asset_type_id, 'vehicle') AS asset_type_id
+                FROM vehicle_events ve
+                INNER JOIN (
+                    SELECT imei, MAX(timestamp) AS max_ts, COUNT(*) AS reading_count
+                    FROM vehicle_events
+                    WHERE imei IS NOT NULL AND imei != ''
+                    GROUP BY imei
+                ) stats ON stats.imei = ve.imei AND stats.max_ts = ve.timestamp
+                LEFT JOIN sensor_readings sr ON sr.sensor_id = ve.imei
+                LEFT JOIN vehicles v ON ve.vehicle_id = v.id
+                WHERE ve.imei IS NOT NULL
+                  AND ve.imei != ''
+                  AND sr.sensor_id IS NULL
+            ),
+            combined AS (
+                SELECT * FROM latest_sensor
+                UNION ALL
+                SELECT * FROM latest_orphan_tracker
+            )
+            SELECT c.*, tc.schema_version AS server_config_version,
+                         tc.last_applied_config_version
+            FROM combined c
+            LEFT JOIN tracker_configs tc ON tc.imei = c.sensor_id
             \(unsafeRaw: vehicleFilter)
-            GROUP BY sr.sensor_id
-            ORDER BY sr.vehicle_name, sr.wheel_position
+            ORDER BY c.vehicle_name, c.wheel_position
             """).all(decoding: LatestRow.self)
 
         let isoFull  = ISO8601DateFormatter()
@@ -286,9 +371,11 @@ struct RecordController: RouteCollection {
                 latestTotalSeconds:   r.total_seconds,
                 latestTimestamp:      ts,
                 readingCount:         r.reading_count,
-                latestGpsSatellites:  r.gps_satellites,
-                latestLatitude:       r.latitude,
-                latestLongitude:      r.longitude
+                latestGpsSatellites:          r.gps_satellites,
+                latestLatitude:               r.latitude,
+                latestLongitude:              r.longitude,
+                trackerServerConfigVersion:   r.server_config_version,
+                trackerAppliedConfigVersion:  r.last_applied_config_version
             )
         }
     }
@@ -386,12 +473,8 @@ struct RecordController: RouteCollection {
         )
         try await upsertVehicles(from: [syntheticPayload], on: req.db)
 
-        // Delete the previous pairing record for this sensor (if it existed on another vehicle)
-        // then insert a fresh one, so GET /api/sensors/latest always reflects the current pairing.
-        try await SensorReading.query(on: req.db)
-            .filter(\.$sensorID == p.sensorID)
-            .delete()
-
+        // Keep historical rows intact. Insert a fresh synthetic row so /api/sensors/latest
+        // immediately reflects the new pairing without destroying telemetry history.
         let r = SensorReading(from: syntheticPayload)
         try await r.save(on: req.db)
 

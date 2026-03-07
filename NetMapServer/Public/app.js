@@ -4,23 +4,30 @@
 const AUTH = { token: null, username: null, role: null,
   get isAdmin() { return this.role === 'admin'; } };
 
+function normalizeRole(role) {
+  return role === 'admin' ? 'admin' : 'user';
+}
+
 function saveAuth(data) {
-  AUTH.token = data.token; AUTH.username = data.username; AUTH.role = data.role;
-  localStorage.setItem('netmap-auth', JSON.stringify(data));
+  AUTH.token = null; // Browser UI uses HttpOnly session cookie, not JS-readable tokens.
+  AUTH.username = data.username;
+  AUTH.role = data.role;
+  sessionStorage.setItem('netmap-auth', JSON.stringify({ username: AUTH.username, role: AUTH.role }));
 }
 function clearAuth() {
   AUTH.token = null; AUTH.username = null; AUTH.role = null;
-  localStorage.removeItem('netmap-auth');
+  sessionStorage.removeItem('netmap-auth');
 }
 function applyAuthUI() {
   const badge  = $('user-badge');
   const addBtn = $('add-vehicle-btn');
   const adminBtn = $('admin-btn');
-  if (AUTH.token) {
+  if (AUTH.username) {
     $('user-name').textContent = AUTH.username;
     const roleEl = $('user-role');
-    roleEl.textContent = AUTH.role;
-    roleEl.className   = `role-badge ${AUTH.role}`;
+    const roleSafe = normalizeRole(AUTH.role);
+    roleEl.textContent = roleSafe;
+    roleEl.className   = `role-badge ${roleSafe}`;
     badge.style.display = 'flex';
     if (addBtn)   addBtn.style.display   = AUTH.isAdmin ? '' : 'none';
     if (adminBtn) adminBtn.style.display = AUTH.isAdmin ? '' : 'none';
@@ -52,16 +59,16 @@ function showAuthOverlay(mode) {
 async function checkAuth() {
   const statusData = await fetch('/api/auth/status').then(r => r.json());
   if (statusData.needsSetup) { showAuthOverlay('setup'); await waitForAuth(); return; }
-  const stored = localStorage.getItem('netmap-auth');
-  if (stored) {
-    try {
-      const p = JSON.parse(stored);
-      AUTH.token = p.token;
-      const me = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${p.token}` } });
-      if (me.ok) { const d = await me.json(); saveAuth({ token: p.token, username: d.email, role: d.role }); applyAuthUI(); return; }
-    } catch {}
-    clearAuth();
-  }
+  try {
+    const me = await fetch('/api/auth/me');
+    if (me.ok) {
+      const d = await me.json();
+      saveAuth({ username: d.email, role: d.role });
+      applyAuthUI();
+      return;
+    }
+  } catch {}
+  clearAuth();
   showAuthOverlay('login'); await waitForAuth();
 }
 
@@ -88,7 +95,7 @@ function openVehicleModal(vehicle = null) {
   const sel = $('vf-type');
   if (S.assetTypes.length) {
     sel.innerHTML = S.assetTypes.map(t =>
-      `<option value="${t.id}"${t.id === currentTypeID ? ' selected' : ''}>${t.name}</option>`
+      `<option value="${escAttr(t.id)}"${t.id === currentTypeID ? ' selected' : ''}>${escHTML(t.name)}</option>`
     ).join('');
     // Fallback: if no exact match, select by name
     if (!S.assetTypes.find(t => t.id === currentTypeID)) {
@@ -122,7 +129,7 @@ function closeVehicleModal() {
 }
 
 async function saveVehicle(payload) {
-  const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH.token}` };
+  const headers = { 'Content-Type': 'application/json', ...authHeaders() };
   const url     = _editingVehicleID ? `/api/vehicles/${_editingVehicleID}` : '/api/vehicles';
   const method  = _editingVehicleID ? 'PATCH' : 'POST';
   const res     = await fetch(url, { method, headers, body: JSON.stringify(payload) });
@@ -130,7 +137,7 @@ async function saveVehicle(payload) {
   return res.status === 200 || res.status === 201 ? res.json() : null;
 }
 async function deleteVehicle(id) {
-  const res = await fetch(`/api/vehicles/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${AUTH.token}` } });
+  const res = await fetch(`/api/vehicles/${id}`, { method: 'DELETE', headers: authHeaders() });
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
 }
 
@@ -156,12 +163,14 @@ function gpsFixBadge(fixType) {
   const f = fixType != null
     ? (GPS_FIX_LABELS[fixType] ?? { icon: '?', label: String(fixType), color: 'var(--fg2)' })
     : { icon: '✕', label: 'No fix', color: '#6b7280' };
-  return `<span class="ev-badge" style="--ev-color:${f.color};font-size:10px">${f.icon} ${f.label}</span>`;
+  const c = safeCssColor(f.color) || 'var(--fg2)';
+  return `<span class="ev-badge" style="--ev-color:${c};font-size:10px">${escHTML(f.icon)} ${escHTML(f.label)}</span>`;
 }
 function gpsCell(e) {
   const badge = gpsFixBadge(e.gpsFixType);
-  const link  = e.latitude != null
-    ? `<a href="https://www.openstreetmap.org/?mlat=${e.latitude}&mlon=${e.longitude}&zoom=16" target="_blank" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a> `
+  const href = osmHref(e.latitude, e.longitude);
+  const link  = href
+    ? `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a> `
     : '';
   return link + badge;
 }
@@ -199,7 +208,7 @@ function renderPictoGrid(currentKey) {
   const grid = $('vf-picto-grid');
   if (!grid) return;
   grid.innerHTML = Object.entries(PICTO_ICONS).map(([key, svg]) =>
-    `<button type="button" class="picto-btn${key === currentKey ? ' picto-sel' : ''}" data-key="${key}" title="${PICTO_LABELS[key] ?? key}">${svg}<span>${PICTO_LABELS[key] ?? key}</span></button>`
+    `<button type="button" class="picto-btn${key === currentKey ? ' picto-sel' : ''}" data-key="${escAttr(key)}" title="${escAttr(PICTO_LABELS[key] ?? key)}">${svg}<span>${escHTML(PICTO_LABELS[key] ?? key)}</span></button>`
   ).join('');
   grid.querySelectorAll('.picto-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -238,13 +247,48 @@ function fmtTs(dateVal) {
   return d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
+// Escape helpers to prevent HTML injection when rendering server-provided strings.
+function escHTML(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escAttr(value) {
+  return escHTML(value).replace(/`/g, '&#96;');
+}
+
+function toFiniteNumber(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function osmHref(lat, lon) {
+  const la = toFiniteNumber(lat);
+  const lo = toFiniteNumber(lon);
+  if (la == null || lo == null) return null;
+  return `https://www.openstreetmap.org/?mlat=${encodeURIComponent(la)}&mlon=${encodeURIComponent(lo)}&zoom=16`;
+}
+
+function safeCssColor(value) {
+  if (typeof value !== 'string') return '';
+  const v = value.trim();
+  if (/^#[0-9a-fA-F]{3,8}$/.test(v)) return v;
+  if (/^rgb(a)?\(\s*[\d.\s,%]+\)$/.test(v)) return v;
+  if (/^var\(--[a-z0-9-]+\)$/i.test(v)) return v;
+  return '';
+}
+
 /** Transient toast notification (bottom-right) */
 function showToast(msg, type = 'success') {
   const cont = $('toast-container');
   if (!cont) return;
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
-  t.innerHTML = msg;
+  t.textContent = String(msg ?? '');
   cont.appendChild(t);
   requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('toast-visible')));
   setTimeout(() => {
@@ -258,7 +302,7 @@ function showDeleteModal({ title, body, confirmLabel = 'Delete', onConfirm }) {
   const modal = $('del-modal');
   if (!modal) { if (confirm(title + '\n\n' + body)) onConfirm(); return; }
   $('del-modal-title').textContent = title;
-  $('del-modal-body').innerHTML    = body;
+  $('del-modal-body').textContent  = body;
   $('del-modal-ok').textContent    = confirmLabel;
   modal.classList.add('del-modal-open');
   const close = () => modal.classList.remove('del-modal-open');
@@ -289,6 +333,7 @@ const S = {
   loading: false, autoRefresh: false, timer: null,
   pChart: null, tChart: null, wovChart: null, wovTChart: null, leafletMap: null,
   mapMatchEnabled: false,
+  secAudit: { limit: 50, offset: 0, total: 0, action: '', actor: '' },
 };
 
 // ─── DOM helpers ──────────────────────────────────────────────────────────────
@@ -409,7 +454,7 @@ function renderVehicles() {
       const g     = groups[vid];
       const name  = g.serverVehicle?.name ?? g.name;
       const label = g.sensors.length ? name : `${name} \u2014 no sensors`;
-      return `<option value="${vid}"${S.vehicleFilter === vid ? ' selected' : ''}>${label}</option>`;
+      return `<option value="${escAttr(vid)}"${S.vehicleFilter === vid ? ' selected' : ''}>${escHTML(label)}</option>`;
     }).join('');
   // Edit button is rendered inside the asset card (see renderSensors)
 }
@@ -436,11 +481,11 @@ function renderSensors() {
   const typeIcon = (sv?.iconKey && PICTO_ICONS[sv.iconKey])
     ? PICTO_ICONS[sv.iconKey]
     : (Object.entries(ASSET_SVG).find(([k]) => typeName.includes(k))?.[1] ?? S_CAR);
-  const assetName   = sv?.name ?? entry.name;
+  const assetName   = escHTML(sv?.name ?? entry.name);
   const subParts    = [sv?.brand, sv?.modelName, sv?.year].filter(Boolean);
-  const subText     = subParts.join('\u00a0· ');
-  const vrnBadge    = sv?.vrn  ? `<span class="ac-badge ac-vrn">${sv.vrn}</span>`  : '';
-  const vinBadge    = sv?.vin  ? `<span class="ac-badge ac-vin" title="${sv.vin}">${sv.vin}</span>` : '';
+  const subText     = escHTML(subParts.join('\u00a0· '));
+  const vrnBadge    = sv?.vrn  ? `<span class="ac-badge ac-vrn">${escHTML(sv.vrn)}</span>`  : '';
+  const vinBadge    = sv?.vin  ? `<span class="ac-badge ac-vin" title="${escAttr(sv.vin)}">${escHTML(sv.vin)}</span>` : '';
   const sCount      = sensors.length;
   const sLabel      = `${sCount} sensor${sCount !== 1 ? 's' : ''}`;
   const editBtn     = AUTH.isAdmin && sv
@@ -449,7 +494,7 @@ function renderSensors() {
     <div class="asset-card">
       <div class="ac-left">
         ${vrnBadge}
-        ${sv?.vin ? `<span class="ac-badge ac-vin">${sv.vin}</span>` : ''}
+        ${sv?.vin ? `<span class="ac-badge ac-vin">${escHTML(sv.vin)}</span>` : ''}
         <span class="ac-badge ac-count">${sLabel}</span>
       </div>
       <div class="ac-right">
@@ -478,7 +523,7 @@ function renderSensors() {
   // ──── Non-TPMS tracker rows rendered first ───────────────────────────────
   html += nonTpmsSensors.filter(s => s.brand === 'tracker').map(s => {
     const stale  = isStale(s.latestTimestamp);
-    const label  = s.sensorName ?? s.vehicleName ?? BRAND_LABELS[s.brand] ?? s.brand;
+    const label  = escHTML(s.sensorName ?? s.vehicleName ?? BRAND_LABELS[s.brand] ?? s.brand);
     const sel    = s.sensorID === S.selected;
     const dotCol = stale ? SC.unknown : SC.ok;
     const parts  = [];
@@ -487,11 +532,11 @@ function renderSensors() {
     if (s.latestLatitude != null && s.latestLongitude != null)
       parts.push(`<span style="color:#60a5fa;font-weight:600">${s.latestLatitude.toFixed(4)}, ${s.latestLongitude.toFixed(4)}</span>`);
     const valueSpan = parts.length ? ' \u00b7 ' + parts.join(' \u00b7 ') : '';
-    return `<div class="sensor-row${sel ? ' selected' : ''}" data-sid="${s.sensorID}">
+    return `<div class="sensor-row${sel ? ' selected' : ''}" data-sid="${escAttr(s.sensorID)}">
       <div class="s-dot" style="background:${dotCol}"></div>
       <div class="s-info">
         <div class="s-name">${label}</div>
-        <div class="s-sub"><span class="s-brand" data-brand="${s.brand}">${BRAND_LABELS[s.brand] ?? s.brand}</span>${valueSpan}</div>
+        <div class="s-sub"><span class="s-brand" data-brand="${escAttr(s.brand)}">${escHTML(BRAND_LABELS[s.brand] ?? s.brand)}</span>${valueSpan}</div>
       </div>
     </div>`;
   }).join('');
@@ -528,7 +573,7 @@ function renderSensors() {
       const sel    = s.sensorID === S.selected;
       const pText  = s.latestPressureBar != null ? s.latestPressureBar.toFixed(2) : '\u2013';
       const cp     = s.wheelPosition ?? '?';
-      return `<div class="tpms-chip${sel ? ' tpms-chip-sel' : ''}" data-sid="${s.sensorID}" style="--chip-col:${pCol};--chip-bg:${bgCol}" title="${WHEEL_LABELS[cp] ?? cp}">
+      return `<div class="tpms-chip${sel ? ' tpms-chip-sel' : ''}" data-sid="${escAttr(s.sensorID)}" style="--chip-col:${pCol};--chip-bg:${bgCol}" title="${escAttr(WHEEL_LABELS[cp] ?? cp)}">
         <div class="tpms-chip-pos">${cp}</div>
         <div class="tpms-chip-pres" style="color:var(--chip-col)">${pText}</div>
         <div class="tpms-chip-unit">bar</div>
@@ -555,11 +600,11 @@ function renderSensors() {
     const extrasHtml = [...extraPos.map(p => chip(byPos[p], p)), ...unpositioned.map(s => chip(s))].join('');
     const extraGrid  = extrasHtml ? `<div class="tpms-wheel-grid tpms-extra-grid">${extrasHtml}</div>` : '';
 
-    html += `<div class="sensor-row tpms-group-card${anySelected ? ' selected' : ''}" data-sid="${tpmsSensors[0].sensorID}" data-tpms-card="1">
+    html += `<div class="sensor-row tpms-group-card${anySelected ? ' selected' : ''}" data-sid="${escAttr(tpmsSensors[0].sensorID)}" data-tpms-card="1">
       <div class="tpms-row-top">
         <div class="s-dot" style="background:${worstDot}"></div>
         <div class="s-info">
-          <div class="s-name"><span class="s-brand" data-brand="${tpmsSensors[0].brand}">${brandLabel}</span></div>
+          <div class="s-name"><span class="s-brand" data-brand="${escAttr(tpmsSensors[0].brand)}">${escHTML(brandLabel)}</span></div>
           <div class="s-sub">${tpmsSensors.length} sensor${tpmsSensors.length > 1 ? 's' : ''}${anyStale ? ' \u00b7 <span style="color:var(--fg3)">stale</span>' : ''}</div>
         </div>
       </div>
@@ -570,7 +615,7 @@ function renderSensors() {
   // ──── Other non-TPMS rows (non-tracker) ──────────────────────────────────
   html += nonTpmsSensors.filter(s => s.brand !== 'tracker').map(s => {
     const stale  = isStale(s.latestTimestamp);
-    const label  = s.sensorName ?? (s.brand === 'tracker' ? s.vehicleName : null) ?? BRAND_LABELS[s.brand] ?? s.brand;
+    const label  = escHTML(s.sensorName ?? (s.brand === 'tracker' ? s.vehicleName : null) ?? BRAND_LABELS[s.brand] ?? s.brand);
     const sel    = s.sensorID === S.selected;
     const dotCol = stale ? SC.unknown : SC.ok;
     let valueSpan = '';
@@ -584,16 +629,16 @@ function renderSensors() {
     } else if (s.latestBatteryPct != null || s.latestChargeState) {
       const pct  = s.latestBatteryPct ?? 0;
       const bCol = pct > 50 ? '#34d399' : pct > 20 ? '#fbbf24' : '#f87171';
-      valueSpan  = ` \u00b7 <span style="color:${bCol};font-weight:600">${pct}%${s.latestChargeState ? ' \u00b7 ' + s.latestChargeState : ''}</span>`;
+      valueSpan  = ` \u00b7 <span style="color:${bCol};font-weight:600">${pct}%${s.latestChargeState ? ' \u00b7 ' + escHTML(s.latestChargeState) : ''}</span>`;
     } else if (s.latestTemperatureC != null) {
       valueSpan = ` \u00b7 <span style="color:#60a5fa;font-weight:600">${s.latestTemperatureC.toFixed(1)}\u00b0C</span>`;
     }
     const brandLabel = BRAND_LABELS[s.brand] ?? s.brand;
-    return `<div class="sensor-row${sel ? ' selected' : ''}" data-sid="${s.sensorID}">
+    return `<div class="sensor-row${sel ? ' selected' : ''}" data-sid="${escAttr(s.sensorID)}">
       <div class="s-dot" style="background:${dotCol}"></div>
       <div class="s-info">
         <div class="s-name">${label}</div>
-        <div class="s-sub"><span class="s-brand" data-brand="${s.brand}">${brandLabel}</span>${valueSpan}</div>
+        <div class="s-sub"><span class="s-brand" data-brand="${escAttr(s.brand)}">${escHTML(brandLabel)}</span>${valueSpan}</div>
       </div>
     </div>`;
   }).join('');
@@ -636,11 +681,14 @@ function renderSensorInfoCard() {
   const s = S.sensors.find(x => x.sensorID === S.selected);
   if (!s) { el.innerHTML = ''; el.style.display = 'none'; return; }
   el.style.display = '';
-  const brandLabel = BRAND_LABELS[s.brand] ?? s.brand;
+  const rawBrandLabel = BRAND_LABELS[s.brand] ?? s.brand;
+  const brandLabel = escHTML(rawBrandLabel);
   const stale = isStale(s.latestTimestamp);
-  const mainLabel = s.wheelPosition
-    ? (WHEEL_LABELS[s.wheelPosition] ?? s.wheelPosition)
-    : (s.sensorName ?? (s.brand === 'tracker' ? s.vehicleName : null) ?? brandLabel);
+  const rawMainLabel =
+    s.wheelPosition
+      ? (WHEEL_LABELS[s.wheelPosition] ?? s.wheelPosition)
+      : (s.sensorName ?? (s.brand === 'tracker' ? s.vehicleName : null) ?? rawBrandLabel);
+  const mainLabel = escHTML(rawMainLabel);
   const rows = [];
   if (isTpms(s)) {
     const status = pStatus(s.latestPressureBar, s.targetPressureBar);
@@ -723,6 +771,22 @@ function renderSensorInfoCard() {
       const bCol = s.latestBatteryPct > 50 ? '#34d399' : s.latestBatteryPct > 20 ? '#fbbf24' : '#f87171';
       rows.push(siRow('Fuel level', `${s.latestBatteryPct}%`, bCol));
     }
+    if (s.trackerAppliedConfigVersion != null || s.trackerServerConfigVersion != null) {
+      const dv = s.trackerAppliedConfigVersion;  // null = never received by tracker
+      const sv = s.trackerServerConfigVersion;    // null = no config saved on server
+      let label, color;
+      if (dv == null) {
+        label = sv != null ? `v${sv} \u23f3 pending` : 'none';
+        color = sv != null ? '#fbbf24' : '#6b7280';
+      } else if (sv == null || dv >= sv) {
+        label = `v${dv} \u2713`;
+        color = '#34d399';
+      } else {
+        label = `v${dv} \u2192 v${sv} pending`;
+        color = '#fbbf24';
+      }
+      rows.push(siRow('Config', label, color));
+    }
   }
   if (s.latestTimestamp) rows.unshift(siRow('Last seen', fmtDT(s.latestTimestamp), stale ? '#f87171' : '#34d399'));
   if (s.readingCount != null) rows.push(siRow('Readings', s.readingCount.toLocaleString()));
@@ -736,24 +800,63 @@ function renderSensorInfoCard() {
     const bCol = bp > 50 ? '#34d399' : bp > 20 ? '#fbbf24' : '#f87171';
     const fillW = Math.round((bp / 100) * 12);
     const battIcon = `<svg width="16" height="10" viewBox="0 0 16 10" fill="none" style="vertical-align:-1px"><rect x="0.6" y="0.6" width="13.8" height="8.8" rx="1.8" stroke="currentColor" stroke-width="1.2"/><rect x="14.4" y="3" width="1.6" height="4" rx="0.8" fill="currentColor"/><rect x="2" y="2" width="${fillW}" height="6" rx="1" fill="currentColor"/></svg>`;
-    var battBadge = `<span class="si-badge si-badge-batt" style="background:rgba(52,211,153,.1);color:${bCol}">${battIcon} ${bp}%${ s.latestChargeState ? ' \u00b7 ' + s.latestChargeState : ''}</span>`;
+    var battBadge = `<span class="si-badge si-badge-batt" style="background:rgba(52,211,153,.1);color:${bCol}">${battIcon} ${bp}%${ s.latestChargeState ? ' \u00b7 ' + escHTML(s.latestChargeState) : ''}</span>`;
   } else {
     var battBadge = '';
   }
-  const unpairBtn = AUTH.isAdmin && s.brand !== 'tracker'
-    ? `<div class="si-actions"><button class="si-unpair-btn modal-btn-danger" data-sid="${s.sensorID}">Unpair sensor</button></div>`
-    : '';
+  const actionsBar = AUTH.isAdmin ? `<div class="si-actions">
+    <button class="si-rename-action-btn">✏︎ Rename</button>
+    ${s.brand === 'tracker' ? `<button class="si-config-btn">&#x2699;&#xFE0E; Config</button>` : ''}
+    ${s.brand !== 'tracker' ? `<button class="si-unpair-btn modal-btn-danger" data-sid="${escAttr(s.sensorID)}">Unpair sensor</button>` : ''}
+  </div>` : '';
   el.innerHTML = `<div class="si-header">
-    <span class="si-brand" data-brand="${s.brand}">${brandLabel}</span>
+    <span class="si-brand" data-brand="${escAttr(s.brand)}">${brandLabel}</span>
     <span class="si-name">${mainLabel}</span>
     ${liveBadge}
     <span class="si-badges">${tgtBadge}${battBadge}</span>
   </div>
   <div class="si-rows">${rows.join('')}</div>
-  ${unpairBtn}`;
+  <form class="si-rename-form" style="display:none">
+    <input class="si-rename-input" type="text" value="${escAttr(rawMainLabel)}" maxlength="64" placeholder="Sensor name">
+    <button type="submit" class="si-rename-save">Save</button>
+    <button type="button" class="si-rename-cancel">Cancel</button>
+  </form>
+  ${actionsBar}`;
+
+  el.querySelector('.si-rename-action-btn')?.addEventListener('click', () => {
+    const form = el.querySelector('.si-rename-form');
+    el.querySelector('.si-actions').style.display = 'none';
+    form.style.display = '';
+    form.querySelector('.si-rename-input').select();
+  });
+  el.querySelector('.si-rename-cancel')?.addEventListener('click', () => {
+    el.querySelector('.si-rename-form').style.display = 'none';
+    el.querySelector('.si-actions').style.display = '';
+  });
+  el.querySelector('.si-rename-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newName = el.querySelector('.si-rename-input').value.trim();
+    const saveBtn = el.querySelector('.si-rename-save');
+    saveBtn.disabled = true;
+    try {
+      if (s.brand === 'tracker') {
+        await adminUpdateTracker(s.sensorID, newName);
+      } else {
+        await adminRenameSensor(s.sensorID, newName);
+      }
+      s.sensorName = newName || null;
+      await loadSensors();
+      renderBreadcrumb();
+      renderSensorInfoCard();
+      showToast('Sensor renamed.');
+    } catch (err) {
+      alert(`Failed to rename: ${err.message}`);
+      saveBtn.disabled = false;
+    }
+  });
 
   el.querySelector('.si-unpair-btn')?.addEventListener('click', async () => {
-    if (!confirm(`Remove sensor "${mainLabel}" from server? This will delete all its readings.`)) return;
+    if (!confirm(`Remove sensor "${rawMainLabel}" from server? This will delete all its readings.`)) return;
     const res = await fetch(`/api/sensors/pair/${encodeURIComponent(s.sensorID)}`, { method: 'DELETE', headers: authHeaders() });
     if (res.ok || res.status === 204) {
       S.selected = null;
@@ -765,11 +868,14 @@ function renderSensorInfoCard() {
       alert(`Failed to unpair sensor: ${msg}`);
     }
   });
+
+  el.querySelector('.si-config-btn')?.addEventListener('click', () => openTrackerConfigModal(s.sensorID));
 }
 
 function siRow(label, value, color = '') {
-  const style = color ? ` style="color:${color}"` : '';
-  return `<div class="si-row"><span class="si-label">${label}</span><span class="si-val"${style}>${value}</span></div>`;
+  const safeColor = safeCssColor(color);
+  const style = safeColor ? ` style="color:${safeColor}"` : '';
+  return `<div class="si-row"><span class="si-label">${escHTML(label)}</span><span class="si-val"${style}>${escHTML(value)}</span></div>`;
 }
 
 function chargeStateColor(state) {
@@ -912,13 +1018,13 @@ async function renderWheels() {
     const brandLabel = BRAND_LABELS[s.brand] ?? s.brand ?? '';
     const nameLabel  = s.sensorName ? s.sensorName : '';
     const subLabel   = [brandLabel, nameLabel].filter(Boolean).join(' · ');
-    return `<div class="wov-wheel-card${isSelected ? ' wov-sel' : ''}" data-sid="${s.sensorID}" style="--wov-col:${color}">
+    return `<div class="wov-wheel-card${isSelected ? ' wov-sel' : ''}" data-sid="${escAttr(s.sensorID)}" style="--wov-col:${safeCssColor(color) || '#a78bfa'}">
       <div class="wov-card-header">
         ${statusDot}<span class="wov-pos">${pos}</span>
         ${stale ? '<span class="wov-stale">stale</span>' : ''}
       </div>
       <div class="wov-card-namerow">
-        <span class="wov-card-brand">${subLabel}</span>
+        <span class="wov-card-brand">${escHTML(subLabel)}</span>
         <span class="wov-card-meta">
           ${sTgt   != null ? `<span class="wov-target-inline">${sTgt.toFixed(2)} bar</span>` : ''}
           ${s.latestBatteryPct != null ? `<span style="color:${bCol}">${s.latestBatteryPct}%</span>` : ''}
@@ -1271,12 +1377,13 @@ const BEHAVIOR_CONFIG = {
 function behaviorIcon(alertType) {
   const c   = BEHAVIOR_CONFIG[alertType] || BEHAVIOR_CONFIG.unknown;
   const svg = BEHAVIOR_SVG[alertType] || BEHAVIOR_SVG.unknown;
+  const color = safeCssColor(c.color) || '#94a3b8';
   return L.divIcon({
     className:  '',
     iconSize:   [32, 28],
     iconAnchor: [16, 14],
     popupAnchor:[0, -18],
-    html: `<div style="padding:6px 8px;border-radius:99px;background:color-mix(in srgb,${c.color} 18%,#fff);border:1.5px solid color-mix(in srgb,${c.color} 45%,transparent);color:${c.color};display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.18);cursor:pointer">${svg}</div>`,
+    html: `<div style="padding:6px 8px;border-radius:99px;background:color-mix(in srgb,${color} 18%,#fff);border:1.5px solid color-mix(in srgb,${color} 45%,transparent);color:${color};display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.18);cursor:pointer">${svg}</div>`,
   });
 }
 
@@ -1399,18 +1506,19 @@ async function renderTrackerMap(sensor) {
   const panel = document.createElement('div');
   panel.id = 'journey-list-panel';
   const trackerDisplayName = sensor.sensorName || sensor.vehicleName || 'GPS Tracker';
-  const isAdmin = !!S.authToken;
-  const editBtnHtml = isAdmin
-    ? `<button class="jlp-rename-btn">&#x270F;&#xFE0E; Rename</button>` : '';
+  const isAdmin = !!AUTH.username;   // any logged-in user; server APIs enforce admin-only
+  const adminBarHtml = isAdmin
+    ? `<div class="jlp-admin-bar"><button class="jlp-rename-btn">&#x270F;&#xFE0E; Rename</button></div>` : '';
   panel.innerHTML =
     `<div class="jlp-header">`+
-    `<span class="jlp-header-title">Journeys</span>${editBtnHtml}`+
+    `<span class="jlp-header-title">Journeys</span>`+
     `<form class="jlp-rename-form" style="display:none">`+
-    `<input class="jlp-rename-input" type="text" value="${trackerDisplayName}" placeholder="Tracker name\u2026">`+
+    `<input class="jlp-rename-input" type="text" value="${escAttr(trackerDisplayName)}" placeholder="Tracker name\u2026">`+
     `<button type="submit" class="modal-btn-primary admin-small-btn">Save</button>`+
     `<button type="button" class="modal-btn admin-small-btn jlp-rename-cancel">Cancel</button>`+
     `</form>`+
     `</div>`+
+    adminBarHtml+
     `<div class="jlp-body"><div class="jlp-loading">Loading\u2026</div></div>`;
   wrapper.appendChild(panel);
 
@@ -1467,7 +1575,8 @@ async function renderTrackerMap(sensor) {
       let html = '<div class="behavior-legend-title">Driver Alerts</div>';
       Object.entries(BEHAVIOR_CONFIG).filter(([k]) => k !== 'unknown').forEach(([k, c]) => {
         const svg = BEHAVIOR_SVG[k] || BEHAVIOR_SVG.unknown;
-        html += `<div class="behavior-legend-row"><span class="behavior-legend-icon" style="border-color:${c.color};color:${c.color}">${svg}</span><span style="color:${c.color}">${c.label}</span></div>`;
+        const color = safeCssColor(c.color) || '#94a3b8';
+        html += `<div class="behavior-legend-row"><span class="behavior-legend-icon" style="border-color:${color};color:${color}">${svg}</span><span style="color:${color}">${escHTML(c.label)}</span></div>`;
       });
       div.innerHTML = html;
       L.DomEvent.disableClickPropagation(div);
@@ -1576,7 +1685,10 @@ async function renderTrackerMap(sensor) {
 
       const _mkJourneyIcon = (svgPaths, fillIcon, color) => L.divIcon({
         className: '', iconSize: [32, 28], iconAnchor: [16, 14], popupAnchor: [0, -20],
-        html: `<div style="padding:6px 8px;border-radius:99px;background:color-mix(in srgb,${color} 18%,#fff);border:1.5px solid color-mix(in srgb,${color} 45%,transparent);color:${color};display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.18)"><svg width="15" height="15" viewBox="0 0 24 24" fill="${fillIcon ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/>${svgPaths}</svg></div>`,
+        html: (() => {
+          const safeColor = safeCssColor(color) || '#94a3b8';
+          return `<div style="padding:6px 8px;border-radius:99px;background:color-mix(in srgb,${safeColor} 18%,#fff);border:1.5px solid color-mix(in srgb,${safeColor} 45%,transparent);color:${safeColor};display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.18)"><svg width="15" height="15" viewBox="0 0 24 24" fill="${fillIcon ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/>${svgPaths}</svg></div>`;
+        })(),
       });
       const _flagPaths = '<path d="M5 14h14v-9h-14v16"/>';
       const startIcon = _mkJourneyIcon(_flagPaths, false, '#34d399');
@@ -1650,12 +1762,13 @@ async function renderTrackerMap(sensor) {
         const val  = b.alertValueMax != null ? b.alertValueMax : null;
         const valStr = val != null ? (cfg.unit ? `${val.toFixed(2)} ${cfg.unit}` : val.toFixed(2)) : '—';
         const spdStr = b.speedKmh != null ? `<br><span style="color:#94a3b8">${b.speedKmh.toFixed(0)} km/h</span>` : '';
+        const cfgColor = safeCssColor(cfg.color) || '#94a3b8';
         const popup = `<div style="font-size:13px;min-width:140px">
-          <div style="font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cfg.color};flex-shrink:0"></span>${cfg.label}</div>
-          <div style="color:#94a3b8;font-size:11px">${ts}</div>
+          <div style="font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cfgColor};flex-shrink:0"></span>${escHTML(cfg.label)}</div>
+          <div style="color:#94a3b8;font-size:11px">${escHTML(ts)}</div>
           <hr style="border:none;border-top:1px solid rgba(255,255,255,.1);margin:6px 0">
-          <div>Peak: <b>${valStr}</b></div>
-          <div>Duration: <b>${durS}s</b></div>
+          <div>Peak: <b>${escHTML(valStr)}</b></div>
+          <div>Duration: <b>${escHTML(durS)}s</b></div>
           ${spdStr}
         </div>`;
         const m = L.marker([b.latitude, b.longitude], { icon }).bindPopup(popup, { maxWidth: 220 });
@@ -1691,12 +1804,12 @@ async function renderTrackerMap(sensor) {
         if (j.totalDistanceKm > 0)
           fuel += ` <span style="color:var(--fg3)">(${(fuelL / j.totalDistanceKm * 100).toFixed(1)} L/100km)</span>`;
       }
-      const driver = j.driverID ? `<span class="jlp-driver">${j.driverID}</span>` : '';
+      const driver = j.driverID ? `<span class="jlp-driver">${escHTML(j.driverID)}</span>` : '';
       const meta   = [dist, fuel].filter(Boolean).join(' · ');
       row.innerHTML = `
         <div class="jlp-row-main">
           <div class="jlp-row-info">
-            <div class="jlp-row-date">${date}${driver}</div>
+            <div class="jlp-row-date">${escHTML(date)}${driver}</div>
             ${meta ? `<div class="jlp-row-meta">${meta}</div>` : ''}
           </div>
           <span class="jlp-alert-badge"></span>
@@ -1740,11 +1853,14 @@ function renderMap() {
   const gps    = S.records.filter(r => r.latitude != null && r.longitude != null);
 
   if (!gps.length) {
+    const isAirtagSensor = sensor?.brand === 'airtag';
     D.mapCont.innerHTML = `
       <div class="map-nodata">
-        <div class="nodata-icon">🛰</div>
-        <p>No GPS data in this period</p>
-        <small>Enable Location Services in the NetMap app settings and keep scanning.</small>
+        <div class="nodata-icon">${isAirtagSensor ? '📡' : '🛰'}</div>
+        <p>${isAirtagSensor ? 'No GPS-stamped readings in this period' : 'No GPS data in this period'}</p>
+        <small>${isAirtagSensor
+          ? 'Proximity and battery readings are in the <b>Events</b> tab. GPS stamps appear when the NetMap app has Location Services access.'
+          : 'Enable Location Services in the NetMap app settings and keep scanning.'}</small>
       </div>`;
     return;
   }
@@ -1879,7 +1995,7 @@ async function renderTable() {
         return t >= fromMs && t <= toMs;
       }).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).reverse();
     } catch(err) {
-      D.tableBody.innerHTML = `<tr><td colspan="11" style="color:var(--danger)">${err.message}</td></tr>`;
+      D.tableBody.innerHTML = `<tr><td colspan="11" style="color:var(--danger)">${escHTML(err.message)}</td></tr>`;
       return;
     }
 
@@ -1928,8 +2044,9 @@ async function renderTable() {
         const ev      = EVENT_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType ?? '–', color: 'var(--fg2)' };
         const fuelCol = e.fuelLevelPct != null
           ? (e.fuelLevelPct > 50 ? '#34d399' : e.fuelLevelPct > 20 ? '#fbbf24' : '#f87171') : '';
+        const evColor = safeCssColor(ev.color) || 'var(--fg2)';
         let cells = `<td class="td-ts-compact">${fmtTs(e.timestamp)}</td>`;
-        cells += `<td><span class="ev-badge" style="--ev-color:${ev.color}">${ev.icon} ${ev.label}</span></td>`;
+        cells += `<td><span class="ev-badge" style="--ev-color:${evColor}">${ev.icon} ${escHTML(ev.label)}</span></td>`;
         cells += `<td>${gpsCell(e)}</td>`;
         if (hasSats)  cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
         if (hasSpeed) cells += `<td>${e.speedKmh != null ? e.speedKmh.toFixed(0) + ' km/h' : '–'}</td>`;
@@ -1938,7 +2055,7 @@ async function renderTable() {
         if (hasRpm)   cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + ' rpm' : '–'}</td>`;
         if (hasJFuel) cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + ' L' : '–'}</td>`;
         if (hasFuel)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
-        cells += `<td><button class="row-delete-btn" data-id="${e.id}" title="Delete">🗑︎</button></td>`;
+        cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" title="Delete">🗑︎</button></td>`;
         return sep + `<tr>${cells}</tr>`;
       }).join('');
 
@@ -1988,8 +2105,9 @@ async function renderTable() {
     D.tableBody.innerHTML = rows.map(r => {
       const status = pStatus(r.pressureBar, target);
       const color  = SC[status];
-      const gpsLink = r.latitude != null
-        ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
+      const href = osmHref(r.latitude, r.longitude);
+      const gpsLink = href
+        ? `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
       return `<tr>
         <td class="td-ts">${df.format(new Date(r.timestamp))}</td>
         <td class="td-pres" style="color:${color}">${r.pressureBar?.toFixed(3) ?? '–'} bar</td>
@@ -1997,7 +2115,7 @@ async function renderTable() {
         <td>${r.targetPressureBar != null ? r.targetPressureBar.toFixed(2) + ' bar' : '–'}</td>
         <td>${r.temperatureC  != null ? r.temperatureC.toFixed(1) + ' °C' : '–'}</td>
         <td>${r.vbattVolts    != null ? r.vbattVolts.toFixed(2) + ' V' : '–'}</td>
-        <td>${r.wheelPosition ?? '–'}</td>
+        <td>${escHTML(r.wheelPosition ?? '–')}</td>
         <td>${gpsLink}</td>
       </tr>`;
     }).join('');
@@ -2008,8 +2126,11 @@ async function renderTable() {
       const bLabel = bPct != null ? (bPct >= 100 ? 'Full' : bPct >= 60 ? 'Medium' : bPct >= 25 ? 'Low' : 'Critical') : '\u2013';
       const bCol   = bPct != null ? (bPct >= 60 ? '#34d399' : bPct >= 25 ? '#fbbf24' : '#f87171') : '';
       const stateCell = r.chargeState === 'Separated' ? `<span style="color:#f87171">Separated</span>` : '\u2013';
-      const gpsLink = r.latitude != null
-        ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue)">${r.latitude.toFixed(5)}, ${r.longitude.toFixed(5)}</a>` : '–';
+      const href = osmHref(r.latitude, r.longitude);
+      const lat = toFiniteNumber(r.latitude);
+      const lon = toFiniteNumber(r.longitude);
+      const gpsLink = href
+        ? `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:var(--m-blue)">${lat?.toFixed(5)}, ${lon?.toFixed(5)}</a>` : '–';
       return `<tr><td class="td-ts">${df.format(new Date(r.timestamp))}</td><td style="color:${bCol}">${bLabel}</td><td>${stateCell}</td><td>${gpsLink}</td></tr>`;
     }).join('');
   } else {
@@ -2024,8 +2145,9 @@ async function renderTable() {
       D.tableBody.innerHTML = rows.map(r => {
         const bPct = r.batteryPct;
         const bCol = bPct != null ? (bPct > 50 ? '#34d399' : bPct > 20 ? '#fbbf24' : '#f87171') : '';
-        const gpsLink = r.latitude != null
-          ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
+        const href = osmHref(r.latitude, r.longitude);
+        const gpsLink = href
+          ? `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
         return `<tr>
           <td class="td-ts">${df.format(new Date(r.timestamp))}</td>
           <td style="color:${bCol}">${bPct != null ? bPct + '%' : '–'}</td>
@@ -2042,12 +2164,13 @@ async function renderTable() {
         const bCol = bPct != null ? (bPct > 50 ? '#34d399' : bPct > 20 ? '#fbbf24' : '#f87171') : '';
         const hPct = r.healthPct;
         const hCol = hPct != null ? (hPct > 70 ? '#34d399' : hPct > 40 ? '#fbbf24' : '#f87171') : '';
-        const gpsLink = r.latitude != null
-          ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
+        const href = osmHref(r.latitude, r.longitude);
+        const gpsLink = href
+          ? `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
         return `<tr>
           <td class="td-ts">${df.format(new Date(r.timestamp))}</td>
           <td style="color:${bCol}">${bPct != null ? bPct + '%' : '–'}</td>
-          <td>${r.chargeState ? `<span style="color:${chargeStateColor(r.chargeState)}">${r.chargeState}</span>` : '–'}</td>
+          <td>${r.chargeState ? `<span style="color:${chargeStateColor(r.chargeState)}">${escHTML(r.chargeState)}</span>` : '–'}</td>
           <td style="color:${hCol}">${hPct != null ? hPct + '%' : '–'}</td>
           <td>${r.chargingCycles != null ? r.chargingCycles.toLocaleString() : '–'}</td>
           <td>${fmtDuration(r.totalSeconds)}</td>
@@ -2060,12 +2183,13 @@ async function renderTable() {
       D.tableBody.innerHTML = rows.map(r => {
         const bPct = r.batteryPct;
         const bCol = bPct != null ? (bPct > 50 ? '#34d399' : bPct > 20 ? '#fbbf24' : '#f87171') : '';
-        const gpsLink = r.latitude != null
-          ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}&zoom=16" target="_blank" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
+        const href = osmHref(r.latitude, r.longitude);
+        const gpsLink = href
+          ? `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:var(--m-blue);font-size:2em;line-height:1">⌖</a>` : '–';
         return `<tr>
           <td class="td-ts">${df.format(new Date(r.timestamp))}</td>
           <td style="color:${bCol}">${bPct != null ? bPct + '%' : '–'}</td>
-          <td>${r.chargeState ?? '–'}</td>
+          <td>${escHTML(r.chargeState ?? '–')}</td>
           <td>${fmtDuration(r.totalSeconds)}</td>
           <td>${r.temperatureC != null ? r.temperatureC.toFixed(1) + ' °C' : '–'}</td>
           <td>${gpsLink}</td>
@@ -2085,6 +2209,7 @@ async function renderErrors() {
     boot:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4l0 8"/></svg>',   label: 'Boot',    color: '#a78bfa' },
     sleep:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 12h6l-6 8h6"/><path d="M14 4h6l-6 8h6"/></svg>',     label: 'Sleep',   color: '#94a3b8' },
     wake_up: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up', color: '#fbbf24' },
+    ping:    { icon: '📡', label: 'Ping',     color: '#22d3ee' },
   };
 
   D.errorsCont.innerHTML = `<div class="bat-box"><div class="bat-header">Events with invalid timestamp</div><table class="bat-table"><thead><tr><th>Bad timestamp (from device)</th><th>Received at (real time)</th><th>Event</th><th>Reset reason</th></tr></thead><tbody>${skeletonRows(5)}</tbody></table></div>`;
@@ -2114,8 +2239,8 @@ async function renderErrors() {
           return `<tr>
             <td class="td-ts-compact" style="color:var(--danger)">${fmtTs(e.timestamp)}</td>
             <td class="td-ts-compact">${fmtTs(e.receivedAt)}</td>
-            <td><span class="ev-badge" style="--ev-color:${ev.color}">${ev.icon} ${ev.label}</span></td>
-            <td>${e.resetReason ?? '–'}</td>
+            <td><span class="ev-badge" style="--ev-color:${safeCssColor(ev.color) || 'var(--fg2)'}">${ev.icon} ${escHTML(ev.label)}</span></td>
+            <td>${escHTML(e.resetReason ?? '–')}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>
@@ -2154,7 +2279,8 @@ async function renderDevice() {
   const LIFECYCLE_LABELS = {
     boot:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4l0 8"/></svg>',   label: 'Boot',    color: '#a78bfa' },
     sleep:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 12h6l-6 8h6"/><path d="M14 4h6l-6 8h6"/></svg>',     label: 'Sleep',   color: '#94a3b8' },
-    wake_up: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up', color: '#fbbf24' },
+    wake_up: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up', color: '#fbbf24' },
+    ping:    { icon: '📡', label: 'Ping',     color: '#22d3ee' },
   };
 
   D.deviceCont.innerHTML = `<div class="bat-box"><div class="bat-header">Device events</div><table class="bat-table"><thead><tr><th>Time</th><th>Event</th><th>Reset reason</th><th>Wake source</th><th>Battery</th><th>GPS</th><th></th></tr></thead><tbody>${skeletonRows(6)}</tbody></table></div>`;
@@ -2177,11 +2303,11 @@ async function renderDevice() {
         <thead><tr><th>Time</th><th>Event</th><th>Reset reason</th><th>Wake source</th><th>Battery</th><th>GPS</th><th></th></tr></thead>
         <tbody>${events.map(e => {
           const ev = LIFECYCLE_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType, color: 'var(--fg2)' };
-          return `<tr data-id="${e.id}">
+          return `<tr data-id="${escAttr(e.id)}">
             <td class="td-ts-compact">${fmtTs(e.timestamp)}</td>
-            <td><span class="ev-badge" style="--ev-color:${ev.color}">${ev.icon} ${ev.label}</span></td>
-            <td>${e.resetReason  ?? '–'}</td>
-            <td>${e.wakeupSource ?? '–'}</td>
+            <td><span class="ev-badge" style="--ev-color:${safeCssColor(ev.color) || 'var(--fg2)'}">${ev.icon} ${escHTML(ev.label)}</span></td>
+            <td>${escHTML(e.resetReason  ?? '–')}</td>
+            <td>${escHTML(e.wakeupSource ?? '–')}</td>
             <td>${e.batteryVoltageV != null ? e.batteryVoltageV.toFixed(2) + ' V' : '–'}</td>
             <td>${gpsCell(e)}</td>
             <td><button class="row-delete-btn" title="Delete">🗑︎</button></td>
@@ -2259,14 +2385,15 @@ async function renderAlerts() {
         const val    = b.alertValueMax != null ? b.alertValueMax : null;
         const valStr = val != null ? (cfg.unit ? `${val.toFixed(2)}\u00a0${cfg.unit}` : val.toFixed(2)) : '\u2014';
         const spd    = b.speedKmh != null ? `${b.speedKmh.toFixed(0)}\u00a0km/h` : '\u2014';
-        const journey = b.journeyID ? `<span style="font-family:monospace;font-size:10px;color:var(--fg3)">${b.journeyID.slice(0,8)}\u2026</span>` : '\u2014';
-        const gps    = (b.latitude != null && b.longitude != null)
-          ? `<a href="https://www.openstreetmap.org/?mlat=${b.latitude}&mlon=${b.longitude}&zoom=16" target="_blank" class="bat-gps-yes">\ud83d\udccd map</a>`
+        const journey = b.journeyID ? `<span style="font-family:monospace;font-size:10px;color:var(--fg3)">${escHTML(b.journeyID.slice(0,8))}\u2026</span>` : '\u2014';
+        const href = osmHref(b.latitude, b.longitude);
+        const gps    = href
+          ? `<a href="${href}" target="_blank" rel="noopener noreferrer" class="bat-gps-yes">\ud83d\udccd map</a>`
           : `<span class="bat-gps-no">no GPS</span>`;
         const svgIco = BEHAVIOR_SVG[b.alertType] || BEHAVIOR_SVG.unknown;
-        return `<tr data-id="${b.id}">
+        return `<tr data-id="${escAttr(b.id)}">
           <td class="td-ts-compact">${fmtTs(b.timestamp)}</td>
-          <td><span class="ev-badge" style="--ev-color:${cfg.color}">${svgIco} ${cfg.label}</span></td>
+          <td><span class="ev-badge" style="--ev-color:${safeCssColor(cfg.color) || 'var(--fg2)'}">${svgIco} ${escHTML(cfg.label)}</span></td>
           <td>${valStr}</td>
           <td>${durS}</td>
           <td>${spd}</td>
@@ -2337,7 +2464,8 @@ function renderAll() {
   if (alertsBtn) alertsBtn.style.display = hasAlerts ? '' : 'none';
   if (deviceBtn) deviceBtn.style.display = hasDevice ? '' : 'none';
   // Fallback if current mode is no longer valid
-  if (!hasChart  && S.mode === 'chart')  { S.mode = 'map'; _fixModeBtn(); }
+  // AirTag: prefer the Events (table) tab since readings rarely carry GPS
+  if (!hasChart  && S.mode === 'chart')  { S.mode = sensor?.brand === 'airtag' ? 'table' : 'map'; _fixModeBtn(); }
   if (!hasWheels && S.mode === 'wheels') { S.mode = 'map'; _fixModeBtn(); }
   if (!hasAlerts && (S.mode === 'alerts' || S.mode === 'device')) { S.mode = 'map'; _fixModeBtn(); }
   function _fixModeBtn() {
@@ -2529,7 +2657,7 @@ Share this with the user — it is only shown once.`);
       });
       if (!res.ok) { const e2 = await res.json().catch(() => ({})); throw new Error(e2.reason || `HTTP ${res.status}`); }
       const data = await res.json();
-      saveAuth({ token: data.token, username: data.email, role: data.role }); applyAuthUI();
+      saveAuth({ username: data.email, role: data.role }); applyAuthUI();
       $('auth-overlay').style.display = 'none';
       resolveAuth();
     } catch (err) {
@@ -2541,7 +2669,7 @@ Share this with the user — it is only shown once.`);
   // Logout
   const logoutBtn = $('logout-btn');
   if (logoutBtn) logoutBtn.addEventListener('click', async () => {
-    if (AUTH.token) await fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }).catch(() => {});
+    await fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }).catch(() => {});
     clearAuth(); location.reload();
   });
 
@@ -2654,6 +2782,123 @@ async function adminUpdateTracker(imei, sensorName) {
   if (!res.ok) throw new Error(await res.text());
 }
 
+async function adminRenameSensor(sensorID, sensorName) {
+  const res = await fetch(`/api/admin/sensors/${encodeURIComponent(sensorID)}`, {
+    method: 'PATCH',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sensorName: sensorName || null }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+async function openTrackerConfigModal(imei) {
+  const modal = $('tracker-config-modal');
+  const body  = $('tracker-config-modal-body');
+  const WAKE_SOURCES = ['ignition', 'motion', 'voltage_rise', 'timer'];
+
+  const close = () => { modal.style.display = 'none'; };
+  $('tracker-config-modal-close').onclick = close;
+  modal.onclick = e => { if (e.target === modal) close(); };
+  modal.style.display = 'flex';
+  body.innerHTML = '<p style="color:var(--fg3);font-size:12px">Loading\u2026</p>';
+
+  let cfg;
+  try {
+    cfg = await adminGetTrackerConfig(imei);
+  } catch (err) {
+    body.innerHTML = `<p style="color:#f87171;font-size:12px">${escHTML(err.message)}</p>`;
+    return;
+  }
+
+  const sys = cfg.system; const db = cfg.driverBehavior; const dbT = db.thresholds;
+  const wakes = sys.wakeUpSourcesEnabled ?? [];
+  const wakeRows = WAKE_SOURCES.map(src =>
+    `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:4px">` +
+    `<input type="checkbox" name="tcm-wake-${src}"${wakes.includes(src) ? ' checked' : ''}> ` +
+    escHTML(src.replace(/_/g, ' ')) + `</label>`
+  ).join('');
+
+  body.innerHTML =
+    `<div style="margin-bottom:12px;font-size:11px;color:var(--fg3)">Config version: <strong style="color:var(--fg2)">${cfg.schemaVersion ?? 1}</strong></div>` +
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">` +
+    // ── System ──
+    `<div>` +
+    `<div class="tcm-section-title">System</div>` +
+    `<div class="modal-field"><label>Ping interval (min)</label>` +
+    `<input class="tcm-input" type="number" id="tcm-ping" min="1" max="60" value="${sys.pingIntervalMin}"></div>` +
+    `<div class="modal-field"><label>Sleep delay (min)</label>` +
+    `<input class="tcm-input" type="number" id="tcm-sleep" min="1" max="120" value="${sys.sleepDelayMin}"></div>` +
+    `<div class="modal-field"><label>Wake sources</label>${wakeRows}</div>` +
+    `</div>` +
+    // ── Driver Behavior ──
+    `<div>` +
+    `<div class="tcm-section-title">Driver Behavior</div>` +
+    `<div class="modal-field"><label>Harsh braking (m/s²)</label>` +
+    `<input class="tcm-input" type="number" id="tcm-hbrk" min="0.1" max="10" step="0.1" value="${dbT.harshBraking}"></div>` +
+    `<div class="modal-field"><label>Harsh accel. (m/s²)</label>` +
+    `<input class="tcm-input" type="number" id="tcm-hacc" min="0.1" max="10" step="0.1" value="${dbT.harshAcceleration}"></div>` +
+    `<div class="modal-field"><label>Cornering (m/s²)</label>` +
+    `<input class="tcm-input" type="number" id="tcm-hcor" min="0.1" max="10" step="0.1" value="${dbT.harshCornering}"></div>` +
+    `<div class="modal-field"><label>Overspeed (km/h)</label>` +
+    `<input class="tcm-input" type="number" id="tcm-ovspd" min="50" max="300" value="${dbT.overspeed}"></div>` +
+    `<div class="modal-field"><label>Min. speed (km/h)</label>` +
+    `<input class="tcm-input" type="number" id="tcm-minspd" min="0" max="50" value="${db.minimumSpeedKmh}"></div>` +
+    `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:12px">` +
+    `<input type="checkbox" id="tcm-beep"${db.beepEnabled ? ' checked' : ''}> Beep alerts</label>` +
+    `</div>` +
+    `</div>` +
+    `<div id="tcm-error" class="auth-error" style="display:none;margin-top:8px"></div>` +
+    `<div class="modal-actions">` +
+    `<button type="button" id="tcm-cancel" class="modal-btn-secondary">Cancel</button>` +
+    `<button type="button" id="tcm-save" class="modal-btn-primary">Save</button>` +
+    `</div>`;
+
+  body.querySelector('#tcm-cancel').addEventListener('click', close);
+  body.querySelector('#tcm-save').addEventListener('click', async () => {
+    const errEl  = body.querySelector('#tcm-error');
+    const saveEl = body.querySelector('#tcm-save');
+    const getNum = id => parseFloat(body.querySelector(`#${id}`)?.value) || 0;
+    const getInt = id => parseInt(body.querySelector(`#${id}`)?.value, 10) || 0;
+    const selectedWakes = WAKE_SOURCES.filter(src => body.querySelector(`[name="tcm-wake-${src}"]`)?.checked);
+    const payload = {
+      imei,
+      system: { pingIntervalMin: getInt('tcm-ping'), sleepDelayMin: getInt('tcm-sleep'), wakeUpSourcesEnabled: selectedWakes },
+      driverBehavior: {
+        thresholds: { harshBraking: getNum('tcm-hbrk'), harshAcceleration: getNum('tcm-hacc'), harshCornering: getNum('tcm-hcor'), overspeed: getNum('tcm-ovspd') },
+        minimumSpeedKmh: getInt('tcm-minspd'),
+        beepEnabled: !!(body.querySelector('#tcm-beep')?.checked),
+      },
+    };
+    saveEl.disabled = true; errEl.style.display = 'none';
+    try {
+      await adminPutTrackerConfig(imei, payload);
+      close();
+      showToast('Tracker configuration saved.');
+      // Reload sensors so the Config row in the sidebar reflects the new schemaVersion immediately
+      await loadSensors();
+      renderSensorInfoCard();
+    } catch (err) {
+      errEl.textContent = err.message; errEl.style.display = 'block';
+    } finally { saveEl.disabled = false; }
+  });
+}
+
+async function adminGetTrackerConfig(imei) {
+  const res = await fetch(`/api/admin/trackers/${encodeURIComponent(imei)}/config`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+  return res.json();
+}
+async function adminPutTrackerConfig(imei, payload) {
+  const res = await fetch(`/api/admin/trackers/${encodeURIComponent(imei)}/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+  return res.json();
+}
+
 async function adminUnpairTracker(imei) {
   const res = await fetch(`/api/admin/trackers/${encodeURIComponent(imei)}/pair`, {
     method: 'DELETE', headers: authHeaders(),
@@ -2672,19 +2917,121 @@ async function adminUnlinkAsset(userID, assetID) {
   const res = await fetch(`/api/admin/users/${userID}/assets/${assetID}`, { method: 'DELETE', headers: authHeaders() });
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
 }
+async function adminFetchSecurityEvents({ limit = 50, offset = 0, action = '', actor = '' } = {}) {
+  const qs = new URLSearchParams();
+  qs.set('limit', String(limit));
+  qs.set('offset', String(offset));
+  if (action) qs.set('action', action);
+  if (actor)  qs.set('actor_email', actor);
+  const res = await fetch(`/api/admin/security-events?${qs.toString()}`, { headers: authHeaders() });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+  return res.json();
+}
 
 async function renderAdminPanel() {
   // Hub: just update count badges
   try {
-    const [users, assets, trackers] = await Promise.all([
+    const [users, assets, trackers, sec] = await Promise.all([
       apiFetch('/api/admin/users'),
       apiFetch('/api/vehicles'),
       apiFetch('/api/admin/trackers'),
+      adminFetchSecurityEvents({ limit: 1, offset: 0, action: S.secAudit.action, actor: S.secAudit.actor }),
     ]);
     const cu = $('admin-count-users');    if (cu) cu.textContent = users.length;
     const ca = $('admin-count-assets');   if (ca) ca.textContent = assets.length;
     const ct = $('admin-count-trackers'); if (ct) ct.textContent = trackers.length;
+    const cs = $('admin-count-security'); if (cs) cs.textContent = sec.total ?? 0;
   } catch (_) { /* counts unavailable */ }
+}
+
+async function renderSecurityPanel() {
+  const list = $('admin-security-list');
+  if (!list) return;
+  const applyBtn = $('sec-filter-apply');
+  const clearBtn = $('sec-filter-clear');
+  const prevBtn  = $('sec-prev-btn');
+  const nextBtn  = $('sec-next-btn');
+  const actionEl = $('sec-filter-action');
+  const actorEl  = $('sec-filter-actor');
+  const pageLbl  = $('sec-page-label');
+  if (!applyBtn._wired) {
+    applyBtn._wired = true;
+    applyBtn.addEventListener('click', async () => {
+      S.secAudit.action = actionEl.value.trim();
+      S.secAudit.actor  = actorEl.value.trim();
+      S.secAudit.offset = 0;
+      await renderSecurityPanel();
+      renderAdminPanel();
+    });
+    clearBtn.addEventListener('click', async () => {
+      actionEl.value = '';
+      actorEl.value = '';
+      S.secAudit.action = '';
+      S.secAudit.actor = '';
+      S.secAudit.offset = 0;
+      await renderSecurityPanel();
+      renderAdminPanel();
+    });
+    prevBtn.addEventListener('click', async () => {
+      S.secAudit.offset = Math.max(0, S.secAudit.offset - S.secAudit.limit);
+      await renderSecurityPanel();
+    });
+    nextBtn.addEventListener('click', async () => {
+      const nextOffset = S.secAudit.offset + S.secAudit.limit;
+      if (nextOffset >= S.secAudit.total) return;
+      S.secAudit.offset = nextOffset;
+      await renderSecurityPanel();
+    });
+  }
+
+  actionEl.value = S.secAudit.action;
+  actorEl.value = S.secAudit.actor;
+  list.innerHTML = '<p class="admin-loading">Loading…</p>';
+  try {
+    const data = await adminFetchSecurityEvents({
+      limit: S.secAudit.limit,
+      offset: S.secAudit.offset,
+      action: S.secAudit.action,
+      actor: S.secAudit.actor,
+    });
+    const items = Array.isArray(data.items) ? data.items : [];
+    S.secAudit.total = Number.isFinite(data.total) ? data.total : items.length;
+    const page = Math.floor(S.secAudit.offset / S.secAudit.limit) + 1;
+    const pages = Math.max(1, Math.ceil(S.secAudit.total / S.secAudit.limit));
+    pageLbl.textContent = `Page ${page} / ${pages} · ${S.secAudit.total} event${S.secAudit.total !== 1 ? 's' : ''}`;
+    prevBtn.disabled = S.secAudit.offset <= 0;
+    nextBtn.disabled = (S.secAudit.offset + S.secAudit.limit) >= S.secAudit.total;
+    if (!items.length) {
+      list.innerHTML = '<p class="sidebar-hint">No security events for this filter.</p>';
+      return;
+    }
+    list.innerHTML = items.map(ev => {
+      const when = ev.createdAt ? fmtTs(ev.createdAt) : '–';
+      const actor = ev.actorEmail ? escHTML(ev.actorEmail) : '<span style="opacity:.6">system</span>';
+      const target = ev.targetType
+        ? `<span class="admin-sec-target">${escHTML(ev.targetType)}${ev.targetID ? ' · ' + escHTML(ev.targetID) : ''}</span>`
+        : '<span class="admin-sec-target" style="opacity:.6">—</span>';
+      const ip = ev.ipAddress ? escHTML(ev.ipAddress) : '—';
+      const meta = ev.metadataJSON ? escHTML(ev.metadataJSON) : '';
+      return `<div class="admin-sec-row">
+        <div class="admin-sec-head">
+          <span class="admin-sec-action">${escHTML(ev.action)}</span>
+          <span class="admin-sec-when">${when}</span>
+        </div>
+        <div class="admin-sec-sub">
+          <span class="admin-sec-actor">${actor}</span>
+          ${target}
+          <span class="admin-sec-ip">${ip}</span>
+        </div>
+        ${meta ? `<pre class="admin-sec-meta">${meta}</pre>` : ''}
+      </div>`;
+    }).join('');
+  } catch (err) {
+    list.innerHTML = `<p class="auth-error">${escHTML(err.message)}</p>`;
+    pageLbl.textContent = 'Page –';
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+  }
 }
 
 async function renderUsersPanel() {
@@ -2702,19 +3049,19 @@ async function renderUsersPanel() {
       const checks = assets.length
         ? assets.map(a => `
           <label class="admin-asset-check">
-            <input type="checkbox" data-user="${u.id}" data-asset="${a.id}"${linked.has(a.id) ? ' checked' : ''}>
-            ${a.name}
+            <input type="checkbox" data-user="${escAttr(u.id)}" data-asset="${escAttr(a.id)}"${linked.has(a.id) ? ' checked' : ''}>
+            ${escHTML(a.name)}
           </label>`).join('')
         : '<span class="sidebar-hint">No assets</span>';
       return `
-        <div class="admin-user-row" data-uid="${u.id}">
+        <div class="admin-user-row" data-uid="${escAttr(u.id)}">
           <div class="admin-user-header">
             <div class="admin-user-info">
-              <span class="admin-user-email">${u.email}</span>
-              ${u.displayName ? `<span class="admin-user-dname">${u.displayName}</span>` : ''}
-              <span class="role-badge ${u.role}">${u.role}</span>
+              <span class="admin-user-email">${escHTML(u.email)}</span>
+              ${u.displayName ? `<span class="admin-user-dname">${escHTML(u.displayName)}</span>` : ''}
+              <span class="role-badge ${normalizeRole(u.role)}">${escHTML(normalizeRole(u.role))}</span>
             </div>
-            <button class="modal-btn-danger admin-small-btn" data-delete-user="${u.id}" title="Delete user">\uD83D\uDDD1</button>
+            <button class="modal-btn-danger admin-small-btn" data-delete-user="${escAttr(u.id)}" title="Delete user">\uD83D\uDDD1</button>
           </div>
           <div class="admin-user-assets">${checks}</div>
         </div>`;
@@ -2736,7 +3083,7 @@ async function renderUsersPanel() {
         catch (err) { alert(err.message); }
       });
     });
-  } catch (err) { list.innerHTML = `<p class="auth-error">${err.message}</p>`; }
+  } catch (err) { list.innerHTML = `<p class="auth-error">${escHTML(err.message)}</p>`; }
 }
 
 async function renderAssetsPanel() {
@@ -2758,15 +3105,15 @@ async function renderAssetsPanel() {
         : ((atype?.systemImage ?? '').includes('wrench') || typeName.toLowerCase() === 'tool' ? PICTO_ICONS.tool : PICTO_ICONS.car);
       const sub = [a.brand, a.modelName, a.year, a.vrn].filter(Boolean).join(' \u00b7 ');
       return `
-        <div class="admin-asset-row" data-asset-id="${a.id}">
+        <div class="admin-asset-row" data-asset-id="${escAttr(a.id)}">
           <div class="admin-asset-picto">${pictoSvg}</div>
           <div class="admin-asset-info">
-            <span class="admin-asset-name">${a.name}</span>
-            <span class="admin-asset-meta">${typeName}${sub ? ' \u00b7 ' + sub : ''}</span>
+            <span class="admin-asset-name">${escHTML(a.name)}</span>
+            <span class="admin-asset-meta">${escHTML(typeName)}${sub ? ' \u00b7 ' + escHTML(sub) : ''}</span>
           </div>
           <div class="admin-asset-controls">
-            <button class="modal-btn-secondary admin-small-btn" data-edit-asset="${a.id}" title="Edit">\u270e</button>
-            <button class="modal-btn-danger admin-small-btn" data-delete-asset="${a.id}" title="Delete">\uD83D\uDDD1</button>
+            <button class="modal-btn-secondary admin-small-btn" data-edit-asset="${escAttr(a.id)}" title="Edit">\u270e</button>
+            <button class="modal-btn-danger admin-small-btn" data-delete-asset="${escAttr(a.id)}" title="Delete">\uD83D\uDDD1</button>
           </div>
         </div>`;
     }).join('');
@@ -2788,7 +3135,7 @@ async function renderAssetsPanel() {
         } catch (err) { alert(err.message); }
       });
     });
-  } catch (err) { assetsList.innerHTML = `<p class="auth-error">${err.message}</p>`; }
+  } catch (err) { assetsList.innerHTML = `<p class="auth-error">${escHTML(err.message)}</p>`; }
 }
 
 async function renderTrackersPanel() {
@@ -2806,7 +3153,7 @@ async function renderTrackersPanel() {
 
   const assets = await apiFetch('/api/vehicles').catch(() => []);
   vehicleEl.innerHTML = assets.length
-    ? assets.map(a => `<option value="${a.id}">${a.name}</option>`).join('')
+    ? assets.map(a => `<option value="${escAttr(a.id)}">${escHTML(a.name)}</option>`).join('')
     : '<option value="">No assets</option>';
 
   if (addBtn && !addBtn._wired) {
@@ -2843,26 +3190,26 @@ async function renderTrackersPanel() {
       container.innerHTML = '<p class="sidebar-hint">No trackers yet. Click \u00ab + New Tracker \u00bb to register one.</p>';
       return;
     }
-    const vehicleOptions = assets.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+    const vehicleOptions = assets.map(a => `<option value="${escAttr(a.id)}">${escHTML(a.name)}</option>`).join('');
     container.innerHTML = trackers.map(t => {
       const pairedVehicle = assets.find(a => a.id?.toUpperCase() === t.vehicleID?.toUpperCase());
       const selectedOptions = assets.map(a =>
-        `<option value="${a.id}"${a.id?.toUpperCase() === t.vehicleID?.toUpperCase() ? ' selected' : ''}>${a.name}</option>`
+        `<option value="${escAttr(a.id)}"${a.id?.toUpperCase() === t.vehicleID?.toUpperCase() ? ' selected' : ''}>${escHTML(a.name)}</option>`
       ).join('');
-      return `<div class="admin-tracker-row" data-imei="${t.imei}">
+      return `<div class="admin-tracker-row" data-imei="${escAttr(t.imei)}">
         <div class="admin-tracker-info">
           <div class="admin-tracker-top">
-            <span class="admin-tracker-imei">${t.imei}</span>
+            <span class="admin-tracker-imei">${escHTML(t.imei)}</span>
             <button class="admin-tracker-edit-btn" title="Edit name">&#x270F;&#xFE0E;</button>
           </div>
           <div class="admin-tracker-display">
-            ${t.sensorName ? `<span class="admin-tracker-sname">${t.sensorName}</span>` : '<span class="admin-tracker-sname" style="opacity:.4">No name</span>'}
+            ${t.sensorName ? `<span class="admin-tracker-sname">${escHTML(t.sensorName)}</span>` : '<span class="admin-tracker-sname" style="opacity:.4">No name</span>'}
             ${pairedVehicle
-              ? `<span class="admin-tracker-paired">\u2713 ${pairedVehicle.name}</span>`
+              ? `<span class="admin-tracker-paired">\u2713 ${escHTML(pairedVehicle.name)}</span>`
               : `<span class="admin-tracker-unpaired">Unpaired</span>`}
           </div>
           <div class="admin-tracker-edit-form" style="display:none">
-            <input class="tracker-name-input" type="text" placeholder="Tracker name\u2026" value="${t.sensorName ?? ''}">
+            <input class="tracker-name-input" type="text" placeholder="Tracker name\u2026" value="${escAttr(t.sensorName ?? '')}">
             <button class="modal-btn-primary admin-small-btn tracker-name-save-btn">Save</button>
             <button class="modal-btn admin-small-btn tracker-name-cancel-btn">Cancel</button>
           </div>
@@ -2948,7 +3295,7 @@ async function renderTrackersPanel() {
       });
     });
   } catch (err) {
-    container.innerHTML = `<p class="auth-error">${err.message}</p>`;
+    container.innerHTML = `<p class="auth-error">${escHTML(err.message)}</p>`;
   }
 }
 
@@ -2958,6 +3305,7 @@ function switchAdminTab(tab) {
   if (tab === 'users')    renderUsersPanel();
   if (tab === 'assets')   renderAssetsPanel();
   if (tab === 'trackers') renderTrackersPanel();
+  if (tab === 'security') renderSecurityPanel();
 }
 function openAdminPanel(tab = 'users') {
   $('admin-backdrop').style.display = '';
@@ -2982,7 +3330,7 @@ function _logCategory(text) {
   const t = text.toLowerCase();
   if (/\[airtag\]/.test(t)) return 'airtag';
   if (/\[tms\]/.test(t))    return 'tms';
-  if (/\[tracker\]|\[behavior\]|\[lifecycle\]/.test(t)) return 'tracker';
+  if (/\[tracker\]|\[behavior\]|\[lifecycle\]|\[ping\]/.test(t)) return 'tracker';
   // Vapor framework / server internals: request logs, routing, boot, DB...
   if (/vapor|post \/api|get \/api|request|response|routing|middleware|application|migrat|server started|listening|boot/.test(t)) return 'internal';
   return 'other';
@@ -3082,7 +3430,7 @@ async function main() {
   } catch (e) {
     console.error('Init error:', e);
     D.sensorList.innerHTML = `<div class="sidebar-hint" style="color:var(--danger)">
-      Error: ${e.message}<br>
+      Error: ${escHTML(e.message)}<br>
       <small>Is NetMapServer running?<br>Start with: <code>swift run App</code></small>
     </div>`;
   }

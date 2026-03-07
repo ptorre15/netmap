@@ -1,6 +1,71 @@
 import Vapor
 import Fluent
 
+// MARK: - Client IP resolution
+
+/// Returns the real client IP, with trusted-proxy handling that resists XFF spoofing.
+///
+/// Trust is only granted when the direct TCP peer is in `trustedProxyIPs`.
+/// In that case, we parse X-Forwarded-For as a chain and walk right-to-left
+/// to find the first untrusted hop (the effective client IP).
+private let trustedProxyIPs: Set<String> = {
+    let defaults: Set<String> = ["127.0.0.1", "::1"]
+    let extra = (Environment.get("TRUSTED_PROXY_IPS") ?? "")
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+    if extra.isEmpty { return defaults }
+    return defaults.union(extra)
+}()
+
+private func normaliseForwardedIP(_ raw: String) -> String {
+    var v = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if v.hasPrefix("for=") { v = String(v.dropFirst(4)) }
+    v = v.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+    // RFC 3986 bracketed IPv6 with optional port, e.g. [2001:db8::1]:443
+    if v.hasPrefix("["),
+       let end = v.firstIndex(of: "]"),
+       end > v.startIndex {
+        return String(v[v.index(after: v.startIndex)..<end])
+    }
+    // IPv4:port -> IPv4
+    if v.contains("."),
+       v.filter({ $0 == ":" }).count == 1,
+       let idx = v.lastIndex(of: ":") {
+        return String(v[..<idx])
+    }
+    return v
+}
+
+func clientIP(for req: Request) -> String {
+    let remote = req.remoteAddress?.ipAddress ?? ""
+    guard !remote.isEmpty else { return "unknown" }
+
+    // If connection is not from a trusted proxy, ignore forwarding headers.
+    guard trustedProxyIPs.contains(remote) else { return remote }
+
+    if let xff = req.headers.first(name: "X-Forwarded-For"), !xff.isEmpty {
+        // Build chain with remote peer as last hop and walk from right to left.
+        let chain = xff.split(separator: ",")
+            .map { normaliseForwardedIP(String($0)) }
+            .filter { !$0.isEmpty } + [remote]
+        for hop in chain.reversed() where !trustedProxyIPs.contains(hop) {
+            return hop
+        }
+    }
+    if let forwarded = req.headers.first(name: "Forwarded"), !forwarded.isEmpty {
+        // Minimal fallback parser for single-hop "for=..." values.
+        let parts = forwarded.split(separator: ";").map { String($0) }
+        if let forPart = parts.first(where: { $0.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("for=") }) {
+            let ip = normaliseForwardedIP(forPart)
+            if !ip.isEmpty, !trustedProxyIPs.contains(ip) { return ip }
+        }
+    }
+
+    // All hops trusted or no valid forwarding info.
+    return remote
+}
+
 struct AuthController: RouteCollection {
 
     func boot(routes: RoutesBuilder) throws {
@@ -23,35 +88,49 @@ struct AuthController: RouteCollection {
 
     // MARK: - POST /api/auth/login
 
-    func login(req: Request) async throws -> LoginResponse {
-        let ip = req.remoteAddress?.ipAddress ?? "unknown"
-        guard await !LoginRateLimiter.shared.isBlocked(ip: ip) else {
+    func login(req: Request) async throws -> Response {
+        let body = try req.content.decode(LoginPayload.self)
+        let ip = clientIP(for: req)
+        let email = body.email.lowercased().trimmingCharacters(in: .whitespaces)
+        guard try await !LoginRateLimiter.isBlocked(req: req, ip: ip, email: email) else {
             throw Abort(.tooManyRequests, reason: "Too many failed login attempts. Try again in 60 seconds.")
         }
-        let body = try req.content.decode(LoginPayload.self)
         guard let user = try await User.query(on: req.db)
-                .filter(\.$email == body.email.lowercased()).first()
+                .filter(\.$email == email).first()
         else {
-            await LoginRateLimiter.shared.recordFailure(ip: ip)
+            try await LoginRateLimiter.recordFailure(req: req, ip: ip, email: email)
             throw Abort(.unauthorized, reason: "Invalid credentials")
         }
         guard try Bcrypt.verify(body.password, created: user.passwordHash) else {
-            await LoginRateLimiter.shared.recordFailure(ip: ip)
+            try await LoginRateLimiter.recordFailure(req: req, ip: ip, email: email)
             throw Abort(.unauthorized, reason: "Invalid credentials")
         }
-        await LoginRateLimiter.shared.reset(ip: ip)
+        try await LoginRateLimiter.reset(on: req.db, ip: ip, email: email)
         try await UserToken.query(on: req.db).filter(\.$userID == user.id!).delete()
         let tok = UserToken(value: randomToken(), userID: user.id!, email: user.email, role: user.role)
         try await tok.save(on: req.db)
-        return LoginResponse(token: tok.value, email: tok.email, displayName: user.displayName, role: tok.role)
+        let payload = LoginResponse(token: tok.value, email: tok.email, displayName: user.displayName, role: tok.role)
+        let res = try await payload.encodeResponse(status: .ok, for: req)
+        attachSessionCookie(to: res, token: tok)
+        return res
     }
 
     // MARK: - POST /api/auth/setup  (only when zero users exist)
 
-    func setup(req: Request) async throws -> LoginResponse {
+    func setup(req: Request) async throws -> Response {
         let count = try await User.query(on: req.db).count()
         guard count == 0
         else { throw Abort(.forbidden, reason: "Server already configured. Use /api/auth/login.") }
+        let setupSecret = Environment.get("SETUP_SECRET")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let setupSecret, !setupSecret.isEmpty {
+            let provided = req.headers.first(name: "X-Setup-Secret")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard provided == setupSecret else {
+                throw Abort(.unauthorized, reason: "Invalid setup secret.")
+            }
+        } else if req.application.environment == .production {
+            req.logger.critical("Blocked /api/auth/setup in production because SETUP_SECRET is not configured.")
+            throw Abort(.forbidden, reason: "Initial setup is disabled until SETUP_SECRET is configured.")
+        }
         let body  = try req.content.decode(LoginPayload.self)
         let email = body.email.lowercased().trimmingCharacters(in: .whitespaces)
         guard email.contains("@"), body.password.count >= 12
@@ -60,7 +139,10 @@ struct AuthController: RouteCollection {
         try await user.save(on: req.db)
         let tok = UserToken(value: randomToken(), userID: user.id!, email: user.email, role: user.role)
         try await tok.save(on: req.db)
-        return LoginResponse(token: tok.value, email: tok.email, displayName: nil, role: tok.role)
+        let payload = LoginResponse(token: tok.value, email: tok.email, displayName: nil, role: tok.role)
+        let res = try await payload.encodeResponse(status: .ok, for: req)
+        attachSessionCookie(to: res, token: tok)
+        return res
     }
 
     // MARK: - GET /api/auth/status
@@ -72,10 +154,17 @@ struct AuthController: RouteCollection {
 
     // MARK: - POST /api/auth/logout
 
-    func logout(req: Request) async throws -> HTTPStatus {
-        guard let bearer = req.headers.bearerAuthorization else { return .ok }
-        try await UserToken.query(on: req.db).filter(\.$value == bearer.token).delete()
-        return .ok
+    func logout(req: Request) async throws -> Response {
+        let bearerToken = req.headers.bearerAuthorization?.token
+        let cookieToken = sessionCookieNames
+            .compactMap { req.cookies[$0]?.string }
+            .first { !$0.isEmpty }
+        if let token = bearerToken ?? cookieToken {
+            try await UserToken.query(on: req.db).filter(\.$value == token).delete()
+        }
+        let res = Response(status: .ok)
+        clearSessionCookie(on: res)
+        return res
     }
 
     // MARK: - GET /api/auth/me
@@ -135,6 +224,12 @@ struct AuthController: RouteCollection {
         }
         try await UserToken.query(on: req.db).filter(\.$userID == id).delete()
         try await user.delete(on: req.db)
+        await req.auditSecurityEvent(
+            action: "auth.user.delete",
+            targetType: "user",
+            targetID: id.uuidString,
+            metadata: ["email": user.email, "role": user.role]
+        )
         return .noContent
     }
 
@@ -142,6 +237,43 @@ struct AuthController: RouteCollection {
 
     private func randomToken() -> String {
         (0..<32).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined()
+    }
+
+    private func cookieSecureEnabled() -> Bool {
+        if let raw = Environment.get("COOKIE_SECURE")?.lowercased() {
+            return raw == "1" || raw == "true" || raw == "yes" || raw == "on"
+        }
+        return Environment.get("ENV") == "production" || Environment.get("VAPOR_ENV") == "production"
+    }
+
+    private func sessionCookieName() -> String {
+        cookieSecureEnabled() ? "__Host-session" : "session"
+    }
+
+    private func attachSessionCookie(to response: Response, token: UserToken) {
+        response.cookies[sessionCookieName()] = HTTPCookies.Value(
+            string: token.value,
+            expires: token.expiresAt,
+            maxAge: nil,
+            domain: nil,
+            path: "/",
+            isSecure: cookieSecureEnabled(),
+            isHTTPOnly: true,
+            sameSite: .strict
+        )
+    }
+
+    private func clearSessionCookie(on response: Response) {
+        response.cookies[sessionCookieName()] = HTTPCookies.Value(
+            string: "",
+            expires: Date(timeIntervalSince1970: 0),
+            maxAge: 0,
+            domain: nil,
+            path: "/",
+            isSecure: cookieSecureEnabled(),
+            isHTTPOnly: true,
+            sameSite: .strict
+        )
     }
 
     /// Generates a readable initial password like "Kx3-Bm7-Rp2"

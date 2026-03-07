@@ -22,6 +22,15 @@ PORT=9000 swift run App
 
 # Base de données dans un répertoire spécifique
 DB_PATH=/var/lib/netmap/data.db swift run App
+
+# Configuration sécurité recommandée
+API_KEY=change-me SETUP_SECRET=change-me-too swift run App
+
+# Proxy trust (if running behind reverse proxy on another host/IP)
+TRUSTED_PROXY_IPS=127.0.0.1,::1,10.0.0.5 swift run App
+
+# Audit log sink + retention
+SECURITY_EVENT_LOG_PATH=/var/log/netmap/security_events.log SECURITY_EVENT_RETENTION_DAYS=90 swift run App
 ```
 
 ## Endpoints

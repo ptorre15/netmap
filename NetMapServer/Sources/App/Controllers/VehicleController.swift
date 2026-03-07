@@ -11,15 +11,14 @@ struct VehicleController: RouteCollection {
         let admin    = api.grouped(BearerAuthMiddleware(), AdminMiddleware())
         let adminA   = assetApi.grouped(BearerAuthMiddleware(), AdminMiddleware())
 
-        // Wrap public reads with OptionalBearerAuthMiddleware so non-admin users get filtered results
-        let optAuth = api.grouped(OptionalBearerAuthMiddleware())
-        let optAuthA = assetApi.grouped(OptionalBearerAuthMiddleware())
+        // Authenticated reads — API key or Bearer; non-admin Bearer users see only their linked assets.
+        let protectedRead  = api.grouped(APIKeyOrBearerMiddleware())
+        let protectedReadA = assetApi.grouped(APIKeyOrBearerMiddleware())
 
-        // Public reads (filtered by user-asset when authenticated non-admin)
-        optAuth.get(use: list)                          // GET  /api/vehicles
-        optAuth.get(":vehicleID", use: get)             // GET  /api/vehicles/:id
-        optAuthA.get(use: list)                         // GET  /api/assets
-        optAuthA.get(":vehicleID", use: get)            // GET  /api/assets/:id
+        protectedRead.get(use: list)                          // GET  /api/vehicles
+        protectedRead.get(":vehicleID", use: get)             // GET  /api/vehicles/:id
+        protectedReadA.get(use: list)                         // GET  /api/assets
+        protectedReadA.get(":vehicleID", use: get)            // GET  /api/assets/:id
 
         // Admin writes — /api/vehicles (legacy)
         admin.post(use: create)                    // POST   /api/vehicles

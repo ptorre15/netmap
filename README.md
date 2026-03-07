@@ -83,7 +83,7 @@ swift run App
 PORT=8092 DB_PATH=/var/lib/netmap/data.db API_KEY=your-key swift run App
 ```
 
-First run: set `ADMIN_USERNAME` and `ADMIN_PASSWORD` env vars to auto-create the admin account.
+First run in production: set `SETUP_SECRET` and call `POST /api/auth/setup` with header `X-Setup-Secret`.
 
 ### App
 
@@ -114,7 +114,7 @@ In the app's **Server Settings**, enter the server URL and API key.
 | `GET` | `/api/records` | — | List records (filters: `vehicle`, `sensor`, `brand`, `limit`) |
 | `GET` | `/api/records/by-sensor/:id` | — | Sensor history (`from`/`to` ISO 8601) |
 | `GET` | `/api/records/by-vehicle/:id` | — | Vehicle history |
-| `GET` | `/api/sensors/latest` | — | Latest reading per sensor |
+| `GET` | `/api/sensors/latest` | X-API-Key or Bearer | Latest reading per sensor |
 | `GET` | `/api/sensors/:id/puncture-risk` | — | Slow puncture risk score for a sensor |
 | `POST` | `/api/sensors/pair` | X-API-Key | Register a sensor↔vehicle pairing |
 | `DELETE` | `/api/sensors/pair/:sensorID` | X-API-Key or Admin | Remove a sensor pairing |
@@ -139,8 +139,8 @@ In the app's **Server Settings**, enter the server URL and API key.
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `POST` | `/api/vehicle-events` | X-API-Key | Push event(s) from tracker (single or array) |
-| `GET` | `/api/vehicle-events` | — | List events (filters: `vehicle`, `journey`, `imei`, `event_type`, `limit`) |
-| `GET` | `/api/vehicle-events/journeys` | — | List journeys (`vehicle`, `limit`) |
+| `GET` | `/api/vehicle-events` | X-API-Key or Bearer | List events (filters: `vehicle`, `journey`, `imei`, `event_type`, `limit`) |
+| `GET` | `/api/vehicle-events/journeys` | X-API-Key or Bearer | List journeys (`vehicle`, `limit`) |
 | `DELETE` | `/api/vehicle-events/:id` | X-API-Key or Admin | Delete a single event |
 | `DELETE` | `/api/vehicle-events/journeys/:journeyID` | X-API-Key or Admin | Delete all events in a journey |
 | `DELETE` | `/api/vehicle-events` | X-API-Key or Admin | Delete events in period (`imei`, `from`, `to`) |
@@ -149,19 +149,25 @@ In the app's **Server Settings**, enter the server URL and API key.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `GET` | `/api/driver-behavior` | — | List alerts (filters: `journey`, `vehicle`, `imei`, `alert_type`, `limit`) |
-| `GET` | `/api/driver-behavior/summary` | — | Aggregated score for a journey |
-| `DELETE` | `/api/driver-behavior/:id` | — | Delete single alert |
-| `DELETE` | `/api/driver-behavior` | — | Delete alerts in period (`imei`, `from`, `to`) |
+| `GET` | `/api/driver-behavior` | X-API-Key or Bearer | List alerts (filters: `journey`, `vehicle`, `imei`, `alert_type`, `limit`) |
+| `GET` | `/api/driver-behavior/summary` | X-API-Key or Bearer | Aggregated score for a journey |
+| `DELETE` | `/api/driver-behavior/:id` | X-API-Key or Admin | Delete single alert |
+| `DELETE` | `/api/driver-behavior` | X-API-Key or Admin | Delete alerts in period (`imei`, `from`, `to`) |
 
 ### Device Lifecycle
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `GET` | `/api/device-lifecycle` | — | List lifecycle events |
-| `GET` | `/api/device-lifecycle/summary` | — | Summary per device |
-| `DELETE` | `/api/device-lifecycle/:id` | — | Delete single event |
-| `DELETE` | `/api/device-lifecycle` | — | Delete events in period (`imei`, `from`, `to`) |
+| `GET` | `/api/device-lifecycle` | X-API-Key or Bearer | List lifecycle events |
+| `GET` | `/api/device-lifecycle/summary` | X-API-Key or Bearer | Summary per device |
+| `DELETE` | `/api/device-lifecycle/:id` | X-API-Key or Admin | Delete single event |
+| `DELETE` | `/api/device-lifecycle` | X-API-Key or Admin | Delete events in period (`imei`, `from`, `to`) |
+
+### Admin
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/admin/security-events` | Bearer + Admin | Read-only security audit log (`action`, `actor_email`, `target_type`, `target_id`, `from`, `to`, `limit`, `offset`) |
 
 ### Misc
 
@@ -179,6 +185,12 @@ In the app's **Server Settings**, enter the server URL and API key.
 | `PORT` | `8092` | HTTP listen port |
 | `DB_PATH` | `netmap_data.db` | SQLite file path |
 | `API_KEY` | `netmap-dev` | X-API-Key for sensor writes |
+| `TRUSTED_PROXY_IPS` | `127.0.0.1,::1` | Comma-separated proxy IPs trusted for forwarded client IP (`X-Forwarded-For`) |
+| `SETUP_SECRET` | — | Required in production for first admin bootstrap via `/api/auth/setup` (`X-Setup-Secret`) |
+| `COOKIE_SECURE` | auto (`true` in production) | Force `Secure` attribute on auth session cookie |
+| `TOKEN_TTL_DAYS` | `7` | User token/session lifetime in days |
+| `SECURITY_EVENT_LOG_PATH` | `/var/log/netmap/security_events.log` | Append-only JSONL audit sink path |
+| `SECURITY_EVENT_RETENTION_DAYS` | `90` | Purge security events older than this many days (`0` disables purge) |
 | `ADMIN_USERNAME` | — | Auto-seed admin username (first run) |
 | `ADMIN_PASSWORD` | — | Auto-seed admin password (first run) |
 
@@ -187,8 +199,20 @@ In the app's **Server Settings**, enter the server URL and API key.
 ## Authentication Model
 
 - **X-API-Key** — lightweight auth for sensor payloads sent by the app (telemetry writes)
-- **Bearer token** — full user authentication for admin operations (vehicle CRUD, user management). Tokens expire after 7 days.
+- **Session cookie (`HttpOnly`, `SameSite=Strict`)** — browser dashboard authentication for admin operations.
+- **Bearer token** — supported for API/iOS/tracker clients and admin endpoints. Tokens expire after `TOKEN_TTL_DAYS`.
 - Passwords hashed with BCrypt.
+- Non-admin Bearer users are automatically scoped to their linked assets on sensitive telemetry read endpoints.
+- Privileged operations are recorded in append-only `security_events` audit logs (actor, action, target, metadata, IP).
+- Audit entries include hash chaining (`prev_hash`, `event_hash`) and are mirrored to append-only JSONL file sink.
+
+## CI Security Gates
+
+- GitHub Actions workflow: [`.github/workflows/security.yml`](/Users/phil/Projects/NetMap/.github/workflows/security.yml)
+- Includes:
+  - Trivy filesystem vulnerability scan (fails on `HIGH`/`CRITICAL`)
+  - Gitleaks secret scan
+  - Semgrep SAST scan
 
 > For production, place the server behind a TLS reverse proxy (Caddy or nginx). See `NetMapServer/Caddyfile` for a ready-to-use Caddy config.
 

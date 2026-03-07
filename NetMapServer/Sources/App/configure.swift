@@ -16,6 +16,8 @@ public func configure(_ app: Application) async throws {
     let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
     ContentConfiguration.global.use(encoder: enc, for: .json)
     ContentConfiguration.global.use(decoder: dec, for: .json)
+    // Global request body cap to reduce DoS risk from oversized payloads.
+    app.routes.defaultMaxBodySize = "1mb"
 
     // ── Static files from Public/ (serves index.html at /) ──────────────
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory, defaultFile: "index.html"))
@@ -26,10 +28,14 @@ public func configure(_ app: Application) async throws {
 
     // ── Migrations ───────────────────────────────────────────────────────
     app.migrations.add(CreateSensorReading())
+    app.migrations.add(CreateTrackerConfig())
     app.migrations.add(CreateUser())
     app.migrations.add(CreateUserToken())
+    app.migrations.add(CreateLoginAttemptBucket())
     app.migrations.add(CreateVehicle())
     app.migrations.add(CreateAppSetting())
+    app.migrations.add(CreateSecurityEvent())
+    app.migrations.add(AddSecurityEventHashChain())
     app.migrations.add(MigrateUsernameToEmail())
     app.migrations.add(CreateAssetType())
     app.migrations.add(AddAssetFieldsToVehicle())
@@ -48,6 +54,7 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(AddVehicleEventIndexes())                  // idx_ve_imei_ts + idx_ve_journey (README_JOURNEY_API.md)
     app.migrations.add(AddGpsFixTypeToVehicleEvents())            // gps_fix_type on vehicle_events (spec v6)
     app.migrations.add(AddGpsToDeviceLifecycleEvents())           // GPS fields + gps_fix_type on device_lifecycle_events (spec v6)
+    app.migrations.add(AddLastAppliedConfigVersion())             // last_applied_config_version on tracker_configs
     try await app.autoMigrate()   // non-blocking in async context
 
     // ── Seed built-in asset types if absent ─────────────────────
@@ -112,9 +119,11 @@ public func configure(_ app: Application) async throws {
 
     // ── Periodic token cleanup ───────────────────────────────────────────
     app.lifecycle.use(TokenCleanupLifecycle())
+    app.lifecycle.use(SecurityEventRetentionLifecycle())
 
     // ── Routes ───────────────────────────────────────────────────────────
     try routes(app)
 
-    app.logger.info("NetMapServer listening on 0.0.0.0:\(port) — DB: \(dbPath)")
+    let bindHost = Environment.get("BIND_HOST") ?? "127.0.0.1"
+    app.logger.info("NetMapServer listening on \(bindHost):\(port) — DB: \(dbPath)")
 }

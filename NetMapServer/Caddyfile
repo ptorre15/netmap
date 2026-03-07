@@ -15,7 +15,10 @@
 #   localhost:8443
 92-137-172-240.nip.io {
 	# Proxy everything to the Vapor server
-	reverse_proxy localhost:8092
+	reverse_proxy localhost:8092 {
+		# Replace any client-supplied XFF chain with the real peer seen by Caddy.
+		header_up X-Forwarded-For {remote_host}
+	}
 
 	# Security headers
 	header {
@@ -23,6 +26,7 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https://unpkg.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org; connect-src 'self' https://router.project-osrm.org https://*.tile.openstreetmap.org; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 		-Server
 	}
 

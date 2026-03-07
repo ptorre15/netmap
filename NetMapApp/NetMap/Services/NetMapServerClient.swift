@@ -554,10 +554,14 @@ final class NetMapServerClient: ObservableObject {
         guard let url = URL(string: "\(baseURL)/api/asset-types") else {
             throw NetMapServerError.invalidURL
         }
-        let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 10))
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+        var req = URLRequest(url: url, timeoutInterval: 10)
+        req.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else {
             throw NetMapServerError.httpError(0)
         }
+        if http.statusCode == 401 { throw NetMapServerError.unauthorized }
+        guard (200...299).contains(http.statusCode) else { throw NetMapServerError.httpError(http.statusCode) }
         let dtos = try JSONDecoder().decode([AssetTypeServerDTO].self, from: data)
         return dtos.map { $0.toAssetType() }
     }
@@ -646,10 +650,14 @@ final class NetMapServerClient: ObservableObject {
         guard let url = URL(string: "\(baseURL)/api/sensors/latest") else {
             throw NetMapServerError.invalidURL
         }
-        let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 10))
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+        var req = URLRequest(url: url, timeoutInterval: 10)
+        req.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else {
             throw NetMapServerError.httpError(0)
         }
+        if http.statusCode == 401 { throw NetMapServerError.unauthorized }
+        guard (200...299).contains(http.statusCode) else { throw NetMapServerError.httpError(http.statusCode) }
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .iso8601
         return try dec.decode([SensorServerDTO].self, from: data)

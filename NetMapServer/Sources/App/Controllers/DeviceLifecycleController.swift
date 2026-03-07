@@ -244,10 +244,12 @@ struct DeviceLifecycleController: RouteCollection {
 
     func boot(routes: RoutesBuilder) throws {
         let open = routes.grouped("api", "device-lifecycle")
-        open.get(use: list)                        // GET /api/device-lifecycle
-        open.get("summary", use: summary)          // GET /api/device-lifecycle/summary
-        open.delete(use: deletePeriod)             // DELETE /api/device-lifecycle?imei=&from=ISO8601&to=ISO8601
-        open.delete(":id", use: deleteOne)         // DELETE /api/device-lifecycle/:id
+        let protectedRead = open.grouped(APIKeyOrBearerMiddleware())
+        let protectedDelete = open.grouped(APIKeyOrAdminMiddleware())
+        protectedRead.get(use: list)                       // GET /api/device-lifecycle
+        protectedRead.get("summary", use: summary)         // GET /api/device-lifecycle/summary
+        protectedDelete.delete(use: deletePeriod)          // DELETE /api/device-lifecycle?imei=&from=ISO8601&to=ISO8601
+        protectedDelete.delete(":id", use: deleteOne)      // DELETE /api/device-lifecycle/:id
     }
 
     // MARK: DELETE /api/device-lifecycle?imei=&from=ISO8601&to=ISO8601
@@ -288,6 +290,12 @@ struct DeviceLifecycleController: RouteCollection {
             """).run()
 
         req.logger.notice("Deleted \(count) device_lifecycle_events for IMEI \(imei) from \(fromStr) to \(toStr)")
+        await req.auditSecurityEvent(
+            action: "device_lifecycle.delete_period",
+            targetType: "device_lifecycle_event",
+            targetID: imei,
+            metadata: ["from": fromStr, "to": toStr, "deleted": String(count)]
+        )
         struct Deleted: Content { var deleted: Int }
         return try await Deleted(deleted: count).encodeResponse(status: .ok, for: req)
     }
@@ -302,6 +310,12 @@ struct DeviceLifecycleController: RouteCollection {
             throw Abort(.notFound)
         }
         try await event.delete(on: req.db)
+        await req.auditSecurityEvent(
+            action: "device_lifecycle.delete_one",
+            targetType: "device_lifecycle_event",
+            targetID: uuid.uuidString,
+            metadata: ["imei": event.imei, "event_type": event.eventType]
+        )
         return .noContent
     }
 
@@ -314,6 +328,23 @@ struct DeviceLifecycleController: RouteCollection {
         let limit:          Int     = req.query[Int.self, at: "limit"] ?? 200
 
         var query = DeviceLifecycleEvent.query(on: req.db)
+        if let auth = req.authUser, !auth.isAdmin {
+            let allowedVehicleIDs = try await UserAsset.query(on: req.db)
+                .filter(\.$userID == auth.userID)
+                .all()
+                .map { $0.assetID.uuidString }
+            if allowedVehicleIDs.isEmpty {
+                let enc = JSONEncoder()
+                enc.dateEncodingStrategy = .iso8601
+                let data = try enc.encode([LifecycleEventResponse]())
+                return Response(
+                    status: .ok,
+                    headers: HTTPHeaders([("Content-Type", "application/json")]),
+                    body: .init(data: data)
+                )
+            }
+            query = query.filter(\.$vehicleID ~~ allowedVehicleIDs)
+        }
         if let v = imeiParam      { query = query.filter(\.$imei      == v) }
         if let v = vehicleParam   { query = query.filter(\.$vehicleID == v) }
         if let v = eventTypeParam { query = query.filter(\.$eventType == v) }
@@ -345,6 +376,31 @@ struct DeviceLifecycleController: RouteCollection {
     // ── GET /api/device-lifecycle/summary ─────────────────────────────────
     func summary(req: Request) async throws -> Response {
         let imei: String = req.query[String.self, at: "imei"] ?? ""
+        if let auth = req.authUser, !auth.isAdmin {
+            let allowedVehicleIDs = try await UserAsset.query(on: req.db)
+                .filter(\.$userID == auth.userID)
+                .all()
+                .map { $0.assetID.uuidString.uppercased() }
+            if allowedVehicleIDs.isEmpty {
+                throw Abort(.forbidden, reason: "No assets linked to this user.")
+            }
+            // Resolve IMEI to a vehicle ID and enforce user-asset access.
+            let knownReadingVehicle = try await SensorReading.query(on: req.db)
+                .filter(\.$sensorID == imei)
+                .filter(\.$brand == "tracker")
+                .sort(\.$timestamp, .descending)
+                .first()?
+                .vehicleID
+            let knownLifecycleVehicle = try await DeviceLifecycleEvent.query(on: req.db)
+                .filter(\.$imei == imei)
+                .sort(\.$timestamp, .descending)
+                .first()?
+                .vehicleID
+            let resolvedVehicleID = (knownReadingVehicle ?? knownLifecycleVehicle ?? imei).uppercased()
+            guard allowedVehicleIDs.contains(resolvedVehicleID) else {
+                throw Abort(.forbidden, reason: "Access denied for this tracker.")
+            }
+        }
 
         guard let sql = req.db as? SQLDatabase else {
             throw Abort(.internalServerError, reason: "SQL database unavailable")

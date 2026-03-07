@@ -10,19 +10,47 @@ private func validTimestamp(_ candidate: Date?) -> Date {
     return ts
 }
 
+// MARK: - Piggyback config response structs
+struct PiggybackSystemPayload: Content {
+    var pingIntervalMin: Int
+    var sleepDelayMin: Int
+    var wakeUpSourcesEnabled: [String]
+}
+struct PiggybackThresholdsPayload: Content {
+    var harshBraking: Double
+    var harshAcceleration: Double
+    var harshCornering: Double
+    var overspeed: Double
+}
+struct PiggybackDriverBehaviorPayload: Content {
+    var thresholds: PiggybackThresholdsPayload
+    var minimumSpeedKmh: Int
+    var beepEnabled: Bool
+}
+struct PiggybackConfigPayload: Content {
+    var schemaVersion: Int
+    var imei: String
+    var system: PiggybackSystemPayload
+    var driverBehavior: PiggybackDriverBehaviorPayload
+}
+struct PushEventsResponse: Content {
+    var received: Int
+    var config: PiggybackConfigPayload?
+}
+
 struct VehicleEventController: RouteCollection {
 
     func boot(routes: RoutesBuilder) throws {
         let protected       = routes.grouped("api", "vehicle-events").grouped(APIKeyMiddleware())
         let protectedDelete = routes.grouped("api", "vehicle-events").grouped(APIKeyOrAdminMiddleware())
-        let open            = routes.grouped("api", "vehicle-events")
+        let protectedRead   = routes.grouped("api", "vehicle-events").grouped(APIKeyOrBearerMiddleware())
 
         // Writes (require API key — tracker devices)
         protected.post(use: push)           // POST /api/vehicle-events  — single or array
 
-        // Reads (public)
-        open.get(use: list)                 // GET  /api/vehicle-events?vehicle=&journey=&limit=
-        open.get("journeys", use: journeys) // GET  /api/vehicle-events/journeys?vehicle=&limit=
+        // Reads (API key or Bearer token)
+        protectedRead.get(use: list)                 // GET  /api/vehicle-events?vehicle=&journey=&limit=
+        protectedRead.get("journeys", use: journeys) // GET  /api/vehicle-events/journeys?vehicle=&limit=
 
         // Deletes — accept API key OR admin Bearer (web dashboard)
         protectedDelete.delete(":id", use: deleteOne)             // DELETE /api/vehicle-events/:id
@@ -33,7 +61,7 @@ struct VehicleEventController: RouteCollection {
     // MARK: - POST /api/vehicle-events
     // N'accepte que l'IMEI + données télémétriques.
     // Le serveur résout vehicleID/vehicleName depuis sensor_readings et gère le journeyID.
-    func push(req: Request) async throws -> HTTPStatus {
+    func push(req: Request) async throws -> Response {
         let payloads: [VehicleEventPayload]
         if let arr = try? req.content.decode([VehicleEventPayload].self) {
             payloads = arr
@@ -41,6 +69,11 @@ struct VehicleEventController: RouteCollection {
             payloads = [try req.content.decode(VehicleEventPayload.self)]
         }
         guard !payloads.isEmpty else { throw Abort(.badRequest, reason: "Empty payload") }
+
+        // Debug: log configVersion decoded from first payload
+        if let first = payloads.first {
+            req.logger.info("[push] imei=\(first.imei) configVersion=\(first.configVersion.map { String($0) } ?? "nil")")
+        }
 
         for p in payloads {
             let imei      = p.imei
@@ -106,7 +139,7 @@ struct VehicleEventController: RouteCollection {
             }
 
             // ── 3. Device lifecycle events: store in separate table, skip journey logic ──
-            if eventType == "boot" || eventType == "sleep" || eventType == "wake_up" {
+            if eventType == "boot" || eventType == "sleep" || eventType == "wake_up" || eventType == "ping" {
                 // batteryVoltageV < 0 → treat as unavailable
                 let rawVoltage = p.batteryVoltageV
                 let safeVoltage: Double? = (rawVoltage != nil && rawVoltage! >= 0) ? rawVoltage : nil
@@ -137,7 +170,11 @@ struct VehicleEventController: RouteCollection {
                     gpsSatellites:   p.gpsSatellites
                 )
                 try await dle.save(on: req.db)
-                req.logger.info("⚡️ [lifecycle] imei=\(imei) type=\(effectiveType)\(effectiveType != eventType ? " (reclassified from \(eventType)/DEEPSLEEP)" : "")")
+                if effectiveType == "ping" {
+                    req.logger.info("📡 [ping] imei=\(imei) fix=\(p.gpsFixType.map{String($0)} ?? "?") lat=\(p.latitude.map{String($0)} ?? "-") lon=\(p.longitude.map{String($0)} ?? "-") sats=\(p.gpsSatellites.map{String($0)} ?? "-")")
+                } else {
+                    req.logger.info("⚡️ [lifecycle] imei=\(imei) type=\(effectiveType)\(effectiveType != eventType ? " (reclassified from \(eventType)/DEEPSLEEP)" : "")")
+                }
                 continue   // do NOT affect journey state machine or vehicle_events
             }
 
@@ -203,13 +240,62 @@ struct VehicleEventController: RouteCollection {
         }
 
         req.logger.info("vehicle-events saved: \(payloads.count)")
-        return .created
+
+        // ── Piggyback: inject pending config into response ───────────────
+        // Only include config when the stored schemaVersion is newer than what
+        // the tracker already has applied (tracker sends configVersion in payload).
+        // nil configVersion means first boot — always send config.
+        let imeis = Array(Set(payloads.map { $0.imei }))
+        var piggybackConfig: PiggybackConfigPayload? = nil
+        for batchImei in imeis {
+            // Find the reported configVersion for this IMEI from the batch
+            let reportedVersion = payloads.first(where: { $0.imei == batchImei })?.configVersion
+            guard let cfg = try? await TrackerConfig.query(on: req.db)
+                .filter(\.$imei == batchImei)
+                .first() else { continue }
+
+            // Always persist the tracker's reported version (so the UI can show sync status)
+            if let v = reportedVersion, cfg.lastAppliedConfigVersion != v {
+                cfg.lastAppliedConfigVersion = v
+                try? await cfg.save(on: req.db)
+            }
+
+            // Gate: only piggyback if tracker hasn't seen this version yet
+            guard cfg.schemaVersion > (reportedVersion ?? -1) else { break }
+            let wake = (try? JSONDecoder().decode([String].self,
+                from: Data(cfg.wakeUpSourcesJSON.utf8))) ?? []
+            piggybackConfig = PiggybackConfigPayload(
+                schemaVersion: cfg.schemaVersion,
+                imei: cfg.imei,
+                system: .init(pingIntervalMin: cfg.pingIntervalMin,
+                              sleepDelayMin: cfg.sleepDelayMin,
+                              wakeUpSourcesEnabled: wake),
+                driverBehavior: .init(
+                    thresholds: .init(harshBraking: cfg.thresholdHarshBraking,
+                                      harshAcceleration: cfg.thresholdHarshAcceleration,
+                                      harshCornering: cfg.thresholdHarshCornering,
+                                      overspeed: cfg.thresholdOverspeedKmh),
+                    minimumSpeedKmh: cfg.minimumSpeedKmh,
+                    beepEnabled: cfg.beepEnabled)
+            )
+            break
+        }
+        let pushResponse = PushEventsResponse(received: payloads.count, config: piggybackConfig)
+        return try await pushResponse.encodeResponse(status: .created, for: req)
     }
 
     // MARK: - GET /api/vehicle-events?imei=&vehicle=UUID&journey=UUID&event_type=driving&limit=1000
     func list(req: Request) async throws -> [VehicleEvent] {
         let limit = (try? req.query.get(Int.self, at: "limit")) ?? 1_000
         var q = VehicleEvent.query(on: req.db).sort(\.$timestamp, .ascending)
+        if let auth = req.authUser, !auth.isAdmin {
+            let allowedVehicleIDs = try await UserAsset.query(on: req.db)
+                .filter(\.$userID == auth.userID)
+                .all()
+                .map { $0.assetID.uuidString }
+            if allowedVehicleIDs.isEmpty { return [] }
+            q = q.filter(\.$vehicleID ~~ allowedVehicleIDs)
+        }
         if let v = try? req.query.get(String.self, at: "vehicle")    { q = q.filter(\.$vehicleID == v) }
         if let i = try? req.query.get(String.self, at: "imei")       { q = q.filter(\.$imei == i) }
         if let j = try? req.query.get(String.self, at: "journey")    { q = q.filter(\.$journeyID == j) }
@@ -237,31 +323,89 @@ struct VehicleEventController: RouteCollection {
             var event_count:              Int
         }
 
-        var filter = ""
-        if let v = try? req.query.get(String.self, at: "vehicle") {
-            filter = "WHERE vehicle_id = '\(v)'"
+        // Clamp limit to a sane range and avoid raw interpolation.
+        let rawLimit = (try? req.query.get(Int.self, at: "limit")) ?? 50
+        let limit = min(max(rawLimit, 1), 500)
+        let vehicleFilter = try? req.query.get(String.self, at: "vehicle")
+        var accessFilterSQL = ""
+        if let auth = req.authUser, !auth.isAdmin {
+            let allowedVehicleIDs = try await UserAsset.query(on: req.db)
+                .filter(\.$userID == auth.userID)
+                .all()
+                .map { $0.assetID.uuidString.uppercased() }
+            if allowedVehicleIDs.isEmpty { return [] }
+            if let v = vehicleFilter, !v.isEmpty, !allowedVehicleIDs.contains(v.uppercased()) {
+                return []
+            }
+            let quoted = allowedVehicleIDs.map { "'\($0)'" }.joined(separator: ",")
+            accessFilterSQL = "UPPER(vehicle_id) IN (\(quoted))"
         }
-        let limit = (try? req.query.get(Int.self, at: "limit")) ?? 50
 
-        let rows = try await sql.raw("""
-            SELECT
-                journey_id,
-                vehicle_id,
-                vehicle_name,
-                MIN(driver_id) AS driver_id,
-                MIN(timestamp) AS started_at,
-                CASE WHEN SUM(CASE WHEN event_type = 'journey_end' THEN 1 ELSE 0 END) > 0
-                     THEN MAX(timestamp) ELSE NULL END AS ended_at,
-                MAX(journey_distance_km) AS total_distance_km,
-                SUM(COALESCE(fuel_consumed_l, 0)) AS total_fuel_consumed_l,
-                MAX(COALESCE(journey_fuel_consumed_l, 0)) AS total_journey_fuel_consumed_l,
-                COUNT(*) AS event_count
-            FROM vehicle_events
-            \(unsafeRaw: filter)
-            GROUP BY journey_id
-            ORDER BY MIN(timestamp) DESC
-            LIMIT \(unsafeRaw: String(limit))
-            """).all(decoding: Row.self)
+        let rows: [Row]
+        if let vehicleID = vehicleFilter, !vehicleID.isEmpty {
+            if accessFilterSQL.isEmpty {
+                rows = try await sql.raw("""
+                    SELECT
+                        journey_id,
+                        vehicle_id,
+                        vehicle_name,
+                        MIN(driver_id) AS driver_id,
+                        MIN(timestamp) AS started_at,
+                        CASE WHEN SUM(CASE WHEN event_type = 'journey_end' THEN 1 ELSE 0 END) > 0
+                             THEN MAX(timestamp) ELSE NULL END AS ended_at,
+                        MAX(journey_distance_km) AS total_distance_km,
+                        SUM(COALESCE(fuel_consumed_l, 0)) AS total_fuel_consumed_l,
+                        MAX(COALESCE(journey_fuel_consumed_l, 0)) AS total_journey_fuel_consumed_l,
+                        COUNT(*) AS event_count
+                    FROM vehicle_events
+                    WHERE vehicle_id = \(bind: vehicleID)
+                    GROUP BY journey_id
+                    ORDER BY MIN(timestamp) DESC
+                    LIMIT \(bind: limit)
+                    """).all(decoding: Row.self)
+            } else {
+                rows = try await sql.raw("""
+                    SELECT
+                        journey_id,
+                        vehicle_id,
+                        vehicle_name,
+                        MIN(driver_id) AS driver_id,
+                        MIN(timestamp) AS started_at,
+                        CASE WHEN SUM(CASE WHEN event_type = 'journey_end' THEN 1 ELSE 0 END) > 0
+                             THEN MAX(timestamp) ELSE NULL END AS ended_at,
+                        MAX(journey_distance_km) AS total_distance_km,
+                        SUM(COALESCE(fuel_consumed_l, 0)) AS total_fuel_consumed_l,
+                        MAX(COALESCE(journey_fuel_consumed_l, 0)) AS total_journey_fuel_consumed_l,
+                        COUNT(*) AS event_count
+                    FROM vehicle_events
+                    WHERE vehicle_id = \(bind: vehicleID) AND \(unsafeRaw: accessFilterSQL)
+                    GROUP BY journey_id
+                    ORDER BY MIN(timestamp) DESC
+                    LIMIT \(bind: limit)
+                    """).all(decoding: Row.self)
+            }
+        } else {
+            let whereClause = accessFilterSQL.isEmpty ? "" : "WHERE \(accessFilterSQL)"
+            rows = try await sql.raw("""
+                SELECT
+                    journey_id,
+                    vehicle_id,
+                    vehicle_name,
+                    MIN(driver_id) AS driver_id,
+                    MIN(timestamp) AS started_at,
+                    CASE WHEN SUM(CASE WHEN event_type = 'journey_end' THEN 1 ELSE 0 END) > 0
+                         THEN MAX(timestamp) ELSE NULL END AS ended_at,
+                    MAX(journey_distance_km) AS total_distance_km,
+                    SUM(COALESCE(fuel_consumed_l, 0)) AS total_fuel_consumed_l,
+                    MAX(COALESCE(journey_fuel_consumed_l, 0)) AS total_journey_fuel_consumed_l,
+                    COUNT(*) AS event_count
+                FROM vehicle_events
+                \(unsafeRaw: whereClause)
+                GROUP BY journey_id
+                ORDER BY MIN(timestamp) DESC
+                LIMIT \(bind: limit)
+                """).all(decoding: Row.self)
+        }
 
         let isoFull  = ISO8601DateFormatter()
         isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -299,6 +443,12 @@ struct VehicleEventController: RouteCollection {
             throw Abort(.notFound)
         }
         try await event.delete(on: req.db)
+        await req.auditSecurityEvent(
+            action: "vehicle_events.delete_one",
+            targetType: "vehicle_event",
+            targetID: uuid.uuidString,
+            metadata: ["imei": event.imei ?? "", "journey_id": event.journeyID]
+        )
         return .noContent
     }
 
@@ -341,6 +491,12 @@ struct VehicleEventController: RouteCollection {
             """).run()
 
         req.logger.notice("Deleted \(count) vehicle_events for IMEI \(imei) from \(fromStr) to \(toStr)")
+        await req.auditSecurityEvent(
+            action: "vehicle_events.delete_period",
+            targetType: "vehicle_event",
+            targetID: imei,
+            metadata: ["from": fromStr, "to": toStr, "deleted": String(count)]
+        )
         struct Deleted: Content { var deleted: Int }
         return try await Deleted(deleted: count).encodeResponse(status: .ok, for: req)
     }
@@ -355,6 +511,12 @@ struct VehicleEventController: RouteCollection {
         guard count > 0 else { throw Abort(.notFound, reason: "Journey not found") }
         try await VehicleEvent.query(on: req.db)
             .filter(\.$journeyID == journeyID).delete()
+        await req.auditSecurityEvent(
+            action: "vehicle_events.delete_journey",
+            targetType: "journey",
+            targetID: journeyID,
+            metadata: ["deleted": String(count)]
+        )
         return .noContent
     }
 }

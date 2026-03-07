@@ -110,6 +110,12 @@ final class SensorPushService: ObservableObject {
             if let sc = d.stihlConnectorData {
                 store.storeMACIfNeeded(sc.macAddress, forSensorUUID: d.id, in: vehicle.id)
             }
+            // AirTag: heal macAddress to a stable name key if not yet stored.
+            // Without this, every UUID rotation (every ~15 min by Apple design) creates a new
+            // orphaned sensorID on the server, fragmenting all historical readings.
+            if (d.isAirTagDevice || d.airtagData != nil), let name = d.name, !name.isEmpty {
+                store.healAirTagMACIfNeeded(name: name, in: vehicle.id)
+            }
 
             // ── Stable push ID (MAC-based where available) ────────────────────
             let stableID: String

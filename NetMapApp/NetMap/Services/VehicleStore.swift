@@ -95,6 +95,21 @@ class VehicleStore: ObservableObject {
         saveVehicles()
     }
 
+    /// Heals the macAddress field of an AirTag sensor to a stable name key.
+    /// Called during push when the tag is detected but macAddress was never stored
+    /// (e.g. old pairing created before the hardwareKey logic, or after UUID rotation).
+    /// Without this, every CBPeripheral UUID rotation creates a new orphaned sensorID on the server.
+    func healAirTagMACIfNeeded(name: String, in vehicleID: UUID) {
+        guard !name.isEmpty,
+              let vIdx = vehicles.firstIndex(where: { $0.id == vehicleID }),
+              let sIdx = vehicles[vIdx].pairedSensors.firstIndex(where: {
+                  $0.brand == .airtag && ($0.macAddress == nil || $0.macAddress!.isEmpty)
+              })
+        else { return }
+        vehicles[vIdx].pairedSensors[sIdx].macAddress = name
+        saveVehicles()
+    }
+
     /// After an app reinstall the CBPeripheral UUID changes.
     /// When a MAC-based lookup succeeds, call this to update the stored UUID
     /// so that future scans match directly without going through the MAC fallback.

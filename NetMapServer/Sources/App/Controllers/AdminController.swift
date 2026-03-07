@@ -35,9 +35,16 @@ struct AdminController: RouteCollection {
         admin.delete("trackers", ":imei",             use: deleteTracker)  // DELETE /api/admin/trackers/:imei
         admin.delete("trackers", ":imei", "pair",     use: unpairTracker)  // DELETE /api/admin/trackers/:imei/pair
         admin.patch ("trackers", ":imei",             use: renameTracker)  // PATCH  /api/admin/trackers/:imei
+        admin.get   ("trackers", ":imei", "config",   use: getTrackerConfig)   // GET   /api/admin/trackers/:imei/config
+        admin.put   ("trackers", ":imei", "config",   use: upsertTrackerConfig) // PUT   /api/admin/trackers/:imei/config
+        admin.patch ("trackers", ":imei", "config",   use: patchTrackerConfig)  // PATCH /api/admin/trackers/:imei/config
+
+        // General sensor rename (SensorPush, AirTag, STIHL, ELA, TPMS…)
+        admin.patch ("sensors", ":sensorID",          use: renameSensor)   // PATCH  /api/admin/sensors/:sensorID
 
         // Server log stream
         admin.get("logs", use: getLogs)               // GET  /api/admin/logs?since=N
+        admin.get("security-events", use: listSecurityEvents) // GET /api/admin/security-events
     }
 
     // ─── Server Logs ──────────────────────────────────────────────────────────
@@ -45,6 +52,73 @@ struct AdminController: RouteCollection {
     struct LogLineDTO: Content {
         let index: Int
         let text: String
+    }
+
+    struct SecurityEventDTO: Content {
+        var id: String
+        var actorUserID: String?
+        var actorEmail: String?
+        var actorRole: String?
+        var action: String
+        var targetType: String?
+        var targetID: String?
+        var metadataJSON: String?
+        var ipAddress: String?
+        var createdAt: Date?
+    }
+
+    struct SecurityEventListResponse: Content {
+        var total: Int
+        var limit: Int
+        var offset: Int
+        var items: [SecurityEventDTO]
+    }
+
+    /// GET /api/admin/security-events?action=&actor_email=&target_type=&target_id=&from=&to=&limit=&offset=
+    /// Read-only audit stream endpoint. No delete route is exposed.
+    func listSecurityEvents(req: Request) async throws -> SecurityEventListResponse {
+        let rawLimit  = (try? req.query.get(Int.self, at: "limit")) ?? 100
+        let rawOffset = (try? req.query.get(Int.self, at: "offset")) ?? 0
+        let limit = min(max(rawLimit, 1), 1000)
+        let offset = max(rawOffset, 0)
+
+        var q = SecurityEvent.query(on: req.db).sort(\.$createdAt, .descending)
+        if let action = try? req.query.get(String.self, at: "action"), !action.isEmpty {
+            q = q.filter(\.$action == action)
+        }
+        if let actorEmail = try? req.query.get(String.self, at: "actor_email"), !actorEmail.isEmpty {
+            q = q.filter(\.$actorEmail == actorEmail)
+        }
+        if let targetType = try? req.query.get(String.self, at: "target_type"), !targetType.isEmpty {
+            q = q.filter(\.$targetType == targetType)
+        }
+        if let targetID = try? req.query.get(String.self, at: "target_id"), !targetID.isEmpty {
+            q = q.filter(\.$targetID == targetID)
+        }
+        if let from = parseISODate(try? req.query.get(String.self, at: "from")) {
+            q = q.filter(\.$createdAt >= from)
+        }
+        if let to = parseISODate(try? req.query.get(String.self, at: "to")) {
+            q = q.filter(\.$createdAt <= to)
+        }
+
+        let total = try await q.count()
+        let rows = try await q.range(offset..<(offset + limit)).all()
+        let items = rows.map { e in
+            SecurityEventDTO(
+                id: e.id?.uuidString ?? "",
+                actorUserID: e.actorUserID?.uuidString,
+                actorEmail: e.actorEmail,
+                actorRole: e.actorRole,
+                action: e.action,
+                targetType: e.targetType,
+                targetID: e.targetID,
+                metadataJSON: e.metadataJSON,
+                ipAddress: e.ipAddress,
+                createdAt: e.createdAt
+            )
+        }
+        return SecurityEventListResponse(total: total, limit: limit, offset: offset, items: items)
     }
 
     /// GET /api/admin/logs?since=N — returns buffered log lines newer than `since` index
@@ -70,6 +144,11 @@ struct AdminController: RouteCollection {
         }
         req.application.currentAPIKey = newKey
         req.logger.warning("API key rotated by \(req.authUser?.email ?? "unknown").")
+        await req.auditSecurityEvent(
+            action: "api_key.rotate",
+            targetType: "api_key",
+            metadata: ["actor": req.authUser?.email ?? "unknown"]
+        )
         return APIKeyResponse(apiKey: newKey)
     }
 
@@ -122,6 +201,12 @@ struct AdminController: RouteCollection {
         let user     = User(email: email, displayName: body.displayName,
                             passwordHash: try Bcrypt.hash(password), role: role)
         try await user.save(on: req.db)
+        await req.auditSecurityEvent(
+            action: "admin.user.create",
+            targetType: "user",
+            targetID: user.id?.uuidString,
+            metadata: ["email": email, "role": role]
+        )
         return NewUserResponse(id: user.id, email: email, displayName: body.displayName,
                                role: role, password: password)
     }
@@ -144,6 +229,15 @@ struct AdminController: RouteCollection {
             user.passwordHash = try Bcrypt.hash(pw)
         }
         try await user.save(on: req.db)
+        await req.auditSecurityEvent(
+            action: "admin.user.update",
+            targetType: "user",
+            targetID: user.id?.uuidString,
+            metadata: [
+                "updated_role": body.role ?? "",
+                "password_changed": (body.password?.isEmpty == false) ? "true" : "false"
+            ]
+        )
         return .ok
     }
 
@@ -160,6 +254,12 @@ struct AdminController: RouteCollection {
         try await UserAsset.query(on: req.db).filter(\.$userID == id).delete()
         try await UserToken.query(on: req.db).filter(\.$userID == id).delete()
         try await user.delete(on: req.db)
+        await req.auditSecurityEvent(
+            action: "admin.user.delete",
+            targetType: "user",
+            targetID: id.uuidString,
+            metadata: ["email": user.email, "role": user.role]
+        )
         return .noContent
     }
 
@@ -188,6 +288,11 @@ struct AdminController: RouteCollection {
         if !exists {
             try await UserAsset(userID: uid, assetID: aid).save(on: req.db)
         }
+        await req.auditSecurityEvent(
+            action: "admin.user_asset.link",
+            targetType: "user_asset",
+            targetID: "\(uid.uuidString):\(aid.uuidString)"
+        )
         return .created
     }
 
@@ -198,6 +303,11 @@ struct AdminController: RouteCollection {
         else { throw Abort(.badRequest) }
         try await UserAsset.query(on: req.db)
             .filter(\.$userID == uid).filter(\.$assetID == aid).delete()
+        await req.auditSecurityEvent(
+            action: "admin.user_asset.unlink",
+            targetType: "user_asset",
+            targetID: "\(uid.uuidString):\(aid.uuidString)"
+        )
         return .noContent
     }
 
@@ -220,6 +330,59 @@ struct AdminController: RouteCollection {
         var imei:       String
         var vehicleID:  String
         var sensorName: String?
+    }
+
+    struct TrackerConfigSystemPayload: Content {
+        var pingIntervalMin: Int
+        var sleepDelayMin: Int
+        var wakeUpSourcesEnabled: [String]
+    }
+
+    struct TrackerConfigThresholdsPayload: Content {
+        var harshBraking: Double
+        var harshAcceleration: Double
+        var harshCornering: Double
+        var overspeed: Double
+    }
+
+    struct TrackerConfigDriverBehaviorPayload: Content {
+        var thresholds: TrackerConfigThresholdsPayload
+        var minimumSpeedKmh: Int
+        var beepEnabled: Bool
+    }
+
+    struct TrackerConfigPayload: Content {
+        var schemaVersion: Int?   // read-only in responses; ignored on input (server auto-manages)
+        var imei: String
+        var updatedAt: Date?
+        var updatedBy: String?
+        var system: TrackerConfigSystemPayload
+        var driverBehavior: TrackerConfigDriverBehaviorPayload
+    }
+
+    struct TrackerConfigSystemPatchPayload: Content {
+        var pingIntervalMin: Int?
+        var sleepDelayMin: Int?
+        var wakeUpSourcesEnabled: [String]?
+    }
+
+    struct TrackerConfigThresholdsPatchPayload: Content {
+        var harshBraking: Double?
+        var harshAcceleration: Double?
+        var harshCornering: Double?
+        var overspeed: Double?
+    }
+
+    struct TrackerConfigDriverBehaviorPatchPayload: Content {
+        var thresholds: TrackerConfigThresholdsPatchPayload?
+        var minimumSpeedKmh: Int?
+        var beepEnabled: Bool?
+    }
+
+    struct TrackerConfigPatchPayload: Content {
+        var imei: String?
+        var system: TrackerConfigSystemPatchPayload?
+        var driverBehavior: TrackerConfigDriverBehaviorPatchPayload?
     }
 
     /// POST /api/admin/trackers  { imei, vehicleID, sensorName? }
@@ -255,6 +418,12 @@ struct AdminController: RouteCollection {
             try await sr.save(on: req.db)
         }
         req.logger.notice("Tracker \(imei) registered to \"\(vehicle.name)\" by \(req.authUser?.email ?? "?")")
+        await req.auditSecurityEvent(
+            action: "admin.tracker.create_or_register",
+            targetType: "tracker",
+            targetID: imei,
+            metadata: ["vehicle_id": vid.uuidString, "vehicle_name": vehicle.name]
+        )
         return .created
     }
 
@@ -266,6 +435,11 @@ struct AdminController: RouteCollection {
             .filter(\.$brand    == "tracker")
             .delete()
         req.logger.notice("Tracker \(imei) deleted by \(req.authUser?.email ?? "?")")
+        await req.auditSecurityEvent(
+            action: "admin.tracker.delete",
+            targetType: "tracker",
+            targetID: imei
+        )
         return .noContent
     }
 
@@ -337,6 +511,12 @@ struct AdminController: RouteCollection {
             WHERE imei = \(bind: imei)
             """).run()
         req.logger.notice("Tracker \(imei) paired to \"\(vehicleName)\" by \(req.authUser?.email ?? "?")")
+        await req.auditSecurityEvent(
+            action: "admin.tracker.pair",
+            targetType: "tracker",
+            targetID: imei,
+            metadata: ["vehicle_id": vehicleID, "vehicle_name": vehicleName]
+        )
         return .ok
     }
 
@@ -373,6 +553,124 @@ struct AdminController: RouteCollection {
                 """).run()
         }
         req.logger.notice("Tracker \(imei) renamed to \"\(name ?? "nil")\" by \(req.authUser?.email ?? "?")")
+        await req.auditSecurityEvent(
+            action: "admin.tracker.rename",
+            targetType: "tracker",
+            targetID: imei,
+            metadata: ["sensor_name": name ?? ""]
+        )
+        return .ok
+    }
+
+    /// GET /api/admin/trackers/:imei/config
+    func getTrackerConfig(req: Request) async throws -> TrackerConfigPayload {
+        guard let imeiRaw = req.parameters.get("imei") else {
+            throw Abort(.badRequest, reason: "imei is required")
+        }
+        let imei = imeiRaw.trimmingCharacters(in: .whitespaces)
+        guard !imei.isEmpty else { throw Abort(.badRequest, reason: "imei is required") }
+        guard try await trackerExists(imei: imei, on: req.db) else {
+            throw Abort(.notFound, reason: "Tracker not found")
+        }
+        if let cfg = try await TrackerConfig.query(on: req.db).filter(\.$imei == imei).first() {
+            return try buildTrackerConfigPayload(from: cfg)
+        }
+        return defaultTrackerConfigPayload(for: imei)
+    }
+
+    /// PUT /api/admin/trackers/:imei/config
+    func upsertTrackerConfig(req: Request) async throws -> Response {
+        guard let imeiRaw = req.parameters.get("imei") else {
+            throw Abort(.badRequest, reason: "imei is required")
+        }
+        let imei = imeiRaw.trimmingCharacters(in: .whitespaces)
+        guard !imei.isEmpty else { throw Abort(.badRequest, reason: "imei is required") }
+        guard try await trackerExists(imei: imei, on: req.db) else {
+            throw Abort(.notFound, reason: "Tracker not found")
+        }
+
+        let payload = try req.content.decode(TrackerConfigPayload.self)
+        guard payload.imei == imei else {
+            throw Abort(.badRequest, reason: "Payload imei must match URL imei")
+        }
+        try validateTrackerConfigPayload(payload)
+
+        let actor = req.authUser?.email
+        if let cfg = try await TrackerConfig.query(on: req.db).filter(\.$imei == imei).first() {
+            try applyFullTrackerConfig(payload, to: cfg, actor: actor)
+            try await cfg.save(on: req.db)
+            await req.auditSecurityEvent(
+                action: "admin.tracker.config.update",
+                targetType: "tracker",
+                targetID: imei,
+                metadata: ["schema_version": String(cfg.schemaVersion)]
+            )
+            let out = try buildTrackerConfigPayload(from: cfg)
+            return try await out.encodeResponse(status: .ok, for: req)
+        }
+
+        let cfg = TrackerConfig()
+        cfg.imei = imei
+        try applyFullTrackerConfig(payload, to: cfg, actor: actor)
+        try await cfg.save(on: req.db)
+        await req.auditSecurityEvent(
+            action: "admin.tracker.config.create",
+            targetType: "tracker",
+            targetID: imei,
+            metadata: ["schema_version": String(cfg.schemaVersion)]
+        )
+        let out = try buildTrackerConfigPayload(from: cfg)
+        return try await out.encodeResponse(status: .created, for: req)
+    }
+
+    /// PATCH /api/admin/trackers/:imei/config
+    func patchTrackerConfig(req: Request) async throws -> TrackerConfigPayload {
+        guard let imeiRaw = req.parameters.get("imei") else {
+            throw Abort(.badRequest, reason: "imei is required")
+        }
+        let imei = imeiRaw.trimmingCharacters(in: .whitespaces)
+        guard !imei.isEmpty else { throw Abort(.badRequest, reason: "imei is required") }
+        guard let cfg = try await TrackerConfig.query(on: req.db).filter(\.$imei == imei).first() else {
+            throw Abort(.notFound, reason: "Tracker config not found")
+        }
+
+        let payload = try req.content.decode(TrackerConfigPatchPayload.self)
+        if let payloadIMEI = payload.imei, payloadIMEI != imei {
+            throw Abort(.badRequest, reason: "Payload imei must match URL imei")
+        }
+
+        try applyPatchTrackerConfig(payload, to: cfg, actor: req.authUser?.email)
+        try await cfg.save(on: req.db)
+        await req.auditSecurityEvent(
+            action: "admin.tracker.config.patch",
+            targetType: "tracker",
+            targetID: imei,
+            metadata: ["schema_version": String(cfg.schemaVersion)]
+        )
+        return try buildTrackerConfigPayload(from: cfg)
+    }
+
+    /// PATCH /api/admin/sensors/:sensorID — renames any non-tracker sensor (SensorPush, AirTag, STIHL, ELA, TPMS…)
+    func renameSensor(req: Request) async throws -> HTTPStatus {
+        guard let sensorID = req.parameters.get("sensorID") else { throw Abort(.badRequest) }
+        struct Body: Content { var sensorName: String? }
+        let body = try req.content.decode(Body.self)
+        guard let sql = req.db as? SQLDatabase else {
+            throw Abort(.internalServerError, reason: "SQL not available")
+        }
+        let name = body.sensorName?.trimmingCharacters(in: .whitespaces)
+        try await sql.raw("""
+            UPDATE sensor_readings
+            SET sensor_name = \(bind: name)
+            WHERE sensor_id = \(bind: sensorID) AND brand != 'tracker'
+            """).run()
+        req.logger.notice("Sensor \(sensorID) renamed to \"\(name ?? "nil")\" by \(req.authUser?.email ?? "?")")
+        await req.auditSecurityEvent(
+            action: "admin.sensor.rename",
+            targetType: "sensor",
+            targetID: sensorID,
+            metadata: ["sensor_name": name ?? ""]
+        )
         return .ok
     }
 
@@ -394,6 +692,11 @@ struct AdminController: RouteCollection {
             WHERE imei = \(bind: imei)
             """).run()
         req.logger.notice("Tracker \(imei) unpaired by \(req.authUser?.email ?? "?")")
+        await req.auditSecurityEvent(
+            action: "admin.tracker.unpair",
+            targetType: "tracker",
+            targetID: imei
+        )
         return .noContent
     }
 
@@ -401,6 +704,242 @@ struct AdminController: RouteCollection {
 
     private func randomKey() -> String {
         (0..<24).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined()
+    }
+
+    private let allowedWakeSources: Set<String> = ["ignition", "motion", "voltage_rise", "timer"]
+
+    private func trackerExists(imei: String, on db: Database) async throws -> Bool {
+        let inReadings = try await SensorReading.query(on: db)
+            .filter(\.$sensorID == imei)
+            .filter(\.$brand == "tracker")
+            .count() > 0
+        if inReadings { return true }
+        let inVehicleEvents = try await VehicleEvent.query(on: db)
+            .filter(\.$imei == imei)
+            .count() > 0
+        if inVehicleEvents { return true }
+        let inBehavior = try await DriverBehaviorEvent.query(on: db)
+            .filter(\.$imei == imei)
+            .count() > 0
+        if inBehavior { return true }
+        return try await DeviceLifecycleEvent.query(on: db)
+            .filter(\.$imei == imei)
+            .count() > 0
+    }
+
+    private func defaultTrackerConfigPayload(for imei: String) -> TrackerConfigPayload {
+        TrackerConfigPayload(
+            schemaVersion: nil,
+            imei: imei,
+            updatedAt: nil,
+            updatedBy: nil,
+            system: TrackerConfigSystemPayload(
+                pingIntervalMin: 5,
+                sleepDelayMin: 15,
+                wakeUpSourcesEnabled: ["ignition", "motion", "voltage_rise"]
+            ),
+            driverBehavior: TrackerConfigDriverBehaviorPayload(
+                thresholds: TrackerConfigThresholdsPayload(
+                    harshBraking: 3.2,
+                    harshAcceleration: 3.0,
+                    harshCornering: 2.8,
+                    overspeed: 120
+                ),
+                minimumSpeedKmh: 20,
+                beepEnabled: true
+            )
+        )
+    }
+
+    private func buildTrackerConfigPayload(from cfg: TrackerConfig) throws -> TrackerConfigPayload {
+        let wake = try decodeWakeSources(cfg.wakeUpSourcesJSON)
+        return TrackerConfigPayload(
+            schemaVersion: cfg.schemaVersion,   // always populated in responses
+            imei: cfg.imei,
+            updatedAt: cfg.updatedAt ?? cfg.createdAt,
+            updatedBy: cfg.updatedBy,
+            system: TrackerConfigSystemPayload(
+                pingIntervalMin: cfg.pingIntervalMin,
+                sleepDelayMin: cfg.sleepDelayMin,
+                wakeUpSourcesEnabled: wake
+            ),
+            driverBehavior: TrackerConfigDriverBehaviorPayload(
+                thresholds: TrackerConfigThresholdsPayload(
+                    harshBraking: cfg.thresholdHarshBraking,
+                    harshAcceleration: cfg.thresholdHarshAcceleration,
+                    harshCornering: cfg.thresholdHarshCornering,
+                    overspeed: cfg.thresholdOverspeedKmh
+                ),
+                minimumSpeedKmh: cfg.minimumSpeedKmh,
+                beepEnabled: cfg.beepEnabled
+            )
+        )
+    }
+
+    private func decodeWakeSources(_ json: String) throws -> [String] {
+        guard let data = json.data(using: .utf8),
+              let arr = try? JSONDecoder().decode([String].self, from: data) else {
+            throw Abort(.internalServerError, reason: "Invalid stored tracker config")
+        }
+        return arr
+    }
+
+    private func validateWakeSources(_ values: [String]) throws {
+        guard !values.isEmpty else {
+            throw Abort(.badRequest, reason: "system.wakeUpSourcesEnabled cannot be empty")
+        }
+        var seen = Set<String>()
+        for source in values {
+            guard allowedWakeSources.contains(source) else {
+                throw Abort(.badRequest, reason: "Invalid wake-up source: \(source)")
+            }
+            guard seen.insert(source).inserted else {
+                throw Abort(.badRequest, reason: "Duplicate wake-up source: \(source)")
+            }
+        }
+    }
+
+    private func validateTrackerConfigPayload(_ payload: TrackerConfigPayload) throws {
+        try validateSystem(
+            pingIntervalMin: payload.system.pingIntervalMin,
+            sleepDelayMin: payload.system.sleepDelayMin,
+            wakeSources: payload.system.wakeUpSourcesEnabled
+        )
+        try validateDriverBehavior(
+            harshBraking: payload.driverBehavior.thresholds.harshBraking,
+            harshAcceleration: payload.driverBehavior.thresholds.harshAcceleration,
+            harshCornering: payload.driverBehavior.thresholds.harshCornering,
+            overspeed: payload.driverBehavior.thresholds.overspeed,
+            minimumSpeedKmh: payload.driverBehavior.minimumSpeedKmh
+        )
+    }
+
+    private func validateSystem(pingIntervalMin: Int, sleepDelayMin: Int, wakeSources: [String]) throws {
+        guard (1...1440).contains(pingIntervalMin) else {
+            throw Abort(.badRequest, reason: "system.pingIntervalMin must be between 1 and 1440")
+        }
+        guard (1...10080).contains(sleepDelayMin) else {
+            throw Abort(.badRequest, reason: "system.sleepDelayMin must be between 1 and 10080")
+        }
+        try validateWakeSources(wakeSources)
+    }
+
+    private func validateDriverBehavior(
+        harshBraking: Double,
+        harshAcceleration: Double,
+        harshCornering: Double,
+        overspeed: Double,
+        minimumSpeedKmh: Int
+    ) throws {
+        guard harshBraking > 0 else {
+            throw Abort(.badRequest, reason: "driverBehavior.thresholds.harshBraking must be > 0")
+        }
+        guard harshAcceleration > 0 else {
+            throw Abort(.badRequest, reason: "driverBehavior.thresholds.harshAcceleration must be > 0")
+        }
+        guard harshCornering > 0 else {
+            throw Abort(.badRequest, reason: "driverBehavior.thresholds.harshCornering must be > 0")
+        }
+        guard overspeed >= 1, overspeed <= 300 else {
+            throw Abort(.badRequest, reason: "driverBehavior.thresholds.overspeed must be between 1 and 300")
+        }
+        guard (0...250).contains(minimumSpeedKmh) else {
+            throw Abort(.badRequest, reason: "driverBehavior.minimumSpeedKmh must be between 0 and 250")
+        }
+    }
+
+    private func applyFullTrackerConfig(_ payload: TrackerConfigPayload, to cfg: TrackerConfig, actor: String?) throws {
+        let newWakeJSON = try encodeWakeSources(payload.system.wakeUpSourcesEnabled)
+        let oldWakeSorted = (try? decodeWakeSources(cfg.wakeUpSourcesJSON))?.sorted() ?? []
+        let newWakeSorted = payload.system.wakeUpSourcesEnabled.sorted()
+        let changed = cfg.pingIntervalMin != payload.system.pingIntervalMin
+            || cfg.sleepDelayMin != payload.system.sleepDelayMin
+            || oldWakeSorted != newWakeSorted
+            || cfg.thresholdHarshBraking != payload.driverBehavior.thresholds.harshBraking
+            || cfg.thresholdHarshAcceleration != payload.driverBehavior.thresholds.harshAcceleration
+            || cfg.thresholdHarshCornering != payload.driverBehavior.thresholds.harshCornering
+            || cfg.thresholdOverspeedKmh != payload.driverBehavior.thresholds.overspeed
+            || cfg.minimumSpeedKmh != payload.driverBehavior.minimumSpeedKmh
+            || cfg.beepEnabled != payload.driverBehavior.beepEnabled
+        cfg.imei = payload.imei
+        cfg.pingIntervalMin = payload.system.pingIntervalMin
+        cfg.sleepDelayMin = payload.system.sleepDelayMin
+        cfg.wakeUpSourcesJSON = newWakeJSON
+        cfg.thresholdHarshBraking = payload.driverBehavior.thresholds.harshBraking
+        cfg.thresholdHarshAcceleration = payload.driverBehavior.thresholds.harshAcceleration
+        cfg.thresholdHarshCornering = payload.driverBehavior.thresholds.harshCornering
+        cfg.thresholdOverspeedKmh = payload.driverBehavior.thresholds.overspeed
+        cfg.minimumSpeedKmh = payload.driverBehavior.minimumSpeedKmh
+        cfg.beepEnabled = payload.driverBehavior.beepEnabled
+        cfg.updatedBy = actor ?? payload.updatedBy
+        if changed { cfg.schemaVersion += 1 }
+    }
+
+    private func applyPatchTrackerConfig(_ patch: TrackerConfigPatchPayload, to cfg: TrackerConfig, actor: String?) throws {
+        // Snapshot to detect changes
+        let snapPing = cfg.pingIntervalMin; let snapSleep = cfg.sleepDelayMin
+        let snapWake = cfg.wakeUpSourcesJSON; let snapBraking = cfg.thresholdHarshBraking
+        let snapAccel = cfg.thresholdHarshAcceleration; let snapCornering = cfg.thresholdHarshCornering
+        let snapOverspeed = cfg.thresholdOverspeedKmh; let snapMinSpeed = cfg.minimumSpeedKmh
+        let snapBeep = cfg.beepEnabled
+
+        if let system = patch.system {
+            let newPing = system.pingIntervalMin ?? cfg.pingIntervalMin
+            let newSleep = system.sleepDelayMin ?? cfg.sleepDelayMin
+            let currentWake = try decodeWakeSources(cfg.wakeUpSourcesJSON)
+            let newWake = system.wakeUpSourcesEnabled ?? currentWake
+            try validateSystem(pingIntervalMin: newPing, sleepDelayMin: newSleep, wakeSources: newWake)
+            cfg.pingIntervalMin = newPing
+            cfg.sleepDelayMin = newSleep
+            cfg.wakeUpSourcesJSON = try encodeWakeSources(newWake)
+        }
+        if let behavior = patch.driverBehavior {
+            let current = TrackerConfigThresholdsPayload(
+                harshBraking: cfg.thresholdHarshBraking,
+                harshAcceleration: cfg.thresholdHarshAcceleration,
+                harshCornering: cfg.thresholdHarshCornering,
+                overspeed: cfg.thresholdOverspeedKmh
+            )
+            let t = behavior.thresholds
+            let newHarshBraking = t?.harshBraking ?? current.harshBraking
+            let newHarshAcceleration = t?.harshAcceleration ?? current.harshAcceleration
+            let newHarshCornering = t?.harshCornering ?? current.harshCornering
+            let newOverspeed = t?.overspeed ?? current.overspeed
+            let newMinSpeed = behavior.minimumSpeedKmh ?? cfg.minimumSpeedKmh
+            try validateDriverBehavior(
+                harshBraking: newHarshBraking,
+                harshAcceleration: newHarshAcceleration,
+                harshCornering: newHarshCornering,
+                overspeed: newOverspeed,
+                minimumSpeedKmh: newMinSpeed
+            )
+            cfg.thresholdHarshBraking = newHarshBraking
+            cfg.thresholdHarshAcceleration = newHarshAcceleration
+            cfg.thresholdHarshCornering = newHarshCornering
+            cfg.thresholdOverspeedKmh = newOverspeed
+            cfg.minimumSpeedKmh = newMinSpeed
+            if let beep = behavior.beepEnabled { cfg.beepEnabled = beep }
+        }
+        cfg.updatedBy = actor ?? cfg.updatedBy
+
+        // Auto-increment version if anything changed
+        let oldWakeSorted = (try? decodeWakeSources(snapWake))?.sorted() ?? []
+        let newWakeSorted = (try? decodeWakeSources(cfg.wakeUpSourcesJSON))?.sorted() ?? []
+        let changed = snapPing != cfg.pingIntervalMin || snapSleep != cfg.sleepDelayMin
+            || oldWakeSorted != newWakeSorted
+            || snapBraking != cfg.thresholdHarshBraking || snapAccel != cfg.thresholdHarshAcceleration
+            || snapCornering != cfg.thresholdHarshCornering || snapOverspeed != cfg.thresholdOverspeedKmh
+            || snapMinSpeed != cfg.minimumSpeedKmh || snapBeep != cfg.beepEnabled
+        if changed { cfg.schemaVersion += 1 }
+    }
+
+    private func encodeWakeSources(_ values: [String]) throws -> String {
+        try validateWakeSources(values)
+        let data = try JSONEncoder().encode(values)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw Abort(.internalServerError, reason: "Failed to encode wake-up sources")
+        }
+        return json
     }
 
     private func readablePassword() -> String {
@@ -411,6 +950,14 @@ struct AdminController: RouteCollection {
             "\(upper.randomElement()!)\(lower.randomElement()!)\(digits.randomElement()!)"
         }
         return "\(group())-\(group())-\(group())-\(group())"
+    }
+
+    private func parseISODate(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let basic = ISO8601DateFormatter()
+        return iso.date(from: raw) ?? basic.date(from: raw) ?? Double(raw).map { Date(timeIntervalSince1970: $0) }
     }
 }
 

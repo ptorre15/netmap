@@ -135,10 +135,12 @@ struct DriverBehaviorController: RouteCollection {
 
     func boot(routes: RoutesBuilder) throws {
         let base = routes.grouped("api", "driver-behavior")
-        base.get(use: list)                        // GET /api/driver-behavior?journey=&vehicle=&imei=&alert_type=&limit=
-        base.get("summary", use: summary)          // GET /api/driver-behavior/summary?journey=
-        base.delete(use: deletePeriod)             // DELETE /api/driver-behavior?imei=&from=ISO8601&to=ISO8601
-        base.delete(":id", use: deleteOne)         // DELETE /api/driver-behavior/:id
+        let protectedRead = base.grouped(APIKeyOrBearerMiddleware())
+        let protectedDelete = base.grouped(APIKeyOrAdminMiddleware())
+        protectedRead.get(use: list)                       // GET /api/driver-behavior?journey=&vehicle=&imei=&alert_type=&limit=
+        protectedRead.get("summary", use: summary)         // GET /api/driver-behavior/summary?journey=
+        protectedDelete.delete(use: deletePeriod)          // DELETE /api/driver-behavior?imei=&from=ISO8601&to=ISO8601
+        protectedDelete.delete(":id", use: deleteOne)      // DELETE /api/driver-behavior/:id
     }
 
     // MARK: DELETE /api/driver-behavior?imei=&from=ISO8601&to=ISO8601
@@ -179,6 +181,12 @@ struct DriverBehaviorController: RouteCollection {
             """).run()
 
         req.logger.notice("Deleted \(count) driver_behavior_events for IMEI \(imei) from \(fromStr) to \(toStr)")
+        await req.auditSecurityEvent(
+            action: "driver_behavior.delete_period",
+            targetType: "driver_behavior_event",
+            targetID: imei,
+            metadata: ["from": fromStr, "to": toStr, "deleted": String(count)]
+        )
         struct Deleted: Content { var deleted: Int }
         return try await Deleted(deleted: count).encodeResponse(status: .ok, for: req)
     }
@@ -193,6 +201,12 @@ struct DriverBehaviorController: RouteCollection {
             throw Abort(.notFound)
         }
         try await event.delete(on: req.db)
+        await req.auditSecurityEvent(
+            action: "driver_behavior.delete_one",
+            targetType: "driver_behavior_event",
+            targetID: uuid.uuidString,
+            metadata: ["imei": event.imei, "journey_id": event.journeyID]
+        )
         return .noContent
     }
 
@@ -200,6 +214,14 @@ struct DriverBehaviorController: RouteCollection {
     func list(req: Request) async throws -> [DriverBehaviorEventResponse] {
         let limit = (try? req.query.get(Int.self, at: "limit")) ?? 500
         var q = DriverBehaviorEvent.query(on: req.db).sort(\.$timestamp, .ascending)
+        if let auth = req.authUser, !auth.isAdmin {
+            let allowedVehicleIDs = try await UserAsset.query(on: req.db)
+                .filter(\.$userID == auth.userID)
+                .all()
+                .map { $0.assetID.uuidString }
+            if allowedVehicleIDs.isEmpty { return [] }
+            q = q.filter(\.$vehicleID ~~ allowedVehicleIDs)
+        }
         if let j = try? req.query.get(String.self, at: "journey")    { q = q.filter(\.$journeyID == j) }
         if let v = try? req.query.get(String.self, at: "vehicle")    { q = q.filter(\.$vehicleID == v) }
         if let i = try? req.query.get(String.self, at: "imei")       { q = q.filter(\.$imei == i) }
@@ -228,6 +250,18 @@ struct DriverBehaviorController: RouteCollection {
     func summary(req: Request) async throws -> DriverBehaviorSummary {
         let journeyID = (try? req.query.get(String.self, at: "journey")) ?? ""
         var q = DriverBehaviorEvent.query(on: req.db)
+        if let auth = req.authUser, !auth.isAdmin {
+            let allowedVehicleIDs = try await UserAsset.query(on: req.db)
+                .filter(\.$userID == auth.userID)
+                .all()
+                .map { $0.assetID.uuidString }
+            if allowedVehicleIDs.isEmpty {
+                return DriverBehaviorSummary(
+                    journeyID: journeyID, vehicleID: "", vehicleName: "", totalAlerts: 0, byType: [:]
+                )
+            }
+            q = q.filter(\.$vehicleID ~~ allowedVehicleIDs)
+        }
         if !journeyID.isEmpty { q = q.filter(\.$journeyID == journeyID) }
         if let v = try? req.query.get(String.self, at: "vehicle") { q = q.filter(\.$vehicleID == v) }
         let rows = try await q.all()

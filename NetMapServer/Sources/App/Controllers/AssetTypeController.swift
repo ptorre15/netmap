@@ -7,7 +7,7 @@ struct AssetTypeController: RouteCollection {
         let api   = routes.grouped("api", "asset-types")
         let admin = api.grouped(BearerAuthMiddleware(), AdminMiddleware())
 
-        api.get(use: list)                          // GET  /api/asset-types
+        api.grouped(APIKeyOrBearerMiddleware()).get(use: list) // GET  /api/asset-types
         admin.post(use: create)                     // POST /api/asset-types  (admin)
         admin.patch(":typeID", use: update)         // PATCH /api/asset-types/:id  (admin)
         admin.delete(":typeID", use: delete)        // DELETE /api/asset-types/:id (admin, non-built-in)

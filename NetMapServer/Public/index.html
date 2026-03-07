@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap">
-  <link rel="stylesheet" href="style.css?v=65">
+  <link rel="stylesheet" href="style.css?v=75">
 </head>
 <body>
 
@@ -287,6 +287,7 @@
     <button class="admin-tab-btn" data-tab="users"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/></svg> Users<span class="admin-tab-count" id="admin-count-users"></span></button>
     <button class="admin-tab-btn" data-tab="assets"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12l0 9"/><path d="M12 12l-8 -4.5"/><path d="M16 5.25l-8 4.5"/></svg> Assets<span class="admin-tab-count" id="admin-count-assets"></span></button>
     <button class="admin-tab-btn" data-tab="trackers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 18l0 -3"/><path d="M10 18l0 -6"/><path d="M14 18l0 -9"/><path d="M18 18l0 -12"/></svg> Trackers<span class="admin-tab-count" id="admin-count-trackers"></span></button>
+    <button class="admin-tab-btn" data-tab="security"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l7 4v6c0 5 -3.5 8.5 -7 10c-3.5 -1.5 -7 -5 -7 -10v-6l7 -4"/><path d="M9 12l2 2l4 -4"/></svg> Security<span class="admin-tab-count" id="admin-count-security"></span></button>
   </div>
   <!-- Users tab -->
   <div class="admin-tab-pane" id="admin-tab-users">
@@ -316,6 +317,21 @@
       <span id="nt-error" class="auth-error" style="display:none"></span>
     </div>
     <div id="admin-trackers-list" class="admin-trackers-list"></div>
+  </div>
+  <!-- Security audit tab -->
+  <div class="admin-tab-pane" id="admin-tab-security">
+    <div class="admin-tab-toolbar admin-security-toolbar">
+      <input type="text" id="sec-filter-action" placeholder="Action (e.g. admin.user.delete)" autocomplete="off">
+      <input type="text" id="sec-filter-actor" placeholder="Actor email" autocomplete="off">
+      <button id="sec-filter-apply" class="modal-btn-primary admin-small-btn">Filter</button>
+      <button id="sec-filter-clear" class="modal-btn admin-small-btn">Clear</button>
+    </div>
+    <div id="admin-security-list" class="admin-security-list"></div>
+    <div class="admin-security-pager">
+      <button id="sec-prev-btn" class="modal-btn admin-small-btn">Prev</button>
+      <span id="sec-page-label">Page 1</span>
+      <button id="sec-next-btn" class="modal-btn admin-small-btn">Next</button>
+    </div>
   </div>
 </div>
 
@@ -349,6 +365,19 @@
 
 <!-- Toast notifications -->
 <div id="toast-container"></div>
+
+<!-- Tracker config modal -->
+<div id="tracker-config-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Tracker Configuration</h3>
+      <button class="modal-close" id="tracker-config-modal-close">&#x2715;</button>
+    </div>
+    <div id="tracker-config-modal-body" style="padding:20px 22px">
+      <p style="color:var(--fg3);font-size:12px">Loading&hellip;</p>
+    </div>
+  </div>
+</div>
 
 <!-- Delete confirmation modal -->
 <div id="del-modal">
@@ -393,6 +422,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="app.js?v=97"></script>
+<script src="app.js?v=108"></script>
 </body>
 </html>

@@ -38,6 +38,9 @@ struct VehicleEventPayload: Content {
     var resetReason:        String?         // boot: "POWERON" | "PANIC" | …
     var wakeupSource:       String?         // wake_up: "VOLTAGE_RISE" | "CAN_ACTIVITY" | …
     var batteryVoltageV:    Double?         // sleep / wake_up: battery voltage in volts
+
+    // ── Config acknowledgment ──────────────────────────────────────────────
+    var configVersion:      Int?            // schemaVersion the tracker currently has applied; nil = never received config
 }
 
 // MARK: - Fluent Model
