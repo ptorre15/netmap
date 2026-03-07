@@ -346,13 +346,11 @@ const D = {
   livePill:     $('live-pill'),
   liveLabel:    $('live-label'),
   breadcrumb:   $('breadcrumb'),
-  statCount:    $('stat-count'),
-  statCountVal: $('stat-count-val'),
+
   statMin:      $('stat-min'),
   statAvg:      $('stat-avg'),
   statMax:      $('stat-max'),
-  statLast:     $('stat-last'),
-  statLastVal:  $('stat-last-val'),
+
   statMinLbl:   $('stat-min')?.closest('.stat-cell')?.querySelector('.stat-label'),
   statAvgLbl:   $('stat-avg')?.closest('.stat-cell')?.querySelector('.stat-label'),
   statMaxLbl:   $('stat-max')?.closest('.stat-cell')?.querySelector('.stat-label'),
@@ -936,8 +934,6 @@ function showStatCells(show) {
 function renderStats() {
   document.querySelectorAll('.stat-cell').forEach(c => { c.className = 'stat-cell'; });
   showStatCells(false);
-  if (D.statCount) D.statCount.style.display = 'none';
-  if (D.statLast)  D.statLast.style.display  = 'none';
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
 
   if (isTpms(sensor)) {
@@ -956,21 +952,7 @@ function renderStats() {
       if (D.statAvg) D.statAvg.closest('.stat-cell').classList.add(pStatus(avgP, target));
       if (D.statMax) D.statMax.closest('.stat-cell').classList.add(pStatus(maxP, target));
     }
-    if (S.records.length && D.statCountVal) {
-      D.statCountVal.textContent = S.records.length.toLocaleString();
-      D.statLastVal.textContent  = fmtDT(S.records.at(-1).timestamp);
-      D.statCount.style.display  = '';
-      D.statLast.style.display   = '';
-    }
     return;
-  }
-
-  // All other sensor types: show count + last reading only
-  if (S.records.length && D.statCountVal) {
-    D.statCountVal.textContent = S.records.length.toLocaleString();
-    D.statLastVal.textContent  = fmtDT(S.records.at(-1).timestamp);
-    D.statCount.style.display  = '';
-    D.statLast.style.display   = '';
   }
 }
 
@@ -1237,6 +1219,22 @@ function renderChartTpms(sensor) {
     ticks: { color: '#8A8D9E', font: { size: 11 } },
     grid:  { color: 'rgba(0,32,91,0.07)' },
   };
+
+  // Annotation: vertical lines at pressure-threshold transitions (ok → warn/danger)
+  const annotations = {};
+  let _prevSt = null;
+  recs.forEach((r, i) => {
+    const st = pStatus(r.pressureBar, target);
+    if ((st === 'warn' || st === 'danger') && st !== _prevSt) {
+      annotations[`thr_${i}`] = {
+        type: 'line', scaleID: 'x', value: labels[i],
+        borderColor: st === 'danger' ? 'rgba(192,57,43,0.55)' : 'rgba(184,98,0,0.55)',
+        borderWidth: 1.5, borderDash: [4, 3],
+      };
+    }
+    _prevSt = st;
+  });
+
   S.pChart = new Chart(D.presCanvas, {
     type: 'line', data: { labels, datasets: pDatasets },
     options: {
@@ -1246,11 +1244,14 @@ function renderChartTpms(sensor) {
         legend: { display: target != null, labels: { color: '#4A4D5E', font: { size: 11 } } },
         tooltip: { callbacks: { label: ctx => ctx.datasetIndex === 0
           ? ` ${ctx.raw?.toFixed(3) ?? '\u2013'} bar`
-          : ` ${ctx.raw?.toFixed(2)} bar (target)` } }
+          : ` ${ctx.raw?.toFixed(2)} bar (target)` } },
+        annotation: { annotations },
       },
       scales: {
         x: { type: 'time', time: { unit: guessTimeUnit(recs) }, ...scaleCommon, ticks: { ...scaleCommon.ticks, maxTicksLimit: 6 } },
-        y: { min: yMin, max: yMax, ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v.toFixed(2) + ' bar' } },
+        y: { min: yMin, max: yMax,
+          title: { display: true, text: 'bar', color: '#8A8D9E', font: { size: 10 } },
+          ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v.toFixed(2) + ' bar' } },
       }
     }
   });
@@ -1270,7 +1271,8 @@ function renderChartTpms(sensor) {
         plugins: { legend: { display: false } },
         scales: {
           x: { type: 'time', time: { unit: guessTimeUnit(recs) }, ...scaleCommon, ticks: { ...scaleCommon.ticks, maxTicksLimit: 6 } },
-          y: { ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v.toFixed(0) + '\u00b0C' } },
+          y: { title: { display: true, text: '\u00b0C', color: '#8A8D9E', font: { size: 10 } },
+            ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v.toFixed(0) + '\u00b0C' } },
         }
       }
     });
@@ -1316,7 +1318,9 @@ function renderChartBatteryTemp(sensor) {
         },
         scales: {
           x: { type: 'time', time: { unit: guessTimeUnit(recs) }, ...scaleCommon, ticks: { ...scaleCommon.ticks, maxTicksLimit: 6 } },
-          y: { min: 0, max: 100, ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v + '%' } },
+          y: { min: 0, max: 100,
+            title: { display: true, text: '%', color: '#8A8D9E', font: { size: 10 } },
+            ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v + '%' } },
         }
       }
     });
@@ -1338,7 +1342,8 @@ function renderChartBatteryTemp(sensor) {
         },
         scales: {
           x: { type: 'time', time: { unit: guessTimeUnit(recs) }, ...scaleCommon, ticks: { ...scaleCommon.ticks, maxTicksLimit: 6 } },
-          y: { ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v.toFixed(0) + '\u00b0C' } },
+          y: { title: { display: true, text: '\u00b0C', color: '#8A8D9E', font: { size: 10 } },
+            ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v.toFixed(0) + '\u00b0C' } },
         }
       }
     });
@@ -1359,7 +1364,8 @@ function renderChartBatteryTemp(sensor) {
         plugins: { legend: { display: false } },
         scales: {
           x: { type: 'time', time: { unit: guessTimeUnit(recs) }, ...scaleCommon, ticks: { ...scaleCommon.ticks, maxTicksLimit: 6 } },
-          y: { ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v.toFixed(0) + '\u00b0C' } },
+          y: { title: { display: true, text: '\u00b0C', color: '#8A8D9E', font: { size: 10 } },
+            ...scaleCommon, ticks: { ...scaleCommon.ticks, callback: v => v.toFixed(0) + '\u00b0C' } },
         }
       }
     });
@@ -2798,6 +2804,8 @@ Share this with the user — it is only shown once.`);
     pushHash();
   });
 
+  $('export-csv-btn')?.addEventListener('click', exportCSV);
+
   $('refresh-btn').addEventListener('click', refresh);
   $('autorefresh-btn').addEventListener('click', () => setAutoRefresh(!S.autoRefresh));
 
@@ -3406,6 +3414,23 @@ function closeAssetsPanel()  {}
 function openTrackersPanel() { openAdminPanel('trackers'); }
 function closeTrackersPanel(){}
 
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+function exportCSV() {
+  const sensor = S.sensors.find(s => s.sensorID === S.selected);
+  if (!S.records.length) return;
+  const name = (sensor?.sensorName ?? sensor?.sensorID ?? 'export').replace(/[^\w-]/g, '_');
+  const header = ['timestamp', 'pressureBar', 'temperatureC', 'batteryPct', 'wheelPosition'];
+  const rows = S.records.map(r => [
+    r.timestamp, r.pressureBar ?? '', r.temperatureC ?? '', r.batteryPct ?? '', r.wheelPosition ?? '',
+  ]);
+  const csv = [header, ...rows].map(r => r.join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    download: `netmap-${name}.csv`,
+    href: 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv),
+  });
+  a.click();
+}
+
 // ─── Log viewer ───────────────────────────────────────────────────────────────
 let _logsInterval  = null;
 let _logsLastIndex = 0;
@@ -3579,21 +3604,12 @@ async function renderStatsPanel() {
     </div>`;
   }
 
-  // ── Sparkline bar chart ──
-  function barChart(title, data, color) {
+  // ── Sparkline bar chart (Chart.js) ──
+  function barChart(title, data, canvasId) {
     if (!data.length) return `<div class="stats-chart-box"><div class="stats-chart-title">${title}</div><div style="color:var(--fg3);font-size:12px;padding:8px 0">No data</div></div>`;
-    const max = Math.max(...data.map(d => d.count), 1);
-    const bars = data.map(d => {
-      const h = Math.max(2, Math.round((d.count / max) * 52));
-      const day = d.date.slice(5); // MM-DD
-      return `<div class="stats-bar-col" title="${d.date}: ${d.count}">
-        <div class="stats-bar" style="height:${h}px;background:${color}"></div>
-        <div class="stats-bar-label">${day}</div>
-      </div>`;
-    }).join('');
     return `<div class="stats-chart-box">
       <div class="stats-chart-title">${title} <span class="stats-chart-range">(last 30 days)</span></div>
-      <div class="stats-bar-chart">${bars}</div>
+      <div style="position:relative;height:80px"><canvas id="${canvasId}"></canvas></div>
     </div>`;
   }
 
@@ -3642,9 +3658,9 @@ async function renderStatsPanel() {
       ${kpiCard('Users', fmtN(s.totalUsers), '')}
     </div>
     <div class="stats-charts-row">
-      ${barChart('Sensor readings / day', s.readingsPerDay, '#60a5fa')}
-      ${barChart('Tracker events / day', s.vehicleEventsPerDay, '#34d399')}
-      ${barChart('Lifecycle events / day', s.lifecyclePerDay, '#a78bfa')}
+      ${barChart('Sensor readings / day', s.readingsPerDay, 'stats-canvas-readings')}
+      ${barChart('Tracker events / day', s.vehicleEventsPerDay, 'stats-canvas-events')}
+      ${barChart('Lifecycle events / day', s.lifecyclePerDay, 'stats-canvas-lifecycle')}
     </div>
     <div class="stats-charts-row">
       ${breakdownChart('Tracker event types (all time)', s.vehicleEventsByType)}

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap">
-  <link rel="stylesheet" href="style.css?v=77">
+  <link rel="stylesheet" href="style.css?v=78">
 </head>
 <body>
 
@@ -213,14 +213,6 @@
 
     <!-- Stats bar -->
     <div id="stats-bar">
-      <div id="stat-count" class="stat-cell" style="display:none">
-        <div class="stat-label">Records</div>
-        <div class="stat-value" id="stat-count-val">–</div>
-      </div>
-      <div id="stat-last" class="stat-cell" style="display:none">
-        <div class="stat-label">Last reading</div>
-        <div class="stat-value stat-value-sm" id="stat-last-val">–</div>
-      </div>
       <div class="stat-cell"><div class="stat-label">Min</div>    <div class="stat-value" id="stat-min">–</div></div>
       <div class="stat-cell"><div class="stat-label">Avg</div>    <div class="stat-value" id="stat-avg">–</div></div>
       <div class="stat-cell"><div class="stat-label">Max</div>    <div class="stat-value" id="stat-max">–</div></div>
@@ -248,21 +240,26 @@
 
     <!-- Table view -->
     <div id="table-container" style="display:none">
-      <table id="data-table">
-        <thead id="table-head">
-          <tr>
-            <th>Time</th>
-            <th>Pressure</th>
-            <th>Status</th>
-            <th>Target</th>
-            <th>Temp</th>
-            <th>Battery</th>
-            <th>Wheel</th>
-            <th>GPS</th>
-          </tr>
-        </thead>
-        <tbody id="table-body"></tbody>
-      </table>
+      <div class="table-toolbar">
+        <button id="export-csv-btn" class="modal-btn admin-small-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4l0 12"/></svg> Export CSV</button>
+      </div>
+      <div class="table-scroll">
+        <table id="data-table">
+          <thead id="table-head">
+            <tr>
+              <th>Time</th>
+              <th>Pressure</th>
+              <th>Status</th>
+              <th>Target</th>
+              <th>Temp</th>
+              <th>Battery</th>
+              <th>Wheel</th>
+              <th>GPS</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Alerts view -->
@@ -471,6 +468,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="app.js?v=126"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3/dist/chartjs-plugin-annotation.min.js"></script>
+<script src="app.js?v=127"></script>
 </body>
 </html>
