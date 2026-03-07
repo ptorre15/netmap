@@ -161,8 +161,40 @@ body {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
   overflow: hidden;
+  position: relative;
   /* Explicit height so nested flex/grid children can be height-bounded */
   height: calc(100vh - var(--header-h));
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Sidebar toggle button
+   ═══════════════════════════════════════════════════════════════ */
+.sidebar-toggle-btn {
+  position: absolute;
+  left: calc(var(--sidebar-w) - 12px);
+  top: 20px;
+  width: 24px; height: 24px;
+  background: var(--bg2);
+  border: 1px solid var(--sep);
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--fg3);
+  padding: 0;
+  box-shadow: var(--shadow);
+  transition: background var(--trans), color var(--trans), box-shadow var(--trans), left .25s cubic-bezier(.4,0,.2,1);
+}
+.sidebar-toggle-btn:hover {
+  background: var(--bg3); color: var(--fg); box-shadow: var(--shadow-md);
+}
+/* Rotates the chevron to point right when sidebar is collapsed */
+#main.sidebar-collapsed .sidebar-toggle-btn svg {
+  transform: rotate(180deg);
+}
+/* Collapsed: shrink the grid column via the CSS variable */
+#main.sidebar-collapsed {
+  --sidebar-w: 44px;
 }
 
 /* ═══════════════════════════════════════════════════════════════

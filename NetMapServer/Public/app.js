@@ -374,6 +374,39 @@ const D = {
   content:      $('content'),
 };
 
+// ─── URL hash state (Phase 2.1) ─────────────────────────────────────────────
+function pushHash() {
+  const parts = [
+    S.vehicleFilter ?? '',
+    S.selected      ?? '',
+    S.mode          ?? 'chart',
+    S.period        ?? '24H',
+  ].map(encodeURIComponent);
+  history.replaceState(null, '', '#' + parts.join('/'));
+}
+
+function restoreFromHash() {
+  const hash = location.hash.slice(1);
+  if (!hash) return false;
+  const parts = hash.split('/').map(p => { try { return decodeURIComponent(p); } catch { return p; } });
+  const [vid, sid, mode, period] = parts;
+  let restored = false;
+  if (vid) { S.vehicleFilter = vid; restored = true; }
+  if (sid) { S.selected = sid; restored = true; }
+  const validModes   = ['chart','map','table','alerts','device','wheels','errors'];
+  const validPeriods = ['1H','24H','7D','30D','custom'];
+  if (mode   && validModes.includes(mode))     S.mode   = mode;
+  if (period && validPeriods.includes(period)) S.period = period;
+  return restored;
+}
+
+function syncPeriodUI() {
+  document.querySelectorAll('.period-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.period === S.period)
+  );
+  D.customRange.style.display = S.period === 'custom' ? 'flex' : 'none';
+}
+
 // ─── Time helpers ─────────────────────────────────────────────────────────────
 function getRange() {
   const now = new Date();
@@ -1524,55 +1557,12 @@ async function renderTrackerMap(sensor) {
   panel.id = 'journey-list-panel';
   const trackerDisplayName = sensor.sensorName || sensor.vehicleName || 'GPS Tracker';
   const isAdmin = !!AUTH.username;   // any logged-in user; server APIs enforce admin-only
-  const adminBarHtml = isAdmin
-    ? `<div class="jlp-admin-bar"><button class="jlp-rename-btn">&#x270F;&#xFE0E; Rename</button></div>` : '';
   panel.innerHTML =
     `<div class="jlp-header">`+
     `<span class="jlp-header-title">Journeys</span>`+
-    `<form class="jlp-rename-form" style="display:none">`+
-    `<input class="jlp-rename-input" type="text" value="${escAttr(trackerDisplayName)}" placeholder="Tracker name\u2026">`+
-    `<button type="submit" class="modal-btn-primary admin-small-btn">Save</button>`+
-    `<button type="button" class="modal-btn admin-small-btn jlp-rename-cancel">Cancel</button>`+
-    `</form>`+
     `</div>`+
-    adminBarHtml+
     `<div class="jlp-body"><div class="jlp-loading">Loading\u2026</div></div>`;
   wrapper.appendChild(panel);
-
-  // ── Inline tracker rename ────────────────────────────────────────────────
-  if (isAdmin) {
-    const renameBtn    = panel.querySelector('.jlp-rename-btn');
-    const renameForm   = panel.querySelector('.jlp-rename-form');
-    const renameInput  = panel.querySelector('.jlp-rename-input');
-    const renameCancel = panel.querySelector('.jlp-rename-cancel');
-    const headerTitle  = panel.querySelector('.jlp-header-title');
-
-    renameBtn.addEventListener('click', () => {
-      renameBtn.style.display    = 'none';
-      headerTitle.style.display  = 'none';
-      renameForm.style.display   = 'flex';
-      renameInput.select();
-    });
-    renameCancel.addEventListener('click', () => {
-      renameForm.style.display   = 'none';
-      headerTitle.style.display  = '';
-      renameBtn.style.display    = '';
-    });
-    renameForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const newName = renameInput.value.trim();
-      if (!newName) return;
-      try {
-        await adminUpdateTracker(sensor.sensorID, newName);
-        headerTitle.textContent    = newName;
-        sensor.sensorName          = newName;   // update in-memory
-        renameForm.style.display   = 'none';
-        headerTitle.style.display  = '';
-        renameBtn.style.display    = '';
-        await loadSensors(); renderBreadcrumb(); renderSensorInfoCard();
-      } catch (err) { alert(err.message); }
-    });
-  }
 
   if (S.leafletMap) { S.leafletMap.remove(); S.leafletMap = null; }
   const defaultLL = sensor.latestLatitude != null ? [sensor.latestLatitude, sensor.latestLongitude] : [48.8566, 2.3522];
@@ -2573,6 +2563,7 @@ async function selectSensor(sensorID) {
   if (!sensorID) return;
   S.selected = sensorID;
   renderSidebar();
+  pushHash();
   D.content.classList.add('loading');
   try {
     await loadRecords();
@@ -2606,6 +2597,14 @@ function setAutoRefresh(on) {
 
 // ─── Event setup ──────────────────────────────────────────────────────────────
 function setup() {
+  // Sidebar collapse toggle
+  $('sidebar-toggle').addEventListener('click', () => {
+    const collapsed = $('main').classList.toggle('sidebar-collapsed');
+    const btn = $('sidebar-toggle');
+    btn.title        = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    btn.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+  });
+
   // Asset type selector change (show/hide vehicle vs tool fields)
   $('vf-type').addEventListener('change', () => updateModalFields($('vf-type').value));
 
@@ -2666,7 +2665,7 @@ Share this with the user — it is only shown once.`);
     // Auto-select first sensor of chosen vehicle
     const first = S.sensors.find(s => s.vehicleID === S.vehicleFilter);
     if (first) selectSensor(first.sensorID);
-    else { S.selected = null; S.records = []; renderAll(); }
+    else { S.selected = null; S.records = []; renderAll(); pushHash(); }
   });
 
   // Add / edit vehicle buttons
@@ -2774,6 +2773,7 @@ Share this with the user — it is only shown once.`);
     S.period = btn.dataset.period;
     D.customRange.style.display = S.period === 'custom' ? 'flex' : 'none';
     if (S.period !== 'custom') selectSensor(S.selected);
+    else pushHash();
   });
 
   // Custom date pickers
@@ -2795,6 +2795,7 @@ Share this with the user — it is only shown once.`);
     if (S.mode === 'device') renderDevice();
     if (S.mode === 'wheels') renderWheels();
     if (S.mode === 'errors') renderErrors();
+    pushHash();
   });
 
   $('refresh-btn').addEventListener('click', refresh);
@@ -3508,14 +3509,29 @@ async function main() {
   try {
     await checkAuth();
     await Promise.all([loadSensors(), loadServerVehicles(), loadAssetTypes()]);
-    // Auto-select first vehicle then first sensor
     const groups = groupByVehicle();
-    const firstVehicle = Object.keys(groups)[0];
-    if (firstVehicle) {
-      S.vehicleFilter = firstVehicle;
-      S.selected      = groups[firstVehicle].sensors[0]?.sensorID ?? null;
-      if (S.selected) await loadRecords();
+
+    // Restore state from URL hash, or fall back to auto-select defaults
+    const hashRestored = restoreFromHash();
+    if (hashRestored) {
+      syncPeriodUI();
+      const sensor = S.sensors.find(s => s.sensorID === S.selected);
+      if (sensor && !S.vehicleFilter) S.vehicleFilter = sensor.vehicleID;
+      if (!sensor) {
+        // Hash sensor no longer exists — fall back to first available
+        const firstVehicle = Object.keys(groups)[0];
+        S.vehicleFilter = firstVehicle ?? null;
+        S.selected      = firstVehicle ? (groups[firstVehicle].sensors[0]?.sensorID ?? null) : null;
+      }
+    } else {
+      // Default: auto-select first vehicle and sensor
+      const firstVehicle = Object.keys(groups)[0];
+      if (firstVehicle) {
+        S.vehicleFilter = firstVehicle;
+        S.selected      = groups[firstVehicle].sensors[0]?.sensorID ?? null;
+      }
     }
+    if (S.selected) await loadRecords();
     renderSidebar();
     renderAll();
   } catch (e) {
