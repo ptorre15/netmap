@@ -69,6 +69,8 @@
   --shadow:      0 2px 8px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.2);
   --shadow-md:   0 4px 20px rgba(0,0,0,.50), 0 2px 6px rgba(0,0,0,.25);
 }
+/* stat-value in dark mode uses fg instead of navy so it stays visible */
+[data-theme="dark"] .stat-value { color: var(--fg); }
 
 /* ── Reset ────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -258,6 +260,7 @@ body {
 .stat-cell:last-child { border-right: none; }
 .stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--fg3); }
 .stat-value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; color: var(--m-navy); }
+.stat-value-sm { font-size: 14px; }
 .stat-sub   { font-size: 11px; color: var(--fg3); }
 .stat-cell.ok     { border-top-color: var(--ok); }
 .stat-cell.warn   { border-top-color: var(--warn); }
@@ -945,7 +948,9 @@ body {
 .admin-sec-row {
   background: var(--bg3); border: 1px solid var(--sep);
   border-radius: var(--r); padding: 9px 11px;
+  transition: border-color var(--trans), background var(--trans);
 }
+.admin-sec-row:hover { border-color: var(--m-blue); background: var(--bg4); }
 .admin-sec-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
@@ -1669,6 +1674,15 @@ tr.journey-sep-row td {
 .stats-bar { width: 100%; border-radius: 2px 2px 0 0; min-width: 4px; transition: opacity .15s; }
 .stats-bar-col:hover .stats-bar { opacity: .75; }
 .stats-bar-label { font-size: 9px; color: var(--fg3); transform: rotate(-45deg); transform-origin: top right; white-space: nowrap; }
+/* Show label only on every 7th bar and the last bar to avoid overlap at 30 days */
+.stats-bar-chart .stats-bar-col:not(:nth-child(7n+1)):not(:last-child) .stats-bar-label { visibility: hidden; }
+
+/* Table empty-state row */
+.tbl-empty-cell {
+  text-align: center; padding: 32px 20px;
+  color: var(--fg3); font-size: 13px;
+}
+.tbl-empty-cell svg { display: block; margin: 0 auto 10px; opacity: .45; }
 
 .stats-breakdown-box {
   background: var(--bg2); border: 1px solid var(--border);

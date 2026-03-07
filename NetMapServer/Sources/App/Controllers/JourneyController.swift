@@ -159,7 +159,8 @@ struct VehicleEventController: RouteCollection {
             }
 
             // ── 3. Device lifecycle events: store in separate table, skip journey logic ──
-            if eventType == "boot" || eventType == "sleep" || eventType == "wake_up" || eventType == "ping" {
+            if eventType == "boot" || eventType == "sleep" || eventType == "wake_up" || eventType == "ping"
+                || eventType == "gps_acquired" || eventType == "gps_lost" {
                 // batteryVoltageV < 0 → treat as unavailable
                 let rawVoltage = p.batteryVoltageV
                 let safeVoltage: Double? = (rawVoltage != nil && rawVoltage! >= 0) ? rawVoltage : nil

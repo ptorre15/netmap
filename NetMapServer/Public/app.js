@@ -347,10 +347,12 @@ const D = {
   liveLabel:    $('live-label'),
   breadcrumb:   $('breadcrumb'),
   statCount:    $('stat-count'),
+  statCountVal: $('stat-count-val'),
   statMin:      $('stat-min'),
   statAvg:      $('stat-avg'),
   statMax:      $('stat-max'),
   statLast:     $('stat-last'),
+  statLastVal:  $('stat-last-val'),
   statMinLbl:   $('stat-min')?.closest('.stat-cell')?.querySelector('.stat-label'),
   statAvgLbl:   $('stat-avg')?.closest('.stat-cell')?.querySelector('.stat-label'),
   statMaxLbl:   $('stat-max')?.closest('.stat-cell')?.querySelector('.stat-label'),
@@ -900,30 +902,42 @@ function showStatCells(show) {
 }
 function renderStats() {
   document.querySelectorAll('.stat-cell').forEach(c => { c.className = 'stat-cell'; });
-  showStatCells(true);
+  showStatCells(false);
+  if (D.statCount) D.statCount.style.display = 'none';
+  if (D.statLast)  D.statLast.style.display  = 'none';
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
 
   if (isTpms(sensor)) {
-    showStatCells(false);
-    D.statCount.textContent = S.records.length ? S.records.length.toLocaleString() : '–';
-    D.statLast.textContent  = S.records.length ? fmtDT(S.records.at(-1).timestamp) : '–';
+    const target    = sensor.targetPressureBar;
+    const pressures = S.records.map(r => r.pressureBar).filter(v => v != null);
+    if (pressures.length) {
+      const minP = Math.min(...pressures);
+      const avgP = pressures.reduce((a, b) => a + b, 0) / pressures.length;
+      const maxP = Math.max(...pressures);
+      D.statMin.textContent = minP.toFixed(3);
+      D.statAvg.textContent = avgP.toFixed(3);
+      D.statMax.textContent = maxP.toFixed(3);
+      setStatLabels('Min (bar)', 'Avg (bar)', 'Max (bar)');
+      showStatCells(true);
+      if (D.statMin) D.statMin.closest('.stat-cell').classList.add(pStatus(minP, target));
+      if (D.statAvg) D.statAvg.closest('.stat-cell').classList.add(pStatus(avgP, target));
+      if (D.statMax) D.statMax.closest('.stat-cell').classList.add(pStatus(maxP, target));
+    }
+    if (S.records.length && D.statCountVal) {
+      D.statCountVal.textContent = S.records.length.toLocaleString();
+      D.statLastVal.textContent  = fmtDT(S.records.at(-1).timestamp);
+      D.statCount.style.display  = '';
+      D.statLast.style.display   = '';
+    }
     return;
+  }
 
-  } else if (sensor?.brand === 'stihl') {
-    showStatCells(false);
-    D.statCount.textContent = S.records.length.toLocaleString();
-    D.statLast.textContent = S.records.length ? fmtDT(S.records.at(-1).timestamp) : '–';
-
-  } else if (sensor?.brand === 'ela') {
-    showStatCells(false);
-    D.statCount.textContent = S.records.length.toLocaleString();
-    D.statLast.textContent = S.records.length ? fmtDT(S.records.at(-1).timestamp) : '–';
-
-  } else {
-    // AirTag ou autre : pas de min/avg/max
-    showStatCells(false);
-    D.statCount.textContent = S.records.length.toLocaleString();
-    D.statLast.textContent = S.records.length ? fmtDT(S.records.at(-1).timestamp) : '–';
+  // All other sensor types: show count + last reading only
+  if (S.records.length && D.statCountVal) {
+    D.statCountVal.textContent = S.records.length.toLocaleString();
+    D.statLastVal.textContent  = fmtDT(S.records.at(-1).timestamp);
+    D.statCount.style.display  = '';
+    D.statLast.style.display   = '';
   }
 }
 
@@ -1760,7 +1774,7 @@ async function renderTrackerMap(sensor) {
         if (b.latitude == null || b.longitude == null) return;
         const cfg  = BEHAVIOR_CONFIG[b.alertType] || BEHAVIOR_CONFIG.unknown;
         const icon = behaviorIcon(b.alertType);
-        const ts   = new Date(b.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const ts   = fmtTs(b.timestamp);
         const durS = b.alertDurationMs != null ? (b.alertDurationMs / 1000).toFixed(1) : '?';
         const val  = b.alertValueMax != null ? b.alertValueMax : null;
         const valStr = val != null ? (cfg.unit ? `${val.toFixed(2)} ${cfg.unit}` : val.toFixed(2)) : '—';
@@ -2015,7 +2029,7 @@ async function renderTable() {
 
     if (!allEvents.length) {
       $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
-      D.tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--fg3)">No events in this period</td></tr>';
+      D.tableBody.innerHTML = '<tr><td colspan="3" class="tbl-empty-cell"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg>No events in this period</td></tr>';
     } else {
       const EVENT_LABELS = {
         journey_start: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 14h14v-9h-14v16"/></svg>',   label: 'Journey start', color: '#34d399' },
@@ -2093,7 +2107,7 @@ async function renderTable() {
 
       if (!events.length) {
         $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
-        D.tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--fg3)">No events in this period</td></tr>';
+        D.tableBody.innerHTML = '<tr><td colspan="3" class="tbl-empty-cell"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg>No events in this period</td></tr>';
       } else {
         renderEventRows(events);
       }
@@ -2129,7 +2143,7 @@ async function renderTable() {
         }
         if (!filtered.length) {
           $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
-          D.tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--fg3)">No events in this period</td></tr>';
+          D.tableBody.innerHTML = '<tr><td colspan="3" class="tbl-empty-cell"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg>No events in this period</td></tr>';
         } else {
           renderEventRows(filtered);
         }
@@ -2346,25 +2360,18 @@ async function renderDevice() {
 
   D.deviceCont.innerHTML = `<div class="bat-box"><div class="bat-header">Device events</div><table class="bat-table"><thead><tr><th>Time</th><th>Event</th><th>Reset reason</th><th>Wake source</th><th>Battery</th><th>GPS</th><th></th></tr></thead><tbody>${skeletonRows(6)}</tbody></table></div>`;
 
-  let events = [], gpsAcq = [], gpsLost = [];
+  let events = [];
   try {
-    [events, gpsAcq, gpsLost] = await Promise.all([
-      apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&limit=500`),
-      apiFetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&event_type=gps_acquired&limit=500`).catch(() => []),
-      apiFetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&event_type=gps_lost&limit=500`).catch(() => []),
-    ]);
+    events = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&limit=500`);
   } catch (err) {
     D.deviceCont.innerHTML = `<div class="bat-loading-full" style="color:var(--danger)">Failed to load device events.</div>`;
     return;
   }
 
-  // Tag source so the delete handler knows which API to call
   events.forEach(e => e._src = 'lifecycle');
-  [...gpsAcq, ...gpsLost].forEach(e => e._src = 'vehicle');
 
-  // Merge and sort descending by timestamp
-  const allEvents = [...events, ...gpsAcq, ...gpsLost]
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  // Sort descending by timestamp
+  const allEvents = [...events].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   if (!allEvents.length) {
     D.deviceCont.innerHTML = '<div class="bat-loading-full"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M9 12l2 2l4 -4"/></svg><br>No device lifecycle events recorded.</div>';
@@ -2395,9 +2402,8 @@ async function renderDevice() {
     btn.addEventListener('click', async evClick => {
       const row = evClick.target.closest('tr');
       const id  = row?.dataset.id;
-      const src = row?.dataset.src;
       if (!id) return;
-      const url = src === 'vehicle' ? `/api/vehicle-events/${id}` : `/api/device-lifecycle/${id}`;
+      const url = `/api/device-lifecycle/${id}`;
       const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
       if (res.ok || res.status === 204) { row.remove(); showToast('Event deleted'); }
       else showToast('Delete failed', 'error');
@@ -3540,6 +3546,13 @@ async function renderStatsPanel() {
   const df = new Intl.DateTimeFormat([], { dateStyle: 'medium', timeStyle: 'short' });
   const fmtD = iso => iso ? df.format(new Date(iso)) : '–';
   const fmtN = n => n?.toLocaleString() ?? '–';
+  function fmtBytes(b) {
+    if (b == null) return '–';
+    if (b < 1024) return b + ' B';
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1024 * 1024 * 1024) return (b / (1024 * 1024)).toFixed(2) + ' MB';
+    return (b / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  }
 
   // ── KPI cards ──
   function kpiCard(label, value, sub = '') {
@@ -3630,5 +3643,6 @@ async function renderStatsPanel() {
       <div class="stats-info-row"><span>Total tracker events</span><span>${fmtN(s.totalVehicleEvents)}</span></div>
       <div class="stats-info-row"><span>Total lifecycle events</span><span>${fmtN(s.totalLifecycleEvents)}</span></div>
       <div class="stats-info-row"><span>Total driver behavior</span><span>${fmtN(s.totalDriverBehaviorEvents)}</span></div>
+      <div class="stats-info-row"><span>Size on disk</span><span>${s.dbSizeBytes != null ? fmtBytes(s.dbSizeBytes) : '–'}</span></div>
     </div>`;
 }

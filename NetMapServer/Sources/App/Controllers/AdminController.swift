@@ -996,6 +996,7 @@ struct AdminController: RouteCollection {
         var topTrackers: [TrackerStat]
         var oldestReading: Date?
         var newestReading: Date?
+        var dbSizeBytes: Int?
     }
 
     func getStats(req: Request) async throws -> AdminStatsResponse {
@@ -1008,6 +1009,7 @@ struct AdminController: RouteCollection {
         struct TypeRow:    Decodable { var t: String;   var n: Int }
         struct TrackerRow: Decodable { var imei: String; var name: String?; var n: Int; var last_ts: Double? }
         struct DateRow:    Decodable { var ts: Double? }
+        struct PageRow:    Decodable { var page_count: Int; var page_size: Int }
 
         let threshold30 = Date().addingTimeInterval(-30 * 86400).timeIntervalSince1970
         let threshold7  = Date().addingTimeInterval(-7  * 86400).timeIntervalSince1970
@@ -1034,13 +1036,14 @@ struct AdminController: RouteCollection {
 
         async let oldestR         = sql.raw("SELECT MIN(received_at) AS ts FROM sensor_readings").first(decoding: DateRow.self)
         async let newestR         = sql.raw("SELECT MAX(received_at) AS ts FROM sensor_readings").first(decoding: DateRow.self)
+        async let dbPages         = sql.raw("SELECT page_count, page_size FROM pragma_page_count(), pragma_page_size()").first(decoding: PageRow.self)
 
-        let (tr, tv, tlc, tdb, tvh, tu, r30, v30, l30, rpd, vpd, lpd, vbt, lbt, top, oldest, newest) = try await (
+        let (tr, tv, tlc, tdb, tvh, tu, r30, v30, l30, rpd, vpd, lpd, vbt, lbt, top, oldest, newest, pages) = try await (
             totalReadings, totalVehEv, totalLC, totalDB, totalVehicles, totalUsers,
             readings30d, vehEv30d, lc30d,
             readPerDay, vehEvPerDay, lcPerDay,
             vehEvByType, lcByType, topTrackers,
-            oldestR, newestR
+            oldestR, newestR, dbPages
         )
 
         let enc = JSONEncoder()
@@ -1062,7 +1065,8 @@ struct AdminController: RouteCollection {
             lifecycleByType:   lbt.map { TypeCount(type: $0.t, count: $0.n) },
             topTrackers: top.map { TrackerStat(imei: $0.imei, name: $0.name, events7d: $0.n, lastSeenAt: $0.last_ts.map { Date(timeIntervalSince1970: $0) }) },
             oldestReading: oldest?.ts.map { Date(timeIntervalSince1970: $0) } ?? nil,
-            newestReading: newest?.ts.map { Date(timeIntervalSince1970: $0) } ?? nil
+            newestReading: newest?.ts.map { Date(timeIntervalSince1970: $0) } ?? nil,
+            dbSizeBytes: pages.map { $0.page_count * $0.page_size }
         )
     }
 }

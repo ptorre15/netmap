@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap">
-  <link rel="stylesheet" href="style.css?v=75">
+  <link rel="stylesheet" href="style.css?v=76">
 </head>
 <body>
 
@@ -208,8 +208,14 @@
 
     <!-- Stats bar -->
     <div id="stats-bar">
-      <div id="stat-count" style="display:none"></div>
-      <div id="stat-last" style="display:none"></div>
+      <div id="stat-count" class="stat-cell" style="display:none">
+        <div class="stat-label">Records</div>
+        <div class="stat-value" id="stat-count-val">–</div>
+      </div>
+      <div id="stat-last" class="stat-cell" style="display:none">
+        <div class="stat-label">Last reading</div>
+        <div class="stat-value stat-value-sm" id="stat-last-val">–</div>
+      </div>
       <div class="stat-cell"><div class="stat-label">Min</div>    <div class="stat-value" id="stat-min">–</div></div>
       <div class="stat-cell"><div class="stat-label">Avg</div>    <div class="stat-value" id="stat-avg">–</div></div>
       <div class="stat-cell"><div class="stat-label">Max</div>    <div class="stat-value" id="stat-max">–</div></div>
@@ -460,6 +466,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="app.js?v=122"></script>
+<script src="app.js?v=125"></script>
 </body>
 </html>
