@@ -1990,40 +1990,30 @@ async function renderTable() {
     D.tableBody.innerHTML = skeletonRows(11);
 
     let events = [];
+    let allEvents = [];
+    let lifecycleEvents = [];
+    const GPS_TYPES = ['gps_acquired', 'gps_lost'];
+    const showSysEvents = () => localStorage.getItem('ev_show_system') === '1';
     try {
       const { from, to } = getRange();
       events = await apiFetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&limit=2000`);
-      events = events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).reverse();
+      allEvents = events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).reverse();
+      if (showSysEvents()) {
+        const lc = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&since=${encodeURIComponent(from.toISOString())}&limit=500`).catch(() => []);
+        lifecycleEvents = lc.filter(e => new Date(e.timestamp) <= to).map(e => ({ ...e, _src: 'lifecycle' }));
+      }
+      events = showSysEvents()
+        ? [...allEvents, ...lifecycleEvents].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        : allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
     } catch(err) {
       D.tableBody.innerHTML = `<tr><td colspan="11" style="color:var(--danger)">${escHTML(err.message)}</td></tr>`;
       return;
     }
 
-    if (!events.length) {
+    if (!allEvents.length) {
       $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
       D.tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--fg3)">No events in this period</td></tr>';
     } else {
-      // Auto-detect which optional columns have data
-      const hasSats  = events.some(e => e.gpsSatellites != null);
-      const hasSpeed = events.some(e => e.speedKmh != null);
-      const hasOdo   = events.some(e => e.odometerKm != null);
-      const hasDist  = events.some(e => e.journeyDistanceKm != null);
-      const hasRpm   = events.some(e => e.engineRpm != null);
-      const hasJFuel = events.some(e => e.journeyFuelConsumedL != null);
-      const hasFuel  = events.some(e => e.fuelLevelPct != null);
-
-      const hdrs = ['Time', 'Event', 'GPS / Fix'];
-      if (hasSats)  hdrs.push('Sats');
-      if (hasSpeed) hdrs.push('Speed');
-      if (hasOdo)   hdrs.push('Odometer');
-      if (hasDist)  hdrs.push('Journey dist.');
-      if (hasRpm)   hdrs.push('Engine RPM');
-      if (hasJFuel) hdrs.push('Journey fuel');
-      if (hasFuel)  hdrs.push('Fuel level');
-      hdrs.push('');
-      const colCount = hdrs.length;
-      $('table-head').innerHTML = `<tr>${hdrs.map(h => `<th>${h}</th>`).join('')}</tr>`;
-
       const EVENT_LABELS = {
         journey_start: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 14h14v-9h-14v16"/></svg>',   label: 'Journey start', color: '#34d399' },
         driving:       { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M12 14l0 7"/><path d="M10 12l-6.75 -2"/><path d="M14 12l6.75 -2"/></svg>', label: 'Driving',       color: '#60a5fa' },
@@ -2031,64 +2021,130 @@ async function renderTable() {
         idle_start:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idle start',    color: '#a78bfa' },
         idle_end:      { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idle end',      color: '#a78bfa' },
         idling:        { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idling',        color: '#a78bfa' },
+        gps_acquired:  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 20l4 -4"/><path d="M14 20l5 -5"/></svg>',  label: 'GPS acquired',  color: '#34d399' },
+        gps_lost:      { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 20l4 -4"/><path d="M14 20l5 -5"/><path d="M3 3l18 18"/></svg>',      label: 'GPS lost',      color: '#f87171' },
+        ping:          { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18.364 5.636a9 9 0 0 1 0 12.728"/><path d="M15.536 8.464a5 5 0 0 1 0 7.072"/><path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M5.636 5.636a9 9 0 0 0 0 12.728"/><path d="M8.464 8.464a5 5 0 0 0 0 7.072"/></svg>', label: 'Ping',          color: '#22d3ee' },
+        boot:          { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4l0 8"/></svg>',   label: 'Boot',          color: '#a78bfa' },
+        sleep:         { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 12h6l-6 8h6"/><path d="M14 4h6l-6 8h6"/></svg>',     label: 'Sleep',         color: '#94a3b8' },
+        wake_up:       { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up',       color: '#fbbf24' },
       };
 
-      // Journey group separators
-      let lastJID = null;
-      D.tableBody.innerHTML = events.map((e, idx) => {
-        let sep = '';
-        if (e.journeyID && e.journeyID !== lastJID) {
-          if (idx > 0) sep = `<tr class="journey-sep-row"><td colspan="${colCount}"></td></tr>`;
-          lastJID = e.journeyID;
-        }
-        const ev      = EVENT_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType ?? '–', color: 'var(--fg2)' };
-        const fuelCol = e.fuelLevelPct != null
-          ? (e.fuelLevelPct > 50 ? '#34d399' : e.fuelLevelPct > 20 ? '#fbbf24' : '#f87171') : '';
-        const evColor = safeCssColor(ev.color) || 'var(--fg2)';
-        let cells = `<td class="td-ts-compact">${fmtTs(e.timestamp)}</td>`;
-        cells += `<td><span class="ev-badge" style="--ev-color:${evColor}">${ev.icon} ${escHTML(ev.label)}</span></td>`;
-        cells += `<td>${gpsCell(e)}</td>`;
-        if (hasSats)  cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
-        if (hasSpeed) cells += `<td>${e.speedKmh != null ? e.speedKmh.toFixed(0) + ' km/h' : '–'}</td>`;
-        if (hasOdo)   cells += `<td>${e.odometerKm != null ? (e.odometerKm / 1000).toFixed(1) + ' km' : '–'}</td>`;
-        if (hasDist)  cells += `<td>${e.journeyDistanceKm != null ? (e.journeyDistanceKm / 1000).toFixed(2) + ' km' : '–'}</td>`;
-        if (hasRpm)   cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + ' rpm' : '–'}</td>`;
-        if (hasJFuel) cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + ' L' : '–'}</td>`;
-        if (hasFuel)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
-        cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" title="Delete">🗑︎</button></td>`;
-        return sep + `<tr>${cells}</tr>`;
-      }).join('');
+      function renderEventRows(evList) {
+        const hasSatsL  = evList.some(e => e.gpsSatellites != null);
+        const hasSpeedL = evList.some(e => e.speedKmh != null);
+        const hasOdoL   = evList.some(e => e.odometerKm != null);
+        const hasDistL  = evList.some(e => e.journeyDistanceKm != null);
+        const hasRpmL   = evList.some(e => e.engineRpm != null);
+        const hasJFuelL = evList.some(e => e.journeyFuelConsumedL != null);
+        const hasFuelL  = evList.some(e => e.fuelLevelPct != null);
 
-      D.tableBody.querySelectorAll('.row-delete-btn').forEach(btn => {
-        btn.addEventListener('click', async evClick => {
-          const row = evClick.target.closest('tr');
-          const id  = btn.dataset.id;
-          if (!id) return;
-          const res = await fetch(`/api/vehicle-events/${id}`, { method: 'DELETE', headers: authHeaders() });
-          if (res.ok || res.status === 204) { row.remove(); showToast('Event deleted'); }
-          else showToast('Delete failed', 'error');
+        const hdrs2 = ['Time', 'Event', 'GPS / Fix'];
+        if (hasSatsL)  hdrs2.push('Sats');
+        if (hasSpeedL) hdrs2.push('Speed');
+        if (hasOdoL)   hdrs2.push('Odometer');
+        if (hasDistL)  hdrs2.push('Journey dist.');
+        if (hasRpmL)   hdrs2.push('Engine RPM');
+        if (hasJFuelL) hdrs2.push('Journey fuel');
+        if (hasFuelL)  hdrs2.push('Fuel level');
+        hdrs2.push('');
+        const colCount2 = hdrs2.length;
+        $('table-head').innerHTML = `<tr>${hdrs2.map(h => `<th>${h}</th>`).join('')}</tr>`;
+
+        let lastJID2 = null;
+        D.tableBody.innerHTML = evList.map((e, idx) => {
+          let sep = '';
+          if (e.journeyID && e.journeyID !== lastJID2) {
+            if (idx > 0) sep = `<tr class="journey-sep-row"><td colspan="${colCount2}"></td></tr>`;
+            lastJID2 = e.journeyID;
+          }
+          const ev2     = EVENT_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType ?? '–', color: 'var(--fg2)' };
+          const fuelCol = e.fuelLevelPct != null
+            ? (e.fuelLevelPct > 50 ? '#34d399' : e.fuelLevelPct > 20 ? '#fbbf24' : '#f87171') : '';
+          const evColor = safeCssColor(ev2.color) || 'var(--fg2)';
+          let cells = `<td class="td-ts-compact">${fmtTs(e.timestamp)}</td>`;
+          cells += `<td><span class="ev-badge" style="--ev-color:${evColor}">${ev2.icon} ${escHTML(ev2.label)}</span></td>`;
+          cells += `<td>${gpsCell(e)}</td>`;
+          if (hasSatsL)  cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
+          if (hasSpeedL) cells += `<td>${e.speedKmh != null ? e.speedKmh.toFixed(0) + ' km/h' : '–'}</td>`;
+          if (hasOdoL)   cells += `<td>${e.odometerKm != null ? (e.odometerKm / 1000).toFixed(1) + ' km' : '–'}</td>`;
+          if (hasDistL)  cells += `<td>${e.journeyDistanceKm != null ? (e.journeyDistanceKm / 1000).toFixed(2) + ' km' : '–'}</td>`;
+          if (hasRpmL)   cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + ' rpm' : '–'}</td>`;
+          if (hasJFuelL) cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + ' L' : '–'}</td>`;
+          if (hasFuelL)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
+          cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" data-src="${e._src === 'lifecycle' ? 'lifecycle' : 'vehicle'}" title="Delete">🗑︎</button></td>`;
+          return sep + `<tr>${cells}</tr>`;
+        }).join('');
+
+        D.tableBody.querySelectorAll('.row-delete-btn').forEach(btn => {
+          btn.addEventListener('click', async evClick => {
+            const row = evClick.target.closest('tr');
+            const id  = btn.dataset.id;
+            if (!id) return;
+            const url = btn.dataset.src === 'lifecycle' ? `/api/device-lifecycle/${id}` : `/api/vehicle-events/${id}`;
+            const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
+            if (res.ok || res.status === 204) { row.remove(); showToast('Event deleted'); }
+            else showToast('Delete failed', 'error');
+          });
         });
-      });
+      }
 
-      // Delete period toolbar
+      if (!events.length) {
+        $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
+        D.tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--fg3)">No events in this period</td></tr>';
+      } else {
+        renderEventRows(events);
+      }
+
+      // Delete period toolbar + system-events toggle
       D.tableCont.querySelector('#events-period-toolbar')?.remove();
       const evToolbar = document.createElement('div');
       evToolbar.id = 'events-period-toolbar';
       evToolbar.className = 'tab-action-toolbar';
       const { from: evFrom, to: evTo } = getRange();
       const dfShortEv = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      evToolbar.innerHTML = `<span>Period: <b>${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)}</b> · ${events.length} event${events.length !== 1 ? 's' : ''}</span><button class="modal-btn-danger admin-small-btn">🗑︎ Delete all</button>`;
+      const visibleCount = () => showSysEvents()
+        ? allEvents.length + lifecycleEvents.length
+        : allEvents.filter(e => !GPS_TYPES.includes(e.eventType)).length;
+      evToolbar.innerHTML =
+        `<span id="ev-toolbar-info">Period: <b>${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)}</b> · ${visibleCount()} event${visibleCount() !== 1 ? 's' : ''}</span>` +
+        `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:12px">` +
+        `<input type="checkbox" id="ev-show-system" style="cursor:pointer"${showSysEvents() ? ' checked' : ''}> Show system events</label>` +
+        `<button class="modal-btn-danger admin-small-btn">🗑︎ Delete all</button>`;
       D.tableCont.prepend(evToolbar);
+
+      evToolbar.querySelector('#ev-show-system').addEventListener('change', async function() {
+        localStorage.setItem('ev_show_system', this.checked ? '1' : '0');
+        let filtered;
+        if (this.checked) {
+          if (!lifecycleEvents.length) {
+            const lc = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&since=${encodeURIComponent(evFrom.toISOString())}&limit=500`).catch(() => []);
+            lifecycleEvents = lc.filter(e => new Date(e.timestamp) <= evTo).map(e => ({ ...e, _src: 'lifecycle' }));
+          }
+          filtered = [...allEvents, ...lifecycleEvents].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        } else {
+          filtered = allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
+        }
+        if (!filtered.length) {
+          $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
+          D.tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--fg3)">No events in this period</td></tr>';
+        } else {
+          renderEventRows(filtered);
+        }
+        const count = filtered.length;
+        evToolbar.querySelector('#ev-toolbar-info').textContent =
+          `Period: ${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)} · ${count} event${count !== 1 ? 's' : ''}`;
+      });
+
       evToolbar.querySelector('button').addEventListener('click', () => {
         showDeleteModal({
           title: 'Delete all events?',
-          body: `Permanently delete <b>${events.length} event${events.length !== 1 ? 's' : ''}</b> for this period.<br><span style="color:var(--fg3);font-size:11px">${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)}</span>`,
-          confirmLabel: `Delete ${events.length} events`,
+          body: `Permanently delete <b>${allEvents.length} event${allEvents.length !== 1 ? 's' : ''}</b> for this period.<br><span style="color:var(--fg3);font-size:11px">${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)}</span>`,
+          confirmLabel: `Delete ${allEvents.length} events`,
           onConfirm: async () => {
             const res = await fetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&from=${evFrom.toISOString()}&to=${evTo.toISOString()}`, { method: 'DELETE', headers: authHeaders() });
             if (res.ok) {
               const data = await res.json().catch(() => ({}));
-              showToast(`Deleted ${data.deleted ?? events.length} events`);
+              showToast(`Deleted ${data.deleted ?? allEvents.length} events`);
               D.tableCont.querySelector('#events-period-toolbar')?.remove();
               renderTable();
             } else showToast('Delete failed', 'error');
@@ -2209,7 +2265,7 @@ async function renderErrors() {
     boot:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4l0 8"/></svg>',   label: 'Boot',    color: '#a78bfa' },
     sleep:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 12h6l-6 8h6"/><path d="M14 4h6l-6 8h6"/></svg>',     label: 'Sleep',   color: '#94a3b8' },
     wake_up: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up', color: '#fbbf24' },
-    ping:    { icon: '📡', label: 'Ping',     color: '#22d3ee' },
+    ping:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18.364 5.636a9 9 0 0 1 0 12.728"/><path d="M15.536 8.464a5 5 0 0 1 0 7.072"/><path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M5.636 5.636a9 9 0 0 0 0 12.728"/><path d="M8.464 8.464a5 5 0 0 0 0 7.072"/></svg>', label: 'Ping',     color: '#22d3ee' },
   };
 
   D.errorsCont.innerHTML = `<div class="bat-box"><div class="bat-header">Events with invalid timestamp</div><table class="bat-table"><thead><tr><th>Bad timestamp (from device)</th><th>Received at (real time)</th><th>Event</th><th>Reset reason</th></tr></thead><tbody>${skeletonRows(5)}</tbody></table></div>`;
@@ -2277,33 +2333,49 @@ async function renderDevice() {
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
   if (!sensor) return;
   const LIFECYCLE_LABELS = {
-    boot:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4l0 8"/></svg>',   label: 'Boot',    color: '#a78bfa' },
-    sleep:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 12h6l-6 8h6"/><path d="M14 4h6l-6 8h6"/></svg>',     label: 'Sleep',   color: '#94a3b8' },
-    wake_up: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up', color: '#fbbf24' },
-    ping:    { icon: '📡', label: 'Ping',     color: '#22d3ee' },
+    boot:         { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4l0 8"/></svg>',   label: 'Boot',         color: '#a78bfa' },
+    sleep:        { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 12h6l-6 8h6"/><path d="M14 4h6l-6 8h6"/></svg>',     label: 'Sleep',        color: '#94a3b8' },
+    wake_up:      { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up',      color: '#fbbf24' },
+    ping:         { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18.364 5.636a9 9 0 0 1 0 12.728"/><path d="M15.536 8.464a5 5 0 0 1 0 7.072"/><path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M5.636 5.636a9 9 0 0 0 0 12.728"/><path d="M8.464 8.464a5 5 0 0 0 0 7.072"/></svg>', label: 'Ping',          color: '#22d3ee' },
+    gps_acquired: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 20l4 -4"/><path d="M14 20l5 -5"/></svg>',  label: 'GPS acquired',  color: '#34d399' },
+    gps_lost:     { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 20l4 -4"/><path d="M14 20l5 -5"/><path d="M3 3l18 18"/></svg>',     label: 'GPS lost',      color: '#f87171' },
   };
 
   D.deviceCont.innerHTML = `<div class="bat-box"><div class="bat-header">Device events</div><table class="bat-table"><thead><tr><th>Time</th><th>Event</th><th>Reset reason</th><th>Wake source</th><th>Battery</th><th>GPS</th><th></th></tr></thead><tbody>${skeletonRows(6)}</tbody></table></div>`;
-  let events = [];
+
+  let events = [], gpsAcq = [], gpsLost = [];
   try {
-    events = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&limit=500`);
+    [events, gpsAcq, gpsLost] = await Promise.all([
+      apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&limit=500`),
+      apiFetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&event_type=gps_acquired&limit=500`).catch(() => []),
+      apiFetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&event_type=gps_lost&limit=500`).catch(() => []),
+    ]);
   } catch (err) {
     D.deviceCont.innerHTML = `<div class="bat-loading-full" style="color:var(--danger)">Failed to load device events.</div>`;
     return;
   }
-  if (!events.length) {
+
+  // Tag source so the delete handler knows which API to call
+  events.forEach(e => e._src = 'lifecycle');
+  [...gpsAcq, ...gpsLost].forEach(e => e._src = 'vehicle');
+
+  // Merge and sort descending by timestamp
+  const allEvents = [...events, ...gpsAcq, ...gpsLost]
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  if (!allEvents.length) {
     D.deviceCont.innerHTML = '<div class="bat-loading-full"><span style="font-size:2rem">✅︎</span><br>No device lifecycle events recorded.</div>';
     return;
   }
-  // API already returns events descending (most recent first)
+
   D.deviceCont.innerHTML = `
     <div class="bat-box">
-      <div class="bat-header">Device events <span class="bat-count">${events.length}</span></div>
+      <div class="bat-header">Device events <span class="bat-count">${allEvents.length}</span></div>
       <table class="bat-table">
         <thead><tr><th>Time</th><th>Event</th><th>Reset reason</th><th>Wake source</th><th>Battery</th><th>GPS</th><th></th></tr></thead>
-        <tbody>${events.map(e => {
+        <tbody>${allEvents.map(e => {
           const ev = LIFECYCLE_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType, color: 'var(--fg2)' };
-          return `<tr data-id="${escAttr(e.id)}">
+          return `<tr data-id="${escAttr(e.id)}" data-src="${e._src}">
             <td class="td-ts-compact">${fmtTs(e.timestamp)}</td>
             <td><span class="ev-badge" style="--ev-color:${safeCssColor(ev.color) || 'var(--fg2)'}">${ev.icon} ${escHTML(ev.label)}</span></td>
             <td>${escHTML(e.resetReason  ?? '–')}</td>
@@ -2320,8 +2392,10 @@ async function renderDevice() {
     btn.addEventListener('click', async evClick => {
       const row = evClick.target.closest('tr');
       const id  = row?.dataset.id;
+      const src = row?.dataset.src;
       if (!id) return;
-      const res = await fetch(`/api/device-lifecycle/${id}`, { method: 'DELETE', headers: authHeaders() });
+      const url = src === 'vehicle' ? `/api/vehicle-events/${id}` : `/api/device-lifecycle/${id}`;
+      const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
       if (res.ok || res.status === 204) { row.remove(); showToast('Event deleted'); }
       else showToast('Delete failed', 'error');
     });
