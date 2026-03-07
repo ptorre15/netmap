@@ -327,6 +327,16 @@ struct VehicleEventController: RouteCollection {
         let rawLimit = (try? req.query.get(Int.self, at: "limit")) ?? 50
         let limit = min(max(rawLimit, 1), 500)
         let vehicleFilter = try? req.query.get(String.self, at: "vehicle")
+
+        // Parse & sanitize date-range params (re-serialised through ISO8601DateFormatter
+        // to strip any injection characters before embedding into SQL).
+        let isoSanitiser = ISO8601DateFormatter()
+        let fromBound = (try? req.query.get(String.self, at: "from"))
+            .flatMap { isoSanitiser.date(from: $0) }
+            .map     { isoSanitiser.string(from: $0) } ?? "1970-01-01T00:00:00Z"
+        let toBound = (try? req.query.get(String.self, at: "to"))
+            .flatMap { isoSanitiser.date(from: $0) }
+            .map     { isoSanitiser.string(from: $0) } ?? "9999-12-31T23:59:59Z"
         var accessFilterSQL = ""
         if let auth = req.authUser, !auth.isAdmin {
             let allowedVehicleIDs = try await UserAsset.query(on: req.db)
@@ -360,6 +370,7 @@ struct VehicleEventController: RouteCollection {
                     FROM vehicle_events
                     WHERE vehicle_id = \(bind: vehicleID)
                     GROUP BY journey_id
+                    HAVING MIN(timestamp) >= \(bind: fromBound) AND MIN(timestamp) <= \(bind: toBound)
                     ORDER BY MIN(timestamp) DESC
                     LIMIT \(bind: limit)
                     """).all(decoding: Row.self)
@@ -380,6 +391,7 @@ struct VehicleEventController: RouteCollection {
                     FROM vehicle_events
                     WHERE vehicle_id = \(bind: vehicleID) AND \(unsafeRaw: accessFilterSQL)
                     GROUP BY journey_id
+                    HAVING MIN(timestamp) >= \(bind: fromBound) AND MIN(timestamp) <= \(bind: toBound)
                     ORDER BY MIN(timestamp) DESC
                     LIMIT \(bind: limit)
                     """).all(decoding: Row.self)
@@ -402,6 +414,7 @@ struct VehicleEventController: RouteCollection {
                 FROM vehicle_events
                 \(unsafeRaw: whereClause)
                 GROUP BY journey_id
+                HAVING MIN(timestamp) >= \(bind: fromBound) AND MIN(timestamp) <= \(bind: toBound)
                 ORDER BY MIN(timestamp) DESC
                 LIMIT \(bind: limit)
                 """).all(decoding: Row.self)

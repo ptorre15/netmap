@@ -1333,8 +1333,11 @@ function resetChartCards() {
 }
 
 // ─── Tracker journey map ──────────────────────────────────────────────────────
-async function loadJourneys(vehicleID) {
-  return apiFetch(`/api/vehicle-events/journeys?vehicle=${encodeURIComponent(vehicleID)}&limit=50`);
+async function loadJourneys(vehicleID, from, to) {
+  let url = `/api/vehicle-events/journeys?vehicle=${encodeURIComponent(vehicleID)}&limit=200`;
+  if (from) url += `&from=${encodeURIComponent(from.toISOString())}`;
+  if (to)   url += `&to=${encodeURIComponent(to.toISOString())}`;
+  return apiFetch(url);
 }
 
 async function loadJourneyTrack(journeyID) {
@@ -1785,7 +1788,8 @@ async function renderTrackerMap(sensor) {
 
   // ── Fetch journeys and render panel ─────────────────────────────────────
   try {
-    const journeys = await loadJourneys(sensor.vehicleID ?? sensor.sensorID);
+    const { from: jFrom, to: jTo } = getRange();
+    const journeys = await loadJourneys(sensor.vehicleID ?? sensor.sensorID, jFrom, jTo);
     const body = panel.querySelector('.jlp-body');
     if (!journeys.length) {
       body.innerHTML = '<div class="jlp-empty">No journeys recorded yet.</div>';
