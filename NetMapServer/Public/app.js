@@ -154,15 +154,15 @@ const HOURS = { '1H': 1, '24H': 24, '7D': 168, '30D': 720 };
 const WHEEL_LABELS  = { FL: 'Front Left', FR: 'Front Right', RL: 'Rear Left', RR: 'Rear Right' };
 const BRAND_LABELS  = { michelin: 'Michelin TMS', stihl: 'STIHL', ela: 'ELA Innovation', airtag: 'AirTag', tracker: 'GPS Tracker' };
 const GPS_FIX_LABELS = {
-  0: { icon: '✕', label: 'No fix',   color: '#6b7280' },
-  2: { icon: '◎', label: '2D',       color: '#fbbf24' },
-  3: { icon: '⏺', label: '3D',       color: '#34d399' },
-  4: { icon: '⏺', label: 'GNSS+DR', color: '#60a5fa' },
+  0: { icon: '–',  label: 'No fix',   color: '#6b7280' },
+  2: { icon: '○',  label: '2D',       color: '#fbbf24' },
+  3: { icon: '●',  label: '3D',       color: '#34d399' },
+  4: { icon: '●',  label: 'GNSS+DR', color: '#60a5fa' },
 };
 function gpsFixBadge(fixType) {
   const f = fixType != null
     ? (GPS_FIX_LABELS[fixType] ?? { icon: '?', label: String(fixType), color: 'var(--fg2)' })
-    : { icon: '✕', label: 'No fix', color: '#6b7280' };
+    : { icon: '–', label: 'No fix', color: '#6b7280' };
   const c = safeCssColor(f.color) || 'var(--fg2)';
   return `<span class="ev-badge" style="--ev-color:${c};font-size:10px">${escHTML(f.icon)} ${escHTML(f.label)}</span>`;
 }
@@ -489,7 +489,7 @@ function renderSensors() {
   const sCount      = sensors.length;
   const sLabel      = `${sCount} sensor${sCount !== 1 ? 's' : ''}`;
   const editBtn     = AUTH.isAdmin && sv
-    ? `<button id="edit-vehicle-btn" class="ac-edit-btn" title="Edit asset">✎</button>` : '';
+    ? `<button id="edit-vehicle-btn" class="ac-edit-btn" title="Edit asset"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg></button>` : '';
   D.assetCard.innerHTML = `
     <div class="asset-card">
       <div class="ac-left">
@@ -805,8 +805,8 @@ function renderSensorInfoCard() {
     var battBadge = '';
   }
   const actionsBar = AUTH.isAdmin ? `<div class="si-actions">
-    <button class="si-rename-action-btn">✏︎ Rename</button>
-    ${s.brand === 'tracker' ? `<button class="si-config-btn">&#x2699;&#xFE0E; Config</button>` : ''}
+    <button class="si-rename-action-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg> Rename</button>
+    ${s.brand === 'tracker' ? `<button class="si-config-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg> Config</button>` : ''}
     ${s.brand !== 'tracker' ? `<button class="si-unpair-btn modal-btn-danger" data-sid="${escAttr(s.sensorID)}">Unpair sensor</button>` : ''}
   </div>` : '';
   el.innerHTML = `<div class="si-header">
@@ -1860,7 +1860,10 @@ function renderMap() {
     const isAirtagSensor = sensor?.brand === 'airtag';
     D.mapCont.innerHTML = `
       <div class="map-nodata">
-        <div class="nodata-icon">${isAirtagSensor ? '📡' : '🛰'}</div>
+        <div class="nodata-icon">${isAirtagSensor
+          ? '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18.364 19.364a9 9 0 1 0 -12.728 0"/><path d="M15.536 16.536a5 5 0 1 0 -7.072 0"/><path d="M12 13m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/></svg>'
+          : '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 12l1.5 1.5"/><path d="M14.5 17a2.5 2.5 0 0 0 2.5 -2.5"/><path d="M15 20a5 5 0 0 0 5 -5"/></svg>'
+        }</div>
         <p>${isAirtagSensor ? 'No GPS-stamped readings in this period' : 'No GPS data in this period'}</p>
         <small>${isAirtagSensor
           ? 'Proximity and battery readings are in the <b>Events</b> tab. GPS stamps appear when the NetMap app has Location Services access.'
@@ -1926,9 +1929,9 @@ function renderMap() {
       });
       m.bindPopup(`<div style="font:13px/1.65 system-ui,sans-serif;min-width:140px">
         <b>${df.format(new Date(r.timestamp))}</b><br>
-        🔵 <b>${r.pressureBar?.toFixed(3) ?? '–'} bar</b>
-        ${r.temperatureC != null ? `<br>🌡 ${r.temperatureC.toFixed(1)} °C` : ''}
-        ${r.vbattVolts   != null ? `<br>🔋 ${r.vbattVolts.toFixed(2)} V`   : ''}
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.8 11a6 6 0 1 0 10.396 0l-5.197 -8l-5.199 8z"/></svg> <b>${r.pressureBar?.toFixed(3) ?? '–'} bar</b>
+        ${r.temperatureC != null ? `<br><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 13.5a4 4 0 1 0 4 0v-8.5a2 2 0 0 0 -4 0v8.5"/><path d="M10 9l4 0"/></svg> ${r.temperatureC.toFixed(1)} °C` : ''}
+        ${r.vbattVolts   != null ? `<br><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 7h11a2 2 0 0 1 2 2v.5a.5 .5 0 0 0 .5 .5a.5 .5 0 0 1 .5 .5v3a.5 .5 0 0 1 -.5 .5a.5 .5 0 0 0 -.5 .5v.5a2 2 0 0 1 -2 2h-11a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2"/></svg> ${r.vbattVolts.toFixed(2)} V` : ''}
       </div>`).addTo(map);
       return;
     }
@@ -1936,7 +1939,7 @@ function renderMap() {
     // Cluster bubble — radius grows logarithmically with count
     const bubbleR  = isLast ? 14 : Math.round(10 + Math.log2(count) * 3.5);
     const fontSize = bubbleR < 14 ? 10 : bubbleR < 18 ? 11 : 13;
-    const label    = isLast ? '📍' : count;
+    const label    = isLast ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 11m-3 0a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"/></svg>' : count;
     const bg       = isLast ? '#30d158' : color;
     const border   = isLast ? '#ffffff' : 'rgba(255,255,255,0.35)';
     const size     = bubbleR * 2;
@@ -1965,10 +1968,10 @@ function renderMap() {
     const popup = `<div style="font:13px/1.65 system-ui,sans-serif;min-width:160px">
       ${isLast ? '<span style="color:#1A8C4E;font-weight:700">● Latest position</span><br>' : ''}
       <b>${count} reading${count > 1 ? 's' : ''}</b><br>
-      🕐 ${df.format(new Date(first.timestamp))}${count > 1 ? `<br>&nbsp;&nbsp;&nbsp;&nbsp;→ ${df.format(new Date(last.timestamp))}` : ''}<br>
-      🔵 avg <b>${avgP} bar</b> · min ${minP} · max ${maxP}
-      ${last.temperatureC != null ? `<br>🌡 ${last.temperatureC.toFixed(1)} °C` : ''}
-      ${last.vbattVolts   != null ? `<br>🔋 ${last.vbattVolts.toFixed(2)} V`   : ''}
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8a8d9e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 7v5l3 3"/></svg> ${df.format(new Date(first.timestamp))}${count > 1 ? `<br>&nbsp;&nbsp;&nbsp;&nbsp;→ ${df.format(new Date(last.timestamp))}` : ''}<br>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.8 11a6 6 0 1 0 10.396 0l-5.197 -8l-5.199 8z"/></svg> avg <b>${avgP} bar</b> · min ${minP} · max ${maxP}
+      ${last.temperatureC != null ? `<br><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 13.5a4 4 0 1 0 4 0v-8.5a2 2 0 0 0 -4 0v8.5"/><path d="M10 9l4 0"/></svg> ${last.temperatureC.toFixed(1)} °C` : ''}
+      ${last.vbattVolts   != null ? `<br><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 7h11a2 2 0 0 1 2 2v.5a.5 .5 0 0 0 .5 .5a.5 .5 0 0 1 .5 .5v3a.5 .5 0 0 1 -.5 .5a.5 .5 0 0 0 -.5 .5v.5a2 2 0 0 1 -2 2h-11a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2"/></svg> ${last.vbattVolts.toFixed(2)} V` : ''}
     </div>`;
 
     L.marker([lat, lng], { icon }).bindPopup(popup).addTo(map);
@@ -2057,7 +2060,7 @@ async function renderTable() {
             if (idx > 0) sep = `<tr class="journey-sep-row"><td colspan="${colCount2}"></td></tr>`;
             lastJID2 = e.journeyID;
           }
-          const ev2     = EVENT_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType ?? '–', color: 'var(--fg2)' };
+          const ev2     = EVENT_LABELS[e.eventType] ?? { icon: '○', label: e.eventType ?? '–', color: 'var(--fg2)' };
           const fuelCol = e.fuelLevelPct != null
             ? (e.fuelLevelPct > 50 ? '#34d399' : e.fuelLevelPct > 20 ? '#fbbf24' : '#f87171') : '';
           const evColor = safeCssColor(ev2.color) || 'var(--fg2)';
@@ -2071,7 +2074,7 @@ async function renderTable() {
           if (hasRpmL)   cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + ' rpm' : '–'}</td>`;
           if (hasJFuelL) cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + ' L' : '–'}</td>`;
           if (hasFuelL)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
-          cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" data-src="${e._src === 'lifecycle' ? 'lifecycle' : 'vehicle'}" title="Delete">🗑︎</button></td>`;
+          cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" data-src="${e._src === 'lifecycle' ? 'lifecycle' : 'vehicle'}" title="Delete"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>`;
           return sep + `<tr>${cells}</tr>`;
         }).join('');
 
@@ -2109,7 +2112,7 @@ async function renderTable() {
         `<span id="ev-toolbar-info">Period: <b>${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)}</b> · ${visibleCount()} event${visibleCount() !== 1 ? 's' : ''}</span>` +
         `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:12px">` +
         `<input type="checkbox" id="ev-show-system" style="cursor:pointer"${showSysEvents() ? ' checked' : ''}> Show system events</label>` +
-        `<button class="modal-btn-danger admin-small-btn">🗑︎ Delete all</button>`;
+        `<button class="modal-btn-danger admin-small-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg> Delete all</button>`;
       D.tableCont.prepend(evToolbar);
 
       evToolbar.querySelector('#ev-show-system').addEventListener('change', async function() {
@@ -2281,7 +2284,7 @@ async function renderErrors() {
   const invalid = events.filter(e => new Date(e.timestamp).getTime() < THRESHOLD);
 
   if (!invalid.length) {
-    D.errorsCont.innerHTML = '<div class="bat-loading-full"><span style="font-size:2rem">✅︎</span><br>No invalid timestamps found.</div>';
+    D.errorsCont.innerHTML = '<div class="bat-loading-full"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M9 12l2 2l4 -4"/></svg><br>No invalid timestamps found.</div>';
     return;
   }
 
@@ -2291,7 +2294,7 @@ async function renderErrors() {
       <table class="bat-table">
         <thead><tr><th>Bad timestamp (from device)</th><th>Received at (real time)</th><th>Event</th><th>Reset reason</th></tr></thead>
         <tbody>${invalid.map(e => {
-          const ev = LIFECYCLE_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType, color: 'var(--fg2)' };
+          const ev = LIFECYCLE_LABELS[e.eventType] ?? { icon: '○', label: e.eventType, color: 'var(--fg2)' };
           return `<tr>
             <td class="td-ts-compact" style="color:var(--danger)">${fmtTs(e.timestamp)}</td>
             <td class="td-ts-compact">${fmtTs(e.receivedAt)}</td>
@@ -2305,7 +2308,7 @@ async function renderErrors() {
   // Delete-all toolbar
   const errToolbar = document.createElement('div');
   errToolbar.className = 'tab-action-toolbar';
-  errToolbar.innerHTML = `<span>${invalid.length} invalid event${invalid.length !== 1 ? 's' : ''} (timestamp before 2026)</span><button class="modal-btn-danger admin-small-btn">🗑︎ Delete all</button>`;
+  errToolbar.innerHTML = `<span>${invalid.length} invalid event${invalid.length !== 1 ? 's' : ''} (timestamp before 2026)</span><button class="modal-btn-danger admin-small-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg> Delete all</button>`;
   D.errorsCont.prepend(errToolbar);
   errToolbar.querySelector('button').addEventListener('click', () => {
     showDeleteModal({
@@ -2364,7 +2367,7 @@ async function renderDevice() {
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   if (!allEvents.length) {
-    D.deviceCont.innerHTML = '<div class="bat-loading-full"><span style="font-size:2rem">✅︎</span><br>No device lifecycle events recorded.</div>';
+    D.deviceCont.innerHTML = '<div class="bat-loading-full"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M9 12l2 2l4 -4"/></svg><br>No device lifecycle events recorded.</div>';
     return;
   }
 
@@ -2374,7 +2377,7 @@ async function renderDevice() {
       <table class="bat-table">
         <thead><tr><th>Time</th><th>Event</th><th>Reset reason</th><th>Wake source</th><th>Battery</th><th>GPS</th><th></th></tr></thead>
         <tbody>${allEvents.map(e => {
-          const ev = LIFECYCLE_LABELS[e.eventType] ?? { icon: '⚪', label: e.eventType, color: 'var(--fg2)' };
+          const ev = LIFECYCLE_LABELS[e.eventType] ?? { icon: '○', label: e.eventType, color: 'var(--fg2)' };
           return `<tr data-id="${escAttr(e.id)}" data-src="${e._src}">
             <td class="td-ts-compact">${fmtTs(e.timestamp)}</td>
             <td><span class="ev-badge" style="--ev-color:${safeCssColor(ev.color) || 'var(--fg2)'}">${ev.icon} ${escHTML(ev.label)}</span></td>
@@ -2382,7 +2385,7 @@ async function renderDevice() {
             <td>${escHTML(e.wakeupSource ?? '–')}</td>
             <td>${e.batteryVoltageV != null ? e.batteryVoltageV.toFixed(2) + ' V' : '–'}</td>
             <td>${gpsCell(e)}</td>
-            <td><button class="row-delete-btn" title="Delete">🗑︎</button></td>
+            <td><button class="row-delete-btn" title="Delete"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>
           </tr>`;
         }).join('')}</tbody>
       </table>
@@ -2406,7 +2409,7 @@ async function renderDevice() {
   const dfShortDv = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const dvToolbar = document.createElement('div');
   dvToolbar.className = 'tab-action-toolbar';
-  dvToolbar.innerHTML = `<span>Period: <b>${dfShortDv.format(dvFrom)} – ${dfShortDv.format(dvTo)}</b> · ${events.length} event${events.length !== 1 ? 's' : ''}</span><button class="modal-btn-danger admin-small-btn">🗑︎ Delete all</button>`;
+  dvToolbar.innerHTML = `<span>Period: <b>${dfShortDv.format(dvFrom)} – ${dfShortDv.format(dvTo)}</b> · ${events.length} event${events.length !== 1 ? 's' : ''}</span><button class="modal-btn-danger admin-small-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg> Delete all</button>`;
   D.deviceCont.prepend(dvToolbar);
   dvToolbar.querySelector('button').addEventListener('click', () => {
     showDeleteModal({
@@ -2442,7 +2445,7 @@ async function renderAlerts() {
   behaviors.reverse(); // most recent first
 
   if (!behaviors.length) {
-    D.alertsCont.innerHTML = `<div class="bat-loading-full"><span style="font-size:2rem">✅\uFE0E</span><br>No driver behaviour alerts recorded.</div>`;
+    D.alertsCont.innerHTML = `<div class="bat-loading-full"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M9 12l2 2l4 -4"/></svg><br>No driver behaviour alerts recorded.</div>`;
     return;
   }
 
@@ -2473,7 +2476,7 @@ async function renderAlerts() {
           <td>${spd}</td>
           <td>${journey}</td>
           <td>${gps}</td>
-          <td><button class="row-delete-btn" title="Delete">🗑︎</button></td>
+          <td><button class="row-delete-btn" title="Delete"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>
         </tr>`;
       }).join('')}</tbody>
       </table>
@@ -2495,7 +2498,7 @@ async function renderAlerts() {
   const dfShortAl = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const alToolbar = document.createElement('div');
   alToolbar.className = 'tab-action-toolbar';
-  alToolbar.innerHTML = `<span>Period: <b>${dfShortAl.format(alFrom)} – ${dfShortAl.format(alTo)}</b> · ${behaviors.length} alert${behaviors.length !== 1 ? 's' : ''}</span><button class="modal-btn-danger admin-small-btn">🗑︎ Delete all</button>`;
+  alToolbar.innerHTML = `<span>Period: <b>${dfShortAl.format(alFrom)} – ${dfShortAl.format(alTo)}</b> · ${behaviors.length} alert${behaviors.length !== 1 ? 's' : ''}</span><button class="modal-btn-danger admin-small-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg> Delete all</button>`;
   D.alertsCont.prepend(alToolbar);
   alToolbar.querySelector('button').addEventListener('click', () => {
     showDeleteModal({
@@ -2605,7 +2608,7 @@ function setup() {
   if (adminBtn) adminBtn.addEventListener('click', () => openAdminPanel());
   $('admin-drawer-close').addEventListener('click', closeAdminPanel);
   $('admin-backdrop').addEventListener('click', closeAdminPanel);
-  document.querySelectorAll('.admin-tab-btn').forEach(btn =>
+  document.querySelectorAll('.admin-nav-btn').forEach(btn =>
     btn.addEventListener('click', () => switchAdminTab(btn.dataset.tab))
   );
   document.addEventListener('keydown', e => {
@@ -3374,12 +3377,13 @@ async function renderTrackersPanel() {
 }
 
 function switchAdminTab(tab) {
-  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.admin-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.admin-tab-pane').forEach(p => p.classList.toggle('active', p.id === 'admin-tab-' + tab));
   if (tab === 'users')    renderUsersPanel();
   if (tab === 'assets')   renderAssetsPanel();
   if (tab === 'trackers') renderTrackersPanel();
   if (tab === 'security') renderSecurityPanel();
+  if (tab === 'stats')    renderStatsPanel();
 }
 function openAdminPanel(tab = 'users') {
   $('admin-backdrop').style.display = '';
@@ -3518,3 +3522,113 @@ async function main() {
 }
 
 main();
+
+// ─── Admin Stats Panel ─────────────────────────────────────────────────────────
+async function renderStatsPanel() {
+  const cont = $('admin-stats-cont');
+  if (!cont) return;
+  cont.innerHTML = `<div style="color:var(--fg3);font-size:13px;padding:16px 8px">Loading statistics…</div>`;
+
+  let s;
+  try {
+    s = await apiFetch('/api/admin/stats');
+  } catch (err) {
+    cont.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:16px 8px">${escHTML(err.message)}</div>`;
+    return;
+  }
+
+  const df = new Intl.DateTimeFormat([], { dateStyle: 'medium', timeStyle: 'short' });
+  const fmtD = iso => iso ? df.format(new Date(iso)) : '–';
+  const fmtN = n => n?.toLocaleString() ?? '–';
+
+  // ── KPI cards ──
+  function kpiCard(label, value, sub = '') {
+    return `<div class="stats-kpi-card">
+      <div class="stats-kpi-value">${value}</div>
+      <div class="stats-kpi-label">${label}</div>
+      ${sub ? `<div class="stats-kpi-sub">${sub}</div>` : ''}
+    </div>`;
+  }
+
+  // ── Sparkline bar chart ──
+  function barChart(title, data, color) {
+    if (!data.length) return `<div class="stats-chart-box"><div class="stats-chart-title">${title}</div><div style="color:var(--fg3);font-size:12px;padding:8px 0">No data</div></div>`;
+    const max = Math.max(...data.map(d => d.count), 1);
+    const bars = data.map(d => {
+      const h = Math.max(2, Math.round((d.count / max) * 52));
+      const day = d.date.slice(5); // MM-DD
+      return `<div class="stats-bar-col" title="${d.date}: ${d.count}">
+        <div class="stats-bar" style="height:${h}px;background:${color}"></div>
+        <div class="stats-bar-label">${day}</div>
+      </div>`;
+    }).join('');
+    return `<div class="stats-chart-box">
+      <div class="stats-chart-title">${title} <span class="stats-chart-range">(last 30 days)</span></div>
+      <div class="stats-bar-chart">${bars}</div>
+    </div>`;
+  }
+
+  // ── Horizontal breakdown bars ──
+  function breakdownChart(title, items) {
+    if (!items.length) return '';
+    const max = Math.max(...items.map(i => i.count), 1);
+    const rows = items.map(i => {
+      const pct = Math.max(2, Math.round((i.count / max) * 100));
+      return `<div class="stats-hbar-row">
+        <div class="stats-hbar-label">${escHTML(i.type)}</div>
+        <div class="stats-hbar-track"><div class="stats-hbar-fill" style="width:${pct}%"></div></div>
+        <div class="stats-hbar-count">${fmtN(i.count)}</div>
+      </div>`;
+    }).join('');
+    return `<div class="stats-breakdown-box"><div class="stats-chart-title">${title}</div>${rows}</div>`;
+  }
+
+  // ── Top trackers table ──
+  function topTrackersTable(trackers) {
+    if (!trackers.length) return '';
+    const rows = trackers.map(t =>
+      `<tr>
+        <td style="font-family:monospace;font-size:11px">${escHTML(t.imei)}</td>
+        <td>${escHTML(t.name ?? '–')}</td>
+        <td style="text-align:right">${fmtN(t.events7d)}</td>
+        <td style="color:var(--fg3)">${t.lastSeenAt ? df.format(new Date(t.lastSeenAt)) : '–'}</td>
+      </tr>`
+    ).join('');
+    return `<div class="stats-breakdown-box" style="margin-bottom:12px">
+      <div class="stats-chart-title">Most active trackers <span class="stats-chart-range">(last 7 days)</span></div>
+      <table class="bat-table" style="margin-top:8px">
+        <thead><tr><th>IMEI</th><th>Name</th><th style="text-align:right">Events</th><th>Last seen</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }
+
+  cont.innerHTML = `
+    <div class="stats-kpi-row">
+      ${kpiCard('Sensor readings', fmtN(s.totalReadings), `${fmtN(s.readingsLast30d)} last 30 d`)}
+      ${kpiCard('Tracker events', fmtN(s.totalVehicleEvents), `${fmtN(s.vehicleEventsLast30d)} last 30 d`)}
+      ${kpiCard('Lifecycle events', fmtN(s.totalLifecycleEvents), `${fmtN(s.lifecycleEventsLast30d)} last 30 d`)}
+      ${kpiCard('Driver behavior', fmtN(s.totalDriverBehaviorEvents), '')}
+      ${kpiCard('Assets', fmtN(s.totalVehicles), '')}
+      ${kpiCard('Users', fmtN(s.totalUsers), '')}
+    </div>
+    <div class="stats-charts-row">
+      ${barChart('Sensor readings / day', s.readingsPerDay, '#60a5fa')}
+      ${barChart('Tracker events / day', s.vehicleEventsPerDay, '#34d399')}
+      ${barChart('Lifecycle events / day', s.lifecyclePerDay, '#a78bfa')}
+    </div>
+    <div class="stats-charts-row">
+      ${breakdownChart('Tracker event types (all time)', s.vehicleEventsByType)}
+      ${breakdownChart('Lifecycle event types (all time)', s.lifecycleByType)}
+    </div>
+    ${topTrackersTable(s.topTrackers)}
+    <div class="stats-breakdown-box" style="margin-bottom:12px">
+      <div class="stats-chart-title">Database</div>
+      <div class="stats-info-row"><span>Oldest reading</span><span>${fmtD(s.oldestReading)}</span></div>
+      <div class="stats-info-row"><span>Newest reading</span><span>${fmtD(s.newestReading)}</span></div>
+      <div class="stats-info-row"><span>Total sensor readings</span><span>${fmtN(s.totalReadings)}</span></div>
+      <div class="stats-info-row"><span>Total tracker events</span><span>${fmtN(s.totalVehicleEvents)}</span></div>
+      <div class="stats-info-row"><span>Total lifecycle events</span><span>${fmtN(s.totalLifecycleEvents)}</span></div>
+      <div class="stats-info-row"><span>Total driver behavior</span><span>${fmtN(s.totalDriverBehaviorEvents)}</span></div>
+    </div>`;
+}

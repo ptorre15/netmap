@@ -42,6 +42,9 @@ struct AdminController: RouteCollection {
         // General sensor rename (SensorPush, AirTag, STIHL, ELA, TPMS…)
         admin.patch ("sensors", ":sensorID",          use: renameSensor)   // PATCH  /api/admin/sensors/:sensorID
 
+        // Server statistics
+        admin.get("stats", use: getStats)               // GET  /api/admin/stats
+
         // Server log stream
         admin.get("logs", use: getLogs)               // GET  /api/admin/logs?since=N
         admin.get("security-events", use: listSecurityEvents) // GET /api/admin/security-events
@@ -958,6 +961,109 @@ struct AdminController: RouteCollection {
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let basic = ISO8601DateFormatter()
         return iso.date(from: raw) ?? basic.date(from: raw) ?? Double(raw).map { Date(timeIntervalSince1970: $0) }
+    }
+
+    // ── GET /api/admin/stats ──────────────────────────────────────────────────
+    struct DayCount: Content {
+        var date: String
+        var count: Int
+    }
+    struct TypeCount: Content {
+        var type: String
+        var count: Int
+    }
+    struct TrackerStat: Content {
+        var imei: String
+        var name: String?
+        var events7d: Int
+        var lastSeenAt: Date?
+    }
+    struct AdminStatsResponse: Content {
+        var totalReadings: Int
+        var totalVehicleEvents: Int
+        var totalLifecycleEvents: Int
+        var totalDriverBehaviorEvents: Int
+        var totalVehicles: Int
+        var totalUsers: Int
+        var readingsLast30d: Int
+        var vehicleEventsLast30d: Int
+        var lifecycleEventsLast30d: Int
+        var readingsPerDay: [DayCount]
+        var vehicleEventsPerDay: [DayCount]
+        var lifecyclePerDay: [DayCount]
+        var vehicleEventsByType: [TypeCount]
+        var lifecycleByType: [TypeCount]
+        var topTrackers: [TrackerStat]
+        var oldestReading: Date?
+        var newestReading: Date?
+    }
+
+    func getStats(req: Request) async throws -> AdminStatsResponse {
+        guard let sql = req.db as? SQLDatabase else {
+            throw Abort(.internalServerError, reason: "SQL not available")
+        }
+
+        struct CountRow:   Decodable { var n: Int }
+        struct DayRow:     Decodable { var day: String; var n: Int }
+        struct TypeRow:    Decodable { var t: String;   var n: Int }
+        struct TrackerRow: Decodable { var imei: String; var name: String?; var n: Int; var last_ts: Double? }
+        struct DateRow:    Decodable { var ts: Double? }
+
+        let threshold30 = Date().addingTimeInterval(-30 * 86400).timeIntervalSince1970
+        let threshold7  = Date().addingTimeInterval(-7  * 86400).timeIntervalSince1970
+
+        async let totalReadings   = sql.raw("SELECT COUNT(*) AS n FROM sensor_readings").first(decoding: CountRow.self)
+        async let totalVehEv      = sql.raw("SELECT COUNT(*) AS n FROM vehicle_events").first(decoding: CountRow.self)
+        async let totalLC         = sql.raw("SELECT COUNT(*) AS n FROM device_lifecycle_events").first(decoding: CountRow.self)
+        async let totalDB         = sql.raw("SELECT COUNT(*) AS n FROM driver_behavior_events").first(decoding: CountRow.self)
+        async let totalVehicles   = sql.raw("SELECT COUNT(*) AS n FROM vehicles").first(decoding: CountRow.self)
+        async let totalUsers      = sql.raw("SELECT COUNT(*) AS n FROM users").first(decoding: CountRow.self)
+
+        async let readings30d     = sql.raw("SELECT COUNT(*) AS n FROM sensor_readings WHERE timestamp >= \(bind: threshold30)").first(decoding: CountRow.self)
+        async let vehEv30d        = sql.raw("SELECT COUNT(*) AS n FROM vehicle_events WHERE timestamp >= \(bind: threshold30)").first(decoding: CountRow.self)
+        async let lc30d           = sql.raw("SELECT COUNT(*) AS n FROM device_lifecycle_events WHERE timestamp >= \(bind: threshold30)").first(decoding: CountRow.self)
+
+        async let readPerDay      = sql.raw("SELECT date(timestamp,'unixepoch') AS day, COUNT(*) AS n FROM sensor_readings WHERE timestamp >= \(bind: threshold30) GROUP BY day ORDER BY day").all(decoding: DayRow.self)
+        async let vehEvPerDay     = sql.raw("SELECT date(timestamp,'unixepoch') AS day, COUNT(*) AS n FROM vehicle_events WHERE timestamp >= \(bind: threshold30) GROUP BY day ORDER BY day").all(decoding: DayRow.self)
+        async let lcPerDay        = sql.raw("SELECT date(timestamp,'unixepoch') AS day, COUNT(*) AS n FROM device_lifecycle_events WHERE timestamp >= \(bind: threshold30) GROUP BY day ORDER BY day").all(decoding: DayRow.self)
+
+        async let vehEvByType     = sql.raw("SELECT event_type AS t, COUNT(*) AS n FROM vehicle_events GROUP BY t ORDER BY n DESC").all(decoding: TypeRow.self)
+        async let lcByType        = sql.raw("SELECT event_type AS t, COUNT(*) AS n FROM device_lifecycle_events GROUP BY t ORDER BY n DESC").all(decoding: TypeRow.self)
+
+        async let topTrackers     = sql.raw("SELECT imei, sensor_name AS name, COUNT(*) AS n, MAX(timestamp) AS last_ts FROM vehicle_events WHERE timestamp >= \(bind: threshold7) GROUP BY imei ORDER BY n DESC LIMIT 10").all(decoding: TrackerRow.self)
+
+        async let oldestR         = sql.raw("SELECT MIN(received_at) AS ts FROM sensor_readings").first(decoding: DateRow.self)
+        async let newestR         = sql.raw("SELECT MAX(received_at) AS ts FROM sensor_readings").first(decoding: DateRow.self)
+
+        let (tr, tv, tlc, tdb, tvh, tu, r30, v30, l30, rpd, vpd, lpd, vbt, lbt, top, oldest, newest) = try await (
+            totalReadings, totalVehEv, totalLC, totalDB, totalVehicles, totalUsers,
+            readings30d, vehEv30d, lc30d,
+            readPerDay, vehEvPerDay, lcPerDay,
+            vehEvByType, lcByType, topTrackers,
+            oldestR, newestR
+        )
+
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .iso8601
+        return AdminStatsResponse(
+            totalReadings:              tr?.n  ?? 0,
+            totalVehicleEvents:         tv?.n  ?? 0,
+            totalLifecycleEvents:       tlc?.n ?? 0,
+            totalDriverBehaviorEvents:  tdb?.n ?? 0,
+            totalVehicles:              tvh?.n ?? 0,
+            totalUsers:                 tu?.n  ?? 0,
+            readingsLast30d:            r30?.n ?? 0,
+            vehicleEventsLast30d:       v30?.n ?? 0,
+            lifecycleEventsLast30d:     l30?.n ?? 0,
+            readingsPerDay:    rpd.map { DayCount(date: $0.day, count: $0.n) },
+            vehicleEventsPerDay: vpd.map { DayCount(date: $0.day, count: $0.n) },
+            lifecyclePerDay:   lpd.map { DayCount(date: $0.day, count: $0.n) },
+            vehicleEventsByType: vbt.map { TypeCount(type: $0.t, count: $0.n) },
+            lifecycleByType:   lbt.map { TypeCount(type: $0.t, count: $0.n) },
+            topTrackers: top.map { TrackerStat(imei: $0.imei, name: $0.name, events7d: $0.n, lastSeenAt: $0.last_ts.map { Date(timeIntervalSince1970: $0) }) },
+            oldestReading: oldest?.ts.map { Date(timeIntervalSince1970: $0) } ?? nil,
+            newestReading: newest?.ts.map { Date(timeIntervalSince1970: $0) } ?? nil
+        )
     }
 }
 

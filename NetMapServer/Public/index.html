@@ -151,7 +151,7 @@
   <button id="refresh-btn"     class="icon-btn" title="Refresh now">↻</button>
   <button id="theme-btn"       class="icon-btn" title="Toggle theme">◑</button>
   <button id="logs-btn"        class="icon-btn" title="Server logs" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 4a2 2 0 0 0 -2 2v3a2 3 0 0 1 -2 3a2 3 0 0 1 2 3v3a2 2 0 0 0 2 2"/><path d="M17 4a2 2 0 0 1 2 2v3a2 3 0 0 0 2 3a2 3 0 0 0 -2 3v3a2 2 0 0 1 -2 2"/></svg></button>
-  <button id="admin-btn"       class="icon-btn" title="Admin panel" style="display:none">⚙</button>
+  <button id="admin-btn"       class="icon-btn" title="Admin panel" style="display:none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg></button>
   <div id="user-badge" class="user-badge" style="display:none">
     <span id="user-name" class="user-name"></span>
     <span id="user-role" class="role-badge"></span>
@@ -216,7 +216,7 @@
     </div>
     <div id="chart-container" style="display:none">
       <div id="chart-gps-only" style="display:none" class="chart-gps-only">
-        <div class="nodata-icon">🛰</div>
+        <div class="nodata-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 12l1.5 1.5"/><path d="M14.5 17a2.5 2.5 0 0 0 2.5 -2.5"/><path d="M15 20a5 5 0 0 0 5 -5"/></svg></div>
         <p>No chart available for AirTag</p>
         <small>Use the <strong>Map</strong> tab to view GPS history.</small>
       </div>
@@ -268,7 +268,7 @@
 
     <!-- Empty / no-sensor state -->
     <div id="empty-state" style="display:none">
-      <div class="empty-icon">📡</div>
+      <div class="empty-icon"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18.364 19.364a9 9 0 1 0 -12.728 0"/><path d="M15.536 16.536a5 5 0 1 0 -7.072 0"/><path d="M12 13m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/></svg></div>
       <p>No sensor data</p>
       <small>Select a sensor from the sidebar — data is recorded as soon as the NetMap app sends readings.</small>
     </div>
@@ -280,59 +280,97 @@
 <div id="admin-backdrop" class="admin-backdrop" style="display:none"></div>
 <div id="admin-drawer" class="admin-drawer">
   <div class="admin-drawer-header">
-    <span class="admin-drawer-title">Admin</span>
-    <button class="admin-drawer-close" id="admin-drawer-close">&#x2715;</button>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 12l2 2l4 -4"/><path d="M12 3l7 4v6c0 5 -3.5 8.5 -7 10c-3.5 -1.5 -7 -5 -7 -10v-6l7 -4"/></svg>
+    <span class="admin-drawer-title">Administration</span>
+    <button class="admin-drawer-close" id="admin-drawer-close" title="Close">&#x2715;</button>
   </div>
-  <div class="admin-tabs-bar">
-    <button class="admin-tab-btn" data-tab="users"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/></svg> Users<span class="admin-tab-count" id="admin-count-users"></span></button>
-    <button class="admin-tab-btn" data-tab="assets"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12l0 9"/><path d="M12 12l-8 -4.5"/><path d="M16 5.25l-8 4.5"/></svg> Assets<span class="admin-tab-count" id="admin-count-assets"></span></button>
-    <button class="admin-tab-btn" data-tab="trackers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 18l0 -3"/><path d="M10 18l0 -6"/><path d="M14 18l0 -9"/><path d="M18 18l0 -12"/></svg> Trackers<span class="admin-tab-count" id="admin-count-trackers"></span></button>
-    <button class="admin-tab-btn" data-tab="security"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l7 4v6c0 5 -3.5 8.5 -7 10c-3.5 -1.5 -7 -5 -7 -10v-6l7 -4"/><path d="M9 12l2 2l4 -4"/></svg> Security<span class="admin-tab-count" id="admin-count-security"></span></button>
-  </div>
-  <!-- Users tab -->
-  <div class="admin-tab-pane" id="admin-tab-users">
-    <div class="admin-tab-toolbar">
-      <button id="admin-add-user-btn" class="modal-btn-primary admin-small-btn">+ New User</button>
-    </div>
-    <div id="admin-users-list" class="admin-users-list"></div>
-  </div>
-  <!-- Assets tab -->
-  <div class="admin-tab-pane" id="admin-tab-assets">
-    <div class="admin-tab-toolbar">
-      <button id="admin-add-asset-btn" class="modal-btn-primary admin-small-btn">+ New Asset</button>
-    </div>
-    <div id="admin-assets-list" class="admin-assets-list"></div>
-  </div>
-  <!-- Trackers tab -->
-  <div class="admin-tab-pane" id="admin-tab-trackers">
-    <div class="admin-tab-toolbar">
-      <button id="admin-add-tracker-btn" class="modal-btn-primary admin-small-btn">+ New Tracker</button>
-    </div>
-    <div id="admin-new-tracker-form" class="admin-new-tracker-form" style="display:none">
-      <input type="text" id="nt-imei" placeholder="IMEI (e.g. 357312098765432)" autocomplete="off" spellcheck="false">
-      <select id="nt-vehicle"></select>
-      <input type="text" id="nt-name" placeholder="Name (optional)" autocomplete="off">
-      <button id="nt-save-btn" class="modal-btn-primary admin-small-btn">Register</button>
-      <button id="nt-cancel-btn" class="modal-btn admin-small-btn">Cancel</button>
-      <span id="nt-error" class="auth-error" style="display:none"></span>
-    </div>
-    <div id="admin-trackers-list" class="admin-trackers-list"></div>
-  </div>
-  <!-- Security audit tab -->
-  <div class="admin-tab-pane" id="admin-tab-security">
-    <div class="admin-tab-toolbar admin-security-toolbar">
-      <input type="text" id="sec-filter-action" placeholder="Action (e.g. admin.user.delete)" autocomplete="off">
-      <input type="text" id="sec-filter-actor" placeholder="Actor email" autocomplete="off">
-      <button id="sec-filter-apply" class="modal-btn-primary admin-small-btn">Filter</button>
-      <button id="sec-filter-clear" class="modal-btn admin-small-btn">Clear</button>
-    </div>
-    <div id="admin-security-list" class="admin-security-list"></div>
-    <div class="admin-security-pager">
-      <button id="sec-prev-btn" class="modal-btn admin-small-btn">Prev</button>
-      <span id="sec-page-label">Page 1</span>
-      <button id="sec-next-btn" class="modal-btn admin-small-btn">Next</button>
-    </div>
-  </div>
+  <div class="admin-body">
+    <!-- Vertical nav rail -->
+    <nav class="admin-nav" aria-label="Admin sections">
+      <button class="admin-nav-btn" data-tab="users">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/></svg>
+        <span>Users</span>
+        <span class="admin-nav-count" id="admin-count-users"></span>
+      </button>
+      <button class="admin-nav-btn" data-tab="assets">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12l0 9"/><path d="M12 12l-8 -4.5"/><path d="M16 5.25l-8 4.5"/></svg>
+        <span>Assets</span>
+        <span class="admin-nav-count" id="admin-count-assets"></span>
+      </button>
+      <button class="admin-nav-btn" data-tab="trackers">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 18l0 -3"/><path d="M10 18l0 -6"/><path d="M14 18l0 -9"/><path d="M18 18l0 -12"/></svg>
+        <span>Trackers</span>
+        <span class="admin-nav-count" id="admin-count-trackers"></span>
+      </button>
+      <button class="admin-nav-btn" data-tab="security">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l7 4v6c0 5 -3.5 8.5 -7 10c-3.5 -1.5 -7 -5 -7 -10v-6l7 -4"/><path d="M9 12l2 2l4 -4"/></svg>
+        <span>Security</span>
+        <span class="admin-nav-count" id="admin-count-security"></span>
+      </button>
+      <button class="admin-nav-btn" data-tab="stats">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 3v18h18"/><path d="M7 16l4 -4l4 4l6 -6"/></svg>
+        <span>Stats</span>
+      </button>
+    </nav>
+    <!-- Content area -->
+    <div class="admin-content">
+      <!-- Users tab -->
+      <div class="admin-tab-pane" id="admin-tab-users">
+        <div class="admin-tab-toolbar">
+          <span class="admin-pane-title">Users</span>
+          <button id="admin-add-user-btn" class="modal-btn-primary admin-small-btn">+ New User</button>
+        </div>
+        <div id="admin-users-list" class="admin-users-list"></div>
+      </div>
+      <!-- Assets tab -->
+      <div class="admin-tab-pane" id="admin-tab-assets">
+        <div class="admin-tab-toolbar">
+          <span class="admin-pane-title">Assets</span>
+          <button id="admin-add-asset-btn" class="modal-btn-primary admin-small-btn">+ New Asset</button>
+        </div>
+        <div id="admin-assets-list" class="admin-assets-list"></div>
+      </div>
+      <!-- Trackers tab -->
+      <div class="admin-tab-pane" id="admin-tab-trackers">
+        <div class="admin-tab-toolbar">
+          <span class="admin-pane-title">Trackers</span>
+          <button id="admin-add-tracker-btn" class="modal-btn-primary admin-small-btn">+ New Tracker</button>
+        </div>
+        <div id="admin-new-tracker-form" class="admin-new-tracker-form" style="display:none">
+          <input type="text" id="nt-imei" placeholder="IMEI (e.g. 357312098765432)" autocomplete="off" spellcheck="false">
+          <select id="nt-vehicle"></select>
+          <input type="text" id="nt-name" placeholder="Name (optional)" autocomplete="off">
+          <button id="nt-save-btn" class="modal-btn-primary admin-small-btn">Register</button>
+          <button id="nt-cancel-btn" class="modal-btn admin-small-btn">Cancel</button>
+          <span id="nt-error" class="auth-error" style="display:none"></span>
+        </div>
+        <div id="admin-trackers-list" class="admin-trackers-list"></div>
+      </div>
+      <!-- Security audit tab -->
+      <div class="admin-tab-pane" id="admin-tab-security">
+        <div class="admin-tab-toolbar admin-security-toolbar">
+          <span class="admin-pane-title">Security</span>
+          <input type="text" id="sec-filter-action" placeholder="Action filter…" autocomplete="off">
+          <input type="text" id="sec-filter-actor" placeholder="Actor email…" autocomplete="off">
+          <button id="sec-filter-apply" class="modal-btn-primary admin-small-btn">Filter</button>
+          <button id="sec-filter-clear" class="modal-btn admin-small-btn">Clear</button>
+        </div>
+        <div id="admin-security-list" class="admin-security-list"></div>
+        <div class="admin-security-pager">
+          <button id="sec-prev-btn" class="modal-btn admin-small-btn">Prev</button>
+          <span id="sec-page-label">Page 1</span>
+          <button id="sec-next-btn" class="modal-btn admin-small-btn">Next</button>
+        </div>
+      </div>
+      <!-- Stats tab -->
+      <div class="admin-tab-pane" id="admin-tab-stats">
+        <div class="admin-tab-toolbar">
+          <span class="admin-pane-title">Statistics</span>
+        </div>
+        <div id="admin-stats-cont" class="admin-stats-scroll"></div>
+      </div>
+    </div><!-- /.admin-content -->
+  </div><!-- /.admin-body -->
 </div>
 
 <!-- ── New user modal ───────────────────────── -->
@@ -383,7 +421,7 @@
 <div id="del-modal">
   <div id="del-modal-backdrop" class="del-modal-backdrop"></div>
   <div class="del-modal-box">
-    <div class="del-modal-icon">🗑︎</div>
+    <div class="del-modal-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></div>
     <div class="del-modal-title" id="del-modal-title"></div>
     <div class="del-modal-body"  id="del-modal-body"></div>
     <div class="del-modal-actions">
@@ -422,6 +460,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="app.js?v=117"></script>
+<script src="app.js?v=122"></script>
 </body>
 </html>
