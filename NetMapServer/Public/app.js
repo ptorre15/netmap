@@ -1992,12 +1992,8 @@ async function renderTable() {
     let events = [];
     try {
       const { from, to } = getRange();
-      events = await apiFetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&limit=2000`);
-      const fromMs = from.getTime(), toMs = to.getTime();
-      events = events.filter(e => {
-        const t = new Date(e.timestamp).getTime();
-        return t >= fromMs && t <= toMs;
-      }).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).reverse();
+      events = await apiFetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&limit=2000`);
+      events = events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).reverse();
     } catch(err) {
       D.tableBody.innerHTML = `<tr><td colspan="11" style="color:var(--danger)">${escHTML(err.message)}</td></tr>`;
       return;

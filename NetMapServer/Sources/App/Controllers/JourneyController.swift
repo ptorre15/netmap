@@ -300,6 +300,18 @@ struct VehicleEventController: RouteCollection {
         if let i = try? req.query.get(String.self, at: "imei")       { q = q.filter(\.$imei == i) }
         if let j = try? req.query.get(String.self, at: "journey")    { q = q.filter(\.$journeyID == j) }
         if let e = try? req.query.get(String.self, at: "event_type") { q = q.filter(\.$eventType == e) }
+        // Date-range filter: timestamp column is REAL (Unix seconds). Fluent's SQLite
+        // driver encodes Date as a Double (timeIntervalSince1970) so the comparison
+        // is REAL vs REAL — correct.
+        let isoRange = ISO8601DateFormatter()
+        if let fromStr = try? req.query.get(String.self, at: "from"),
+           let fromDate = isoRange.date(from: fromStr) {
+            q = q.filter(\.$timestamp >= fromDate)
+        }
+        if let toStr = try? req.query.get(String.self, at: "to"),
+           let toDate = isoRange.date(from: toStr) {
+            q = q.filter(\.$timestamp <= toDate)
+        }
         return try await q.limit(limit).all()
     }
 
@@ -328,15 +340,17 @@ struct VehicleEventController: RouteCollection {
         let limit = min(max(rawLimit, 1), 500)
         let vehicleFilter = try? req.query.get(String.self, at: "vehicle")
 
-        // Parse & sanitize date-range params (re-serialised through ISO8601DateFormatter
-        // to strip any injection characters before embedding into SQL).
+        // Parse date-range params into Unix epoch Doubles so that HAVING comparisons
+        // are REAL vs REAL.  The timestamp column is stored as a REAL (Unix seconds)
+        // in SQLite; binding an ISO8601 string would create a TEXT-typed parameter and
+        // SQLite's type ordering (REAL < TEXT) would make the comparison always false.
         let isoSanitiser = ISO8601DateFormatter()
-        let fromBound = (try? req.query.get(String.self, at: "from"))
+        let fromBound: Double = (try? req.query.get(String.self, at: "from"))
             .flatMap { isoSanitiser.date(from: $0) }
-            .map     { isoSanitiser.string(from: $0) } ?? "1970-01-01T00:00:00Z"
-        let toBound = (try? req.query.get(String.self, at: "to"))
+            .map     { $0.timeIntervalSince1970 } ?? 0.0
+        let toBound: Double = (try? req.query.get(String.self, at: "to"))
             .flatMap { isoSanitiser.date(from: $0) }
-            .map     { isoSanitiser.string(from: $0) } ?? "9999-12-31T23:59:59Z"
+            .map     { $0.timeIntervalSince1970 } ?? Double.greatestFiniteMagnitude
         var accessFilterSQL = ""
         if let auth = req.authUser, !auth.isAdmin {
             let allowedVehicleIDs = try await UserAsset.query(on: req.db)

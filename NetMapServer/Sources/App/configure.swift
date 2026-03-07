@@ -2,7 +2,21 @@ import Vapor
 import Fluent
 import FluentSQLiteDriver
 
+// Single source of truth for the server version, read from NetMapServer/VERSION at startup.
+extension Application {
+    private struct ServerVersionKey: StorageKey { typealias Value = String }
+    var serverVersion: String {
+        get { storage[ServerVersionKey.self] ?? "unknown" }
+        set { storage[ServerVersionKey.self] = newValue }
+    }
+}
+
 public func configure(_ app: Application) async throws {
+
+    // ── Server version (read from VERSION file, single source of truth) ───
+    let versionPath = app.directory.workingDirectory + "VERSION"
+    app.serverVersion = (try? String(contentsOfFile: versionPath, encoding: .utf8))
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? "unknown"
 
     // ── TCP Port (override with PORT env var) ────────────────────────────
     let port = Int(Environment.get("PORT") ?? "") ?? 8092

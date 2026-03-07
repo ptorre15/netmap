@@ -71,7 +71,7 @@
         {
             "label": "Server: Build",
             "type": "shell",
-            "command": "cd '${workspaceFolder}/NetMapServer' && swift build 2>&1",
+            "command": "cd '${workspaceFolder}/NetMapServer' && swift build 2>&1 && '${workspaceFolder}/NetMapServer/bump-version.sh' && echo \"📦 $(cat '${workspaceFolder}/NetMapServer/VERSION')\"",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -94,7 +94,7 @@
         {
             "label": "Server: Restart",
             "type": "shell",
-            "command": "lsof -ti tcp:8092 | xargs kill -9 2>/dev/null; echo '⏹  Ancien processus arrêté'; sleep 1; cd '${workspaceFolder}/NetMapServer' && swift run App >> /tmp/netmap_server.log 2>&1 &\nsleep 5 && tail -8 /tmp/netmap_server.log",
+            "command": "lsof -ti tcp:8092 | xargs kill -9 2>/dev/null; echo '⏹  Ancien processus arrêté'; sleep 1; cd '${workspaceFolder}/NetMapServer' && .build/debug/App >> /tmp/netmap_server.log 2>&1 &\nsleep 5 && tail -8 /tmp/netmap_server.log",
             "group": "build",
             "presentation": {
                 "reveal": "always",

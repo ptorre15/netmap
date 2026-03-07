@@ -3,8 +3,8 @@ import Vapor
 func routes(_ app: Application) throws {
 
     // GET /health  — liveness probe
-    app.get("health") { _ -> [String: String] in
-        ["status": "ok", "server": "NetMapServer", "version": "1.0.0"]
+    app.get("health") { req -> [String: String] in
+        ["status": "ok", "server": "NetMapServer", "version": req.application.serverVersion]
     }
 
     // API key is loaded into app.currentAPIKey by configure.swift (DB > env > default).
