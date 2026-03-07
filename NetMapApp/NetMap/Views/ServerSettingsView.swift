@@ -181,6 +181,14 @@ struct ServerSettingsView: View {
             }
             #endif
 
+            // ── About ────────────────────────────────────────────────────
+            Section("About") {
+                LabeledContent("App version") {
+                    Text(Bundle.main.appVersionString)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             // ── Quick Setup Guide ────────────────────────────────────────
             Section {
                 VStack(alignment: .leading, spacing: 10) {
@@ -230,5 +238,13 @@ struct ServerSettingsView: View {
         }
         let k = apiKeyDraft.trimmingCharacters(in: .whitespaces)
         if !k.isEmpty { serverClient.apiKey = k }
+    }
+}
+
+private extension Bundle {
+    var appVersionString: String {
+        let v = infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "\(v) (build \(b))"
     }
 }

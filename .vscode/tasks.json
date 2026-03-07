@@ -115,6 +115,29 @@
                 "clear": true
             },
             "problemMatcher": []
+        },
+        {
+            "label": "iPhone: Build & Install",
+            "type": "shell",
+            "command": "xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Release -destination 'platform=iOS,id=00008101-000C28493EF1001E' build 2>&1 | /Users/phil/.gem/ruby/2.6.0/bin/xcpretty --color || true && xcrun devicectl device install app --device 00008101-000C28493EF1001E \"$(xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Release -destination 'platform=iOS,id=00008101-000C28493EF1001E' -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR' | awk '{print $3}')/NetMap.app\" 2>&1",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "swift",
+                "fileLocation": ["absolute"],
+                "pattern": {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
         }
     ]
 }

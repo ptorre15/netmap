@@ -3412,6 +3412,13 @@ async function main() {
   if (localStorage.getItem('netmap-theme') === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
   }
+
+  // Show server version in sidebar footer (no auth required)
+  fetch('/health').then(r => r.json()).then(h => {
+    const el = $('server-version');
+    if (el && h?.version) el.textContent = `Server v${h.version}`;
+  }).catch(() => {});
+
   setup();  // register all event listeners first (auth form needs to be live)
 
   try {
