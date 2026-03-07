@@ -133,6 +133,7 @@ struct RecordController: RouteCollection {
         let p = try req.content.decode(SensorPayload.self)
         try await SensorReading(from: p).save(on: req.db)
         try await upsertVehicles(from: [p], on: req.db)
+        Task { await broadcastPayloads([p]) }
         return .created
     }
 
@@ -145,6 +146,7 @@ struct RecordController: RouteCollection {
             }
         }
         try await upsertVehicles(from: payloads, on: req.db)
+        Task { await broadcastPayloads(payloads) }
         // Log one line per brand so the web log viewer can filter by category
         let byBrand = Dictionary(grouping: payloads, by: \.brand)
         for (brand, items) in byBrand.sorted(by: { $0.key < $1.key }) {
@@ -152,6 +154,32 @@ struct RecordController: RouteCollection {
             req.logger.info("📦 [\(tag)] \(brand)×\(items.count)")
         }
         return .created
+    }
+
+    /// Broadcast a minimal push event for each unique sensor in `payloads`.
+    private func broadcastPayloads(_ payloads: [SensorPayload]) async {
+        // Deduplicate: one message per sensor (last value wins)
+        var bySensor: [String: SensorPayload] = [:]
+        for p in payloads { bySensor[p.sensorID] = p }
+        for p in bySensor.values {
+            let enc = JSONEncoder()
+            enc.dateEncodingStrategy = .iso8601
+            // Build a minimal event — only fields the dashboard needs for live update
+            let event: [String: Any] = [
+                "type":         "record",
+                "sensorID":     p.sensorID,
+                "vehicleID":    p.vehicleID,
+                "brand":        p.brand,
+                "pressureBar":  p.pressureBar as Any,
+                "temperatureC": p.temperatureC as Any,
+                "batteryPct":   p.batteryPct as Any,
+                "timestamp":    ISO8601DateFormatter().string(from: p.timestamp ?? Date()),
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: event),
+               let json = String(data: data, encoding: .utf8) {
+                await WebSocketBroadcaster.shared.broadcast(json)
+            }
+        }
     }
 
     /// Ensures all vehicles referenced in payloads exist in the `vehicles` table.

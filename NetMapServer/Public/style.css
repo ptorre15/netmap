@@ -309,11 +309,12 @@ body {
 .mode-btn.active { background: var(--m-blue); border-color: var(--m-blue-dk); color: #fff; box-shadow: 0 1px 4px rgba(0,159,227,.35); font-weight: 700; }
 
 /* ── Chart cards ── */
-#chart-container { flex: 1; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; }
+#chart-container { flex: 1; padding: 16px 20px 0; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; }
 .chart-card {
   background: var(--bg2); border-radius: var(--r); padding: 16px 18px;
   border: 1px solid var(--sep); box-shadow: var(--shadow); position: relative; overflow: hidden;
 }
+.chart-card:last-child { margin-bottom: 16px; }
 .chart-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--m-yellow); }
 .chart-title { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--fg2); margin-bottom: 14px; }
 .chart-wrap    { position: relative; height: 210px; }
@@ -1446,6 +1447,7 @@ body {
 .toast.toast-visible     { opacity: 1; transform: none; }
 .toast.toast-error       { border-left-color: var(--danger); }
 .toast.toast-success     { border-left-color: #34d399; }
+.toast.toast-warn        { border-left-color: #fbbf24; }
 
 /* ═══════════════════════════════════════════════════════════════
    Skeleton loader
@@ -1718,6 +1720,53 @@ tr.journey-sep-row td {
 }
 .tbl-empty-cell svg { display: block; margin: 0 auto 10px; opacity: .45; }
 
+/* ─── Fleet summary bar (sidebar) ──────────────────────────────────────────── */
+.fleet-summary-bar {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  padding: 6px 12px 0;
+}
+.fsb-pill {
+  font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+  white-space: nowrap;
+}
+.fsb-ok     { background: rgba(52,211,153,0.15); color: #34d399; }
+.fsb-warn   { background: rgba(251,191,36,0.15);  color: #fbbf24; }
+.fsb-danger { background: rgba(248,113,113,0.15); color: #f87171; }
+.fsb-bat    { background: rgba(251,191,36,0.15);  color: #fbbf24; }
+.fsb-stale  { background: rgba(85,85,106,0.15);   color: #8A8D9E; }
+
+/* ─── Fleet grid view ───────────────────────────────────────────────────────── */
+#fleet-container { flex: 1; overflow: auto; padding: 20px; }
+.fleet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 12px;
+}
+.fleet-card {
+  background: var(--bg2); border: 1px solid var(--sep); border-radius: 10px;
+  padding: 14px; cursor: pointer; transition: background .15s, border-color .15s;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.fleet-card:hover { background: var(--bg3); }
+.fleet-card.fc-selected { border-color: #009FE3; }
+.fc-header { display: flex; align-items: center; gap: 7px; margin-bottom: 2px; }
+.fc-status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.fc-name {
+  font-size: 12px; font-weight: 600; color: var(--fg);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fc-brand { font-size: 10px; color: var(--fg3); margin-bottom: 4px; }
+.fc-value { font-size: 24px; font-weight: 700; color: var(--fg); line-height: 1.1; }
+.fc-value.fc-no-data { color: var(--fg3); }
+.fc-unit  { font-size: 11px; font-weight: 400; color: var(--fg2); margin-left: 2px; }
+.fc-sub   { font-size: 11px; color: var(--fg2); }
+.fc-badge {
+  display: inline-block; align-self: flex-start;
+  font-size: 10px; font-weight: 600; padding: 2px 6px;
+  border-radius: 4px; margin-top: 4px;
+}
+.fc-last  { font-size: 10px; color: var(--fg3); margin-top: auto; padding-top: 6px; }
+
 .stats-breakdown-box {
   background: var(--bg2); border: 1px solid var(--border);
   border-radius: 8px; padding: 12px 14px; flex: 1; min-width: 200px;
@@ -1741,3 +1790,25 @@ tr.journey-sep-row td {
   flex: 1; overflow-y: auto; min-height: 0;
   padding: 10px 14px 24px;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   WebSocket live indicator
+   ═══════════════════════════════════════════════════════════════ */
+.status-pill.ws-live { border-color: rgba(96,165,250,0.4); background: rgba(37,99,235,0.15); }
+.status-pill.ws-live .dot { background: #60a5fa; animation: pulse 1.5s infinite; }
+
+/* ═══════════════════════════════════════════════════════════════
+   Threshold alert editor
+   ═══════════════════════════════════════════════════════════════ */
+.thresh-editor { padding: 8px 18px 10px; border-top: 1px solid var(--sep); margin-top: 4px; }
+.thresh-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.thresh-title  { font-size: 12px; font-weight: 700; color: var(--fg3);
+                 text-transform: uppercase; letter-spacing: .06em; margin-right: 2px; }
+.thresh-field  { display: flex; align-items: center; gap: 4px; }
+.thresh-lbl    { font-size: 13px; font-weight: 600; color: var(--fg2); white-space: nowrap; }
+.thresh-unit   { font-size: 13px; color: var(--fg3); }
+.thresh-input  { width: 66px; background: var(--bg3); border: 1px solid var(--sep);
+                 border-radius: 5px; color: var(--fg); font-size: 14px;
+                 padding: 4px 6px; text-align: right; }
+.thresh-input:focus { outline: none; border-color: #009FE3; box-shadow: 0 0 0 2px rgba(0,159,227,.18); }
+.thresh-input::placeholder { color: var(--fg3); }

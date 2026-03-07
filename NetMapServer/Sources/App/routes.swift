@@ -7,6 +7,15 @@ func routes(_ app: Application) throws {
         ["status": "ok", "server": "NetMapServer", "version": req.application.serverVersion]
     }
 
+    // WS /api/ws  — push notifications to authenticated browser clients.
+    // The session cookie is checked as first message is not a handshake header;
+    // authenticated via cookie (HttpOnly session, same as the dashboard REST calls).
+    app.grouped(APIKeyOrBearerMiddleware()).webSocket("api", "ws") { req, ws in
+        ws.onText { _, _ in }  // keep-alive / ping (client sends empty strings)
+        ws.onClose.whenComplete { _ in }
+        Task { await WebSocketBroadcaster.shared.add(ws) }
+    }
+
     // API key is loaded into app.currentAPIKey by configure.swift (DB > env > default).
     try app.register(collection: RecordController())
     try app.register(collection: AuthController())

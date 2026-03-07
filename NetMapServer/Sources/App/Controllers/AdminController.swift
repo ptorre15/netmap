@@ -47,6 +47,10 @@ struct AdminController: RouteCollection {
 
         // Server log stream
         admin.get("logs", use: getLogs)               // GET  /api/admin/logs?since=N
+        admin.webSocket("ws", "logs") { req, ws in    // WS   /api/admin/ws/logs
+            ws.onText { _, _ in }                     // keep-alive pings
+            Task { await LogBroadcaster.shared.add(ws) }
+        }
         admin.get("security-events", use: listSecurityEvents) // GET /api/admin/security-events
     }
 

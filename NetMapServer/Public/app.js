@@ -149,7 +149,8 @@ async function loadAssetTypes() {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const REFRESH_MS = 30_000;
+const REFRESH_MS     = 30_000;
+const WS_RECONNECT_MS = 5_000;   // WebSocket reconnect delay after unexpected close
 const HOURS = { '1H': 1, '24H': 24, '7D': 168, '30D': 720 };
 const WHEEL_LABELS  = { FL: 'Front Left', FR: 'Front Right', RL: 'Rear Left', RR: 'Rear Right' };
 const BRAND_LABELS  = { michelin: 'Michelin TMS', stihl: 'STIHL', ela: 'ELA Innovation', airtag: 'AirTag', tracker: 'GPS Tracker' };
@@ -330,7 +331,8 @@ const S = {
   sensors: [], serverVehicles: [], assetTypes: [], selected: null, vehicleFilter: null,
   period: '24H', customFrom: null, customTo: null,
   mode: 'chart', records: [],
-  loading: false, autoRefresh: false, timer: null,
+  loading: false, timer: null,
+  ws: null, wsConnected: false,
   pChart: null, tChart: null, wovChart: null, wovTChart: null, leafletMap: null,
   mapMatchEnabled: false,
   secAudit: { limit: 50, offset: 0, total: 0, action: '', actor: '' },
@@ -361,6 +363,8 @@ const D = {
   deviceCont:   $('device-container'),
   errorsCont:   $('errors-container'),
   wheelsCont:   $('wheels-container'),
+  fleetCont:    $('fleet-container'),
+  fleetSummary: $('fleet-summary'),
   emptyState:   $('empty-state'),
   tableBody:    $('table-body'),
   tempCard:     $('temp-card'),
@@ -391,7 +395,7 @@ function restoreFromHash() {
   let restored = false;
   if (vid) { S.vehicleFilter = vid; restored = true; }
   if (sid) { S.selected = sid; restored = true; }
-  const validModes   = ['chart','map','table','alerts','device','wheels','errors'];
+  const validModes   = ['chart','map','table','alerts','device','wheels','errors','fleet'];
   const validPeriods = ['1H','24H','7D','30D','custom'];
   if (mode   && validModes.includes(mode))     S.mode   = mode;
   if (period && validPeriods.includes(period)) S.period = period;
@@ -424,8 +428,29 @@ function toDatetimeLocal(d) {
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function isStale(iso, mins = 10) {
+// Stale thresholds per brand (minutes).
+// AirTags only report when the iPhone is nearby — hours of silence is normal.
+// Trackers send GPS pings every ~1 min but may lose signal for longer.
+// Active sensors (TPMS, Stihl, ELA) send every few seconds when in range.
+const STALE_MINS = {
+  airtag:  24 * 60,   // 24 h — passive, only seen when phone is nearby
+  tracker: 60,        // 1 h  — GPS ping may drop in tunnels / garages
+};
+function staleMins(brand) {
+  return STALE_MINS[brand] ?? 10;   // default: 10 min for active sensors
+}
+function isStale(iso, minsOrBrand = 10) {
+  const mins = typeof minsOrBrand === 'string' ? staleMins(minsOrBrand) : minsOrBrand;
   return !iso || (Date.now() - new Date(iso)) > mins * 60_000;
+}
+
+function fmtAgo(iso) {
+  if (!iso) return 'never';
+  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (s <    60) return `${s}s ago`;
+  if (s <  3600) return `${Math.floor(s / 60)}min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
 }
 
 function guessTimeUnit(recs) {
@@ -555,7 +580,7 @@ function renderSensors() {
 
   // ──── Non-TPMS tracker rows rendered first ───────────────────────────────
   html += nonTpmsSensors.filter(s => s.brand === 'tracker').map(s => {
-    const stale  = isStale(s.latestTimestamp);
+    const stale  = isStale(s.latestTimestamp, s.brand);
     const label  = escHTML(s.sensorName ?? s.vehicleName ?? BRAND_LABELS[s.brand] ?? s.brand);
     const sel    = s.sensorID === S.selected;
     const dotCol = stale ? SC.unknown : SC.ok;
@@ -583,7 +608,7 @@ function renderSensors() {
       if (st === 'critical') { worstStatus = 'critical'; break; }
       if (st === 'low') worstStatus = 'low';
     }
-    const anyStale   = tpmsSensors.some(s => isStale(s.latestTimestamp));
+    const anyStale   = tpmsSensors.some(s => isStale(s.latestTimestamp, s.brand));
     const worstDot   = anyStale ? SC.unknown : SC[worstStatus];
     const brandLabel = BRAND_LABELS[tpmsSensors[0].brand] ?? tpmsSensors[0].brand;
     const anySelected = tpmsSensors.some(s => s.sensorID === S.selected);
@@ -599,7 +624,7 @@ function renderSensors() {
     // Wheel chip builder
     const chip = (s, pos) => {
       if (!s) return `<div class="tpms-chip tpms-chip-empty"><div class="tpms-chip-pos">${pos ?? ''}</div></div>`;
-      const stale  = isStale(s.latestTimestamp);
+      const stale  = isStale(s.latestTimestamp, s.brand);
       const status = pStatus(s.latestPressureBar, s.targetPressureBar);
       const pCol   = stale ? SC.unknown : SC[status];
       const bgCol  = stale ? 'rgba(255,255,255,.04)' : SC_BG[status];
@@ -647,7 +672,7 @@ function renderSensors() {
 
   // ──── Other non-TPMS rows (non-tracker) ──────────────────────────────────
   html += nonTpmsSensors.filter(s => s.brand !== 'tracker').map(s => {
-    const stale  = isStale(s.latestTimestamp);
+    const stale  = isStale(s.latestTimestamp, s.brand);
     const label  = escHTML(s.sensorName ?? (s.brand === 'tracker' ? s.vehicleName : null) ?? BRAND_LABELS[s.brand] ?? s.brand);
     const sel    = s.sensorID === S.selected;
     const dotCol = stale ? SC.unknown : SC.ok;
@@ -679,11 +704,47 @@ function renderSensors() {
   D.sensorList.innerHTML = html;
 }
 
+// ─── Fleet summary bar ───────────────────────────────────────────────────────
+function renderFleetSummary() {
+  const el = D.fleetSummary;
+  if (!el) return;
+  const groups  = groupByVehicle();
+  const entry   = S.vehicleFilter ? groups[S.vehicleFilter] : null;
+  const sensors = entry?.sensors ?? [];
+  if (!sensors.length) { el.style.display = 'none'; return; }
+
+  let ok = 0, warn = 0, danger = 0, stale = 0, lowBat = 0;
+  for (const s of sensors) {
+    if (isStale(s.latestTimestamp, s.brand)) { stale++; continue; }
+    if (isTpms(s)) {
+      const st = pStatus(s.latestPressureBar, s.targetPressureBar);
+      if (st === 'ok') ok++;
+      else if (st === 'warn') warn++;
+      else danger++;
+    } else if (s.latestBatteryPct != null && s.latestBatteryPct < 20) {
+      lowBat++;
+    } else {
+      ok++;
+    }
+  }
+
+  const pills = [];
+  if (ok)     pills.push(`<span class="fsb-pill fsb-ok">${ok} ok</span>`);
+  if (warn)   pills.push(`<span class="fsb-pill fsb-warn">${warn} warn</span>`);
+  if (danger) pills.push(`<span class="fsb-pill fsb-danger">${danger} alert</span>`);
+  if (lowBat) pills.push(`<span class="fsb-pill fsb-bat">${lowBat} low bat</span>`);
+  if (stale)  pills.push(`<span class="fsb-pill fsb-stale">${stale} stale</span>`);
+
+  el.innerHTML = pills.join('');
+  el.style.display = pills.length ? 'flex' : 'none';
+}
+
 function renderSidebar() {
   renderVehicles();
   renderSensors();
+  renderFleetSummary();
   D.lastUpdated.textContent = new Date().toLocaleTimeString();
-  const hasLive = S.sensors.some(s => !isStale(s.latestTimestamp, 2));
+  const hasLive = S.sensors.some(s => !isStale(s.latestTimestamp, s.brand));
   D.livePill.className  = 'status-pill' + (hasLive ? ' live' : '');
   D.liveLabel.textContent = S.sensors.length
     ? `${S.sensors.length} sensor${S.sensors.length > 1 ? 's' : ''}`
@@ -716,7 +777,7 @@ function renderSensorInfoCard() {
   el.style.display = '';
   const rawBrandLabel = BRAND_LABELS[s.brand] ?? s.brand;
   const brandLabel = escHTML(rawBrandLabel);
-  const stale = isStale(s.latestTimestamp);
+  const stale = isStale(s.latestTimestamp, s.brand);
   const rawMainLabel =
     s.wheelPosition
       ? (WHEEL_LABELS[s.wheelPosition] ?? s.wheelPosition)
@@ -854,7 +915,9 @@ function renderSensorInfoCard() {
     <button type="submit" class="si-rename-save">Save</button>
     <button type="button" class="si-rename-cancel">Cancel</button>
   </form>
-  ${actionsBar}`;
+  ${actionsBar}
+  <div id="threshold-editor"></div>`;
+  renderThresholdEditor(s.sensorID);
 
   el.querySelector('.si-rename-action-btn')?.addEventListener('click', () => {
     const form = el.querySelector('.si-rename-form');
@@ -968,7 +1031,8 @@ function showMode(mode) {
   D.deviceCont.style.display  = mode === 'device'            ? 'block' : 'none';
   D.wheelsCont.style.display  = mode === 'wheels'            ? 'block' : 'none';
   D.errorsCont.style.display  = mode === 'errors'            ? 'block' : 'none';
-  D.emptyState.style.display = noData && !['alerts','device','wheels','errors'].includes(mode) ? 'flex' : 'none';
+  D.fleetCont.style.display   = mode === 'fleet'             ? 'block' : 'none';
+  D.emptyState.style.display = noData && !['alerts','device','wheels','errors','fleet'].includes(mode) ? 'flex' : 'none';
 }
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
@@ -1012,7 +1076,9 @@ async function renderWheels() {
   const curPressures = sorted.map(d => d.sensor.latestPressureBar).filter(v => v != null);
   const spread = curPressures.length > 1 ? Math.max(...curPressures) - Math.min(...curPressures) : null;
   const spreadCol = spread == null ? '#8A8D9E' : spread < 0.10 ? '#34d399' : spread < 0.20 ? '#fbbf24' : '#f87171';
-  const spreadLabel = spread == null ? '–' : spread < 0.10 ? '✓ Balanced' : spread < 0.20 ? '⚠︎ Monitor' : '⚠︎ Check tyres';
+  const _icoCheck = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10"/></svg>`;
+  const _icoWarn  = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg>`;
+  const spreadLabel = spread == null ? '–' : spread < 0.10 ? `${_icoCheck} Balanced` : spread < 0.20 ? `${_icoWarn} Monitor` : `${_icoWarn} Check tyres`;
 
   // SVG semicircle gauge
   const gauge = (pressure, tgt, color) => {
@@ -1039,7 +1105,7 @@ async function renderWheels() {
     const color  = WHEEL_COLORS[pos] ?? '#a78bfa';
     const sTgt   = s.targetPressureBar ?? target;
     const status = pStatus(s.latestPressureBar, sTgt);
-    const stale  = isStale(s.latestTimestamp);
+    const stale  = isStale(s.latestTimestamp, s.brand);
     const bCol   = s.latestBatteryPct != null
       ? (s.latestBatteryPct > 50 ? '#34d399' : s.latestBatteryPct > 20 ? '#fbbf24' : '#f87171') : '';
     const isSelected = s.sensorID === S.selected;
@@ -1764,7 +1830,7 @@ async function renderTrackerMap(sensor) {
       // Count alerts for the badge and update the row
       const alertCount = behaviors.length;
       const alertBadge = rowEl.querySelector('.jlp-alert-badge');
-      if (alertBadge) alertBadge.textContent = alertCount > 0 ? `⚠\uFE0E ${alertCount}` : '';
+      if (alertBadge) alertBadge.innerHTML = alertCount > 0 ? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg> ${alertCount}` : '';
 
       behaviors.forEach(b => {
         if (b.latitude == null || b.longitude == null) return;
@@ -2562,6 +2628,195 @@ function renderAll() {
   if (S.mode === 'device') renderDevice();
   if (S.mode === 'wheels') renderWheels();
   if (S.mode === 'errors') renderErrors();
+  if (S.mode === 'fleet')  renderFleet();
+  checkCurrentSensorAlerts();
+}
+
+// ─── Fleet grid view ─────────────────────────────────────────────────────────
+function renderFleet() {
+  const groups  = groupByVehicle();
+  const entry   = S.vehicleFilter ? groups[S.vehicleFilter] : null;
+  const sensors = entry?.sensors ?? [];
+  if (!sensors.length) {
+    D.fleetCont.innerHTML = '<div class="bat-loading-full"><p>No sensors for this vehicle.</p></div>';
+    return;
+  }
+
+  const cards = sensors.map(s => {
+    const stale   = isStale(s.latestTimestamp, s.brand);
+    const sel     = s.sensorID === S.selected;
+    let statusCol   = stale ? SC.unknown : SC.ok;
+    let statusLabel = stale ? 'stale' : 'ok';
+    let mainValue = '', unit = '', sub = '';
+
+    if (isTpms(s)) {
+      const st    = pStatus(s.latestPressureBar, s.targetPressureBar);
+      statusCol   = stale ? SC.unknown : SC[st];
+      statusLabel = stale ? 'stale' : st;
+      mainValue   = s.latestPressureBar != null ? s.latestPressureBar.toFixed(2) : '';
+      unit        = 'bar';
+      if (s.latestTemperatureC != null) sub = `${s.latestTemperatureC.toFixed(1)}\u00b0C`;
+    } else if (s.brand === 'tracker') {
+      statusLabel = stale ? 'stale' : 'live';
+      statusCol   = stale ? SC.unknown : '#34d399';
+      if (s.latestGpsSatellites != null) { mainValue = String(s.latestGpsSatellites); unit = 'sats'; }
+      if (s.latestLatitude != null && s.latestLongitude != null)
+        sub = `${s.latestLatitude.toFixed(4)}, ${s.latestLongitude.toFixed(4)}`;
+    } else if (s.latestBatteryPct != null) {
+      const pct   = s.latestBatteryPct;
+      statusCol   = stale ? SC.unknown : (pct > 50 ? SC.ok : pct > 20 ? SC.warn : SC.danger);
+      statusLabel = stale ? 'stale' : (pct > 50 ? 'ok' : pct > 20 ? 'low' : 'critical');
+      mainValue   = String(pct);
+      unit        = '%';
+      if (s.latestTemperatureC != null) sub = `${s.latestTemperatureC.toFixed(1)}\u00b0C`;
+    } else if (s.latestTemperatureC != null) {
+      mainValue = s.latestTemperatureC.toFixed(1);
+      unit      = '\u00b0C';
+    }
+
+    const rawName  = s.wheelPosition
+      ? (WHEEL_LABELS[s.wheelPosition] ?? s.wheelPosition)
+      : (s.sensorName ?? (s.brand === 'tracker' ? s.vehicleName : null) ?? (BRAND_LABELS[s.brand] ?? s.brand));
+    const name       = escHTML(rawName);
+    const brandLabel = escHTML(BRAND_LABELS[s.brand] ?? s.brand);
+    const ago        = fmtAgo(s.latestTimestamp);
+    const valueHtml  = mainValue
+      ? `<div class="fc-value">${mainValue}<span class="fc-unit">${escHTML(unit)}</span></div>`
+      : `<div class="fc-value fc-no-data">\u2013</div>`;
+
+    return `<div class="fleet-card${sel ? ' fc-selected' : ''}" data-sid="${escAttr(s.sensorID)}">
+      <div class="fc-header">
+        <div class="fc-status-dot" style="background:${statusCol}"></div>
+        <div class="fc-name" title="${escAttr(rawName)}">${name}</div>
+      </div>
+      <div class="fc-brand">${brandLabel}</div>
+      ${valueHtml}
+      ${sub ? `<div class="fc-sub">${escHTML(sub)}</div>` : ''}
+      <div class="fc-badge" style="background:${statusCol}22;color:${statusCol}">${statusLabel}</div>
+      <div class="fc-last">${ago}</div>
+    </div>`;
+  }).join('');
+
+  D.fleetCont.innerHTML = `<div class="fleet-grid">${cards}</div>`;
+  D.fleetCont.querySelectorAll('.fleet-card[data-sid]').forEach(card => {
+    card.addEventListener('click', () => {
+      const sid = card.dataset.sid;
+      selectSensor(sid).then(() => {
+        const picked = S.sensors.find(s => s.sensorID === sid);
+        const mode = (picked && picked.brand !== 'airtag' && picked.brand !== 'tracker')
+          ? 'chart' : 'map';
+        showMode(mode);
+        pushHash();
+      });
+    });
+  });
+}
+
+// ─── Threshold alerts (5.2) ───────────────────────────────────────────────────
+//
+// Thresholds stored in localStorage key 'netmap-thresholds':
+//   { [sensorID]: { minBar?, maxBar?, maxTempC?, minBatPct? } }
+//
+const THRESH_KEY = 'netmap-thresholds';
+
+function loadThresholds() {
+  try { return JSON.parse(localStorage.getItem(THRESH_KEY) ?? '{}'); } catch { return {}; }
+}
+function saveThresholds(obj) { localStorage.setItem(THRESH_KEY, JSON.stringify(obj)); }
+function getThreshold(sensorID) { return loadThresholds()[sensorID] ?? {}; }
+function setThreshold(sensorID, patch) {
+  const all = loadThresholds();
+  all[sensorID] = { ...(all[sensorID] ?? {}), ...patch };
+  saveThresholds(all);
+}
+function clearThreshold(sensorID) {
+  const all = loadThresholds(); delete all[sensorID]; saveThresholds(all);
+}
+
+const _alerted = new Map(); // sensorID → last alert key (de-duplication)
+
+function checkThresholdAlert(sensor) {
+  const t = getThreshold(sensor.sensorID);
+  if (!Object.keys(t).length) return;
+  const msgs = [], key = [];
+  if (t.minBar   != null && sensor.latestPressureBar  != null && sensor.latestPressureBar  < t.minBar)
+    { msgs.push(`Low pressure: ${sensor.latestPressureBar.toFixed(2)} bar (≥ ${t.minBar} bar)`);  key.push(`p<${t.minBar}`);    }
+  if (t.maxBar   != null && sensor.latestPressureBar  != null && sensor.latestPressureBar  > t.maxBar)
+    { msgs.push(`High pressure: ${sensor.latestPressureBar.toFixed(2)} bar (≤ ${t.maxBar} bar)`); key.push(`p>${t.maxBar}`);    }
+  if (t.maxTempC != null && sensor.latestTemperatureC != null && sensor.latestTemperatureC > t.maxTempC)
+    { msgs.push(`High temp: ${sensor.latestTemperatureC.toFixed(1)} °C (≤ ${t.maxTempC} °C)`);    key.push(`t>${t.maxTempC}`);  }
+  if (t.minBatPct!= null && sensor.latestBatteryPct   != null && sensor.latestBatteryPct   < t.minBatPct)
+    { msgs.push(`Low battery: ${sensor.latestBatteryPct}% (≥ ${t.minBatPct}%)`);                  key.push(`b<${t.minBatPct}`); }
+  if (!msgs.length) { _alerted.delete(sensor.sensorID); return; }
+  const alertKey = key.join('|');
+  if (_alerted.get(sensor.sensorID) === alertKey) return;
+  _alerted.set(sensor.sensorID, alertKey);
+  const label = sensor.sensorName ?? sensor.wheelPosition ?? sensor.sensorID;
+  showToast(`${label}: ${msgs.join(' · ')}`, 'warn');
+  if (Notification.permission === 'granted')
+    new Notification(`NetMap — ${label}`, { body: msgs.join('\n'), icon: '/favicon.ico' });
+}
+
+function checkCurrentSensorAlerts() {
+  const s = S.sensors.find(x => x.sensorID === S.selected);
+  if (s) checkThresholdAlert(s);
+}
+
+function renderThresholdEditor(sensorID) {
+  const el = $('threshold-editor');
+  if (!el) return;
+  const s = S.sensors.find(x => x.sensorID === sensorID);
+  if (!s) { el.innerHTML = ''; return; }
+  const t = getThreshold(sensorID);
+  const hasPressure = isTpms(s);
+  const hasBattery  = s.latestBatteryPct != null;
+  const hasTemp     = s.latestTemperatureC != null;
+  if (!hasPressure && !hasBattery && !hasTemp) { el.innerHTML = ''; return; }
+
+  el.innerHTML = `
+    <div class="thresh-editor">
+      <div class="thresh-inline">
+        <span class="thresh-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg> Alerts</span>
+        ${hasPressure ? `<label class="thresh-field"><span class="thresh-lbl">P≥</span><input class="thresh-input" id="th-min-bar" type="number" step="0.05" placeholder="–" value="${t.minBar != null ? t.minBar : ''}"><span class="thresh-unit">bar</span></label>` : ''}
+        ${hasPressure ? `<label class="thresh-field"><span class="thresh-lbl">P≤</span><input class="thresh-input" id="th-max-bar" type="number" step="0.05" placeholder="–" value="${t.maxBar != null ? t.maxBar : ''}"><span class="thresh-unit">bar</span></label>` : ''}
+        ${hasTemp     ? `<label class="thresh-field"><span class="thresh-lbl">T≤</span><input class="thresh-input" id="th-max-temp" type="number" step="1" placeholder="–" value="${t.maxTempC != null ? t.maxTempC : ''}"><span class="thresh-unit">°C</span></label>` : ''}
+        ${hasBattery  ? `<label class="thresh-field"><span class="thresh-lbl">Bat≥</span><input class="thresh-input" id="th-min-bat" type="number" step="1" min="0" max="100" placeholder="–" value="${t.minBatPct != null ? t.minBatPct : ''}"><span class="thresh-unit">%</span></label>` : ''}
+        <button class="modal-btn admin-small-btn" id="th-save-btn">Save</button>
+        <button class="modal-btn admin-small-btn" id="th-clear-btn" style="background:transparent;color:var(--fg3)">Clear</button>
+        <button class="modal-btn admin-small-btn" id="th-notif-btn">${
+          Notification.permission === 'granted'
+            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10"/></svg>`
+            : Notification.permission === 'denied'
+            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></svg>`
+            : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 5a2 2 0 0 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6"/><path d="M9 17v1a3 3 0 0 0 6 0v-1"/></svg>`}</button>
+      </div>
+    </div>`;
+
+  $('th-save-btn')?.addEventListener('click', () => {
+    const patch = {};
+    const minBar  = parseFloat($('th-min-bar')?.value  ?? '');
+    const maxBar  = parseFloat($('th-max-bar')?.value  ?? '');
+    const maxTemp = parseFloat($('th-max-temp')?.value ?? '');
+    const minBat  = parseFloat($('th-min-bat')?.value  ?? '');
+    if (!isNaN(minBar))  patch.minBar    = minBar;
+    if (!isNaN(maxBar))  patch.maxBar    = maxBar;
+    if (!isNaN(maxTemp)) patch.maxTempC  = maxTemp;
+    if (!isNaN(minBat))  patch.minBatPct = minBat;
+    setThreshold(sensorID, patch);
+    showToast('Thresholds saved');
+  });
+  $('th-clear-btn')?.addEventListener('click', () => {
+    clearThreshold(sensorID); _alerted.delete(sensorID);
+    renderThresholdEditor(sensorID); showToast('Thresholds cleared');
+  });
+  $('th-notif-btn')?.addEventListener('click', async () => {
+    if (Notification.permission !== 'granted') {
+      const p = await Notification.requestPermission();
+      if (p === 'granted') showToast('Browser notifications enabled');
+      else showToast('Notifications blocked by browser', 'error');
+    }
+    renderThresholdEditor(sensorID);
+  });
 }
 
 // ─── Select sensor ────────────────────────────────────────────────────────────
@@ -2593,12 +2848,75 @@ async function refresh() {
   finally { S.loading = false; }
 }
 
-function setAutoRefresh(on) {
-  S.autoRefresh = on;
-  if (S.timer) { clearInterval(S.timer); S.timer = null; }
-  if (on) S.timer = setInterval(refresh, REFRESH_MS);
-  $('autorefresh-btn').classList.toggle('active', on);
-  $('autorefresh-btn').title = on ? 'Auto-refresh ON (30 s) — click to stop' : 'Auto-refresh OFF — click to enable';
+// ─── WebSocket live push (5.1) ────────────────────────────────────────────────
+function _wsConnect() {
+  if (S.ws && S.ws.readyState <= WebSocket.OPEN) return; // already connecting or open
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws    = new WebSocket(`${proto}//${location.host}/api/ws`);
+  S.ws = ws;
+
+  ws.addEventListener('open', () => {
+    const wasPolling = !!S.timer;
+    S.wsConnected = true;
+    // WebSocket connected — stop polling timer; the push channel handles refresh
+    if (S.timer) { clearInterval(S.timer); S.timer = null; }
+    _setWsIndicator(true);
+    // If we were polling (i.e. reconnecting after a server restart / disconnect),
+    // do a full refresh immediately so stale timestamps are cleared.
+    if (wasPolling) refresh();
+  });
+
+  ws.addEventListener('message', e => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    if (!msg || msg.type !== 'record') return;
+
+    // Update the matching sensor's latest values in S.sensors
+    const s = S.sensors.find(x => x.sensorID === msg.sensorID);
+    if (s) {
+      if (msg.pressureBar  != null) s.latestPressureBar  = msg.pressureBar;
+      if (msg.temperatureC != null) s.latestTemperatureC = msg.temperatureC;
+      if (msg.batteryPct   != null) s.latestBatteryPct   = msg.batteryPct;
+      s.latestTimestamp = msg.timestamp ?? s.latestTimestamp;
+    }
+
+    // Re-render sidebar status dots + fleet summary without a full round-trip
+    renderSidebar();
+
+    // If the pushed sensor is currently selected, do a full reload of its records
+    if (msg.sensorID === S.selected) {
+      loadRecords().then(() => renderAll());
+    }
+
+    // Check threshold alerts on incoming live data (5.2)
+    if (s) checkThresholdAlert(s);
+  });
+
+  ws.addEventListener('close', e => {
+    S.wsConnected = false;
+    S.ws = null;
+    _setWsIndicator(false);
+    // Unexpected close — fall back to polling until WS reconnects
+    if (!S.timer) S.timer = setInterval(refresh, REFRESH_MS);
+    if (!e.wasClean) setTimeout(_wsConnect, WS_RECONNECT_MS);
+  });
+
+  ws.addEventListener('error', () => {
+    ws.close();
+  });
+}
+
+function _setWsIndicator(connected) {
+  const pill  = D.livePill;
+  const label = D.liveLabel;
+  if (!pill) return;
+  if (connected) {
+    pill.classList.add('ws-live');
+    pill.title = 'Live push — WebSocket connected';
+  } else {
+    pill.classList.remove('ws-live');
+    pill.title = '';
+  }
 }
 
 // ─── Event setup ──────────────────────────────────────────────────────────────
@@ -2807,7 +3125,6 @@ Share this with the user — it is only shown once.`);
   $('export-csv-btn')?.addEventListener('click', exportCSV);
 
   $('refresh-btn').addEventListener('click', refresh);
-  $('autorefresh-btn').addEventListener('click', () => setAutoRefresh(!S.autoRefresh));
 
   // Theme toggle
   $('theme-btn').addEventListener('click', () => {
@@ -3435,6 +3752,7 @@ function exportCSV() {
 let _logsInterval  = null;
 let _logsLastIndex = 0;
 let _logsHiddenCats = new Set(); // categories toggled OFF
+let _logWs         = null;
 
 function _logCategory(text) {
   const t = text.toLowerCase();
@@ -3471,11 +3789,39 @@ function openLogsViewer() {
   $('logs-overlay').style.display = 'flex';
   _logsLastIndex = 0;
   $('logs-output').innerHTML = '';
-  _startLogPolling();
+  _startLogWs();
 }
 function closeLogsViewer() {
   $('logs-overlay').style.display = 'none';
+  _stopLogWs();
   _stopLogPolling();
+}
+function _startLogWs() {
+  _stopLogWs();
+  _stopLogPolling();
+  // Fetch existing buffered lines first (since=0), then switch to live push
+  pollLogs().then(() => {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${location.host}/api/admin/ws/logs`);
+    _logWs = ws;
+    ws.addEventListener('message', e => {
+      let msg; try { msg = JSON.parse(e.data); } catch { return; }
+      if (!msg || typeof msg.index !== 'number') return;
+      _appendLogLine(msg);
+    });
+    ws.addEventListener('close', e => {
+      _logWs = null;
+      // Viewer still open? Fall back to polling + retry WS
+      if ($('logs-overlay').style.display !== 'none') {
+        _startLogPolling();
+        if (!e.wasClean) setTimeout(_startLogWs, 5000);
+      }
+    });
+    ws.addEventListener('error', () => ws.close());
+  });
+}
+function _stopLogWs() {
+  if (_logWs) { _logWs.close(); _logWs = null; }
 }
 function _startLogPolling() {
   _stopLogPolling();
@@ -3485,27 +3831,29 @@ function _startLogPolling() {
 function _stopLogPolling() {
   if (_logsInterval) { clearInterval(_logsInterval); _logsInterval = null; }
 }
+function _appendLogLine({ index, text }) {
+  _logsLastIndex = index;
+  const out = $('logs-output');
+  if (!out) return;
+  const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 60;
+  const el = document.createElement('span');
+  const cat = _logCategory(text);
+  el.className = 'log-line ' + _logLevel(text);
+  el.dataset.cat = cat;
+  if (_logsHiddenCats.has(cat)) el.style.display = 'none';
+  el.textContent = text;
+  out.appendChild(el);
+  out.appendChild(document.createTextNode('\n'));
+  // Keep last 2000 lines rendered
+  while (out.children.length > 4000) out.removeChild(out.firstChild);
+  if ($('logs-autoscroll').checked && atBottom) out.scrollTop = out.scrollHeight;
+  $('logs-status').textContent = `${_logsLastIndex} lines`;
+}
 async function pollLogs() {
   try {
     const lines = await apiFetch(`/api/admin/logs?since=${_logsLastIndex}`);
     if (!lines.length) return;
-    _logsLastIndex = lines.at(-1).index;
-    const out = $('logs-output');
-    const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 60;
-    lines.forEach(({ text }) => {
-      const el = document.createElement('span');
-      const cat = _logCategory(text);
-      el.className = 'log-line ' + _logLevel(text);
-      el.dataset.cat = cat;
-      if (_logsHiddenCats.has(cat)) el.style.display = 'none';
-      el.textContent = text;
-      out.appendChild(el);
-      out.appendChild(document.createTextNode('\n'));
-    });
-    // Keep last 2000 lines rendered
-    while (out.children.length > 4000) out.removeChild(out.firstChild);
-    if ($('logs-autoscroll').checked && atBottom) out.scrollTop = out.scrollHeight;
-    $('logs-status').textContent = `${_logsLastIndex} lines`;
+    lines.forEach(line => _appendLogLine(line));
   } catch(e) { console.warn('log poll:', e); }
 }
 function _logLevel(text) {
@@ -3559,6 +3907,7 @@ async function main() {
     if (S.selected) await loadRecords();
     renderSidebar();
     renderAll();
+    _wsConnect();
   } catch (e) {
     console.error('Init error:', e);
     D.sensorList.innerHTML = `<div class="sidebar-hint" style="color:var(--danger)">

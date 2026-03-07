@@ -13,6 +13,16 @@ public actor LogBuffer {
         counter += 1
         buffer.append(Entry(index: counter, text: line))
         if buffer.count > maxLines { buffer.removeFirst() }
+        let idx = counter
+        // Escape the text for JSON (handles backslash, quotes, and control chars)
+        let escaped = line
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
+        let json = "{\"index\":\(idx),\"text\":\"\(escaped)\"}"
+        Task { await LogBroadcaster.shared.broadcast(json) }
     }
 
     public func entries(since: Int) -> [Entry] {
