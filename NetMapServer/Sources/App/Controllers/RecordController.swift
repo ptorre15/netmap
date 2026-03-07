@@ -238,7 +238,7 @@ struct RecordController: RouteCollection {
             var product_variant:     String?
             var total_seconds:       Int?
             var gps_satellites:                  Int?
-            var timestamp:                      String
+            var timestamp:                      Double
             var latitude:                       Double?
             var longitude:                      Double?
             var reading_count:                  Int
@@ -265,8 +265,8 @@ struct RecordController: RouteCollection {
                        sr.total_seconds, sr.gps_satellites,
                        CASE WHEN sr.brand = 'tracker'
                             THEN MAX(sr.timestamp,
-                                     COALESCE(ve_max.max_ts, ''),
-                                     COALESCE(dle_max.max_ts, ''))
+                                     COALESCE(ve_max.max_ts, sr.timestamp),
+                                     COALESCE(dle_max.max_ts, sr.timestamp))
                             ELSE sr.timestamp
                        END AS timestamp,
                        sr.latitude, sr.longitude,
@@ -342,15 +342,7 @@ struct RecordController: RouteCollection {
             ORDER BY c.vehicle_name, c.wheel_position
             """).all(decoding: LatestRow.self)
 
-        let isoFull  = ISO8601DateFormatter()
-        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let isoBasic = ISO8601DateFormatter()
-
         return rows.map { r in
-            let ts = isoFull.date(from: r.timestamp)
-                  ?? isoBasic.date(from: r.timestamp)
-                  ?? Double(r.timestamp).map { Date(timeIntervalSince1970: $0) }
-                  ?? Date()
             return SensorStat(
                 sensorID:           r.sensor_id,
                 vehicleID:          r.vehicle_id,
@@ -369,7 +361,7 @@ struct RecordController: RouteCollection {
                 latestChargingCycles: r.charging_cycles,
                 latestProductVariant: r.product_variant,
                 latestTotalSeconds:   r.total_seconds,
-                latestTimestamp:      ts,
+                latestTimestamp:      Date(timeIntervalSince1970: r.timestamp),
                 readingCount:         r.reading_count,
                 latestGpsSatellites:          r.gps_satellites,
                 latestLatitude:               r.latitude,

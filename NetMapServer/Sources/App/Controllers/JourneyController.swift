@@ -10,6 +10,14 @@ private func validTimestamp(_ candidate: Date?) -> Date {
     return ts
 }
 
+/// Normalizes persisted distance values to kilometers for API summaries.
+/// Legacy tracker firmware stored meters in km-named fields; modern payloads are true km.
+/// Heuristic: values >= 1000 are treated as meters.
+func normalizeJourneyDistanceKm(_ raw: Double?) -> Double? {
+    guard let raw, raw >= 0 else { return nil }
+    return raw >= 1000 ? raw / 1000.0 : raw
+}
+
 // MARK: - Piggyback config response structs
 struct PiggybackSystemPayload: Content {
     var pingIntervalMin: Int
@@ -62,6 +70,16 @@ struct VehicleEventController: RouteCollection {
     // N'accepte que l'IMEI + données télémétriques.
     // Le serveur résout vehicleID/vehicleName depuis sensor_readings et gère le journeyID.
     func push(req: Request) async throws -> Response {
+        struct IngestStats {
+            var received: Int = 0
+            var savedVehicleEvents: Int = 0
+            var savedDriverBehavior: Int = 0
+            var savedLifecycle: Int = 0
+            var savedSensorRows: Int = 0
+            var deduped: Int = 0
+            var nonStandardVehicleEventType: Int = 0
+        }
+
         let payloads: [VehicleEventPayload]
         if let arr = try? req.content.decode([VehicleEventPayload].self) {
             payloads = arr
@@ -69,6 +87,7 @@ struct VehicleEventController: RouteCollection {
             payloads = [try req.content.decode(VehicleEventPayload.self)]
         }
         guard !payloads.isEmpty else { throw Abort(.badRequest, reason: "Empty payload") }
+        var stats = IngestStats(received: payloads.count)
 
         // Debug: log configVersion decoded from first payload
         if let first = payloads.first {
@@ -134,6 +153,7 @@ struct VehicleEventController: RouteCollection {
                     speedKmh:        p.speedKmh
                 )
                 try await dbe.save(on: req.db)
+                stats.savedDriverBehavior += 1
                 req.logger.info("🧠 [behavior] imei=\(imei) type=\(dbe.alertType) value=\(alertValue) ms=\(alertMs)")
                 continue   // do NOT feed into journey state machine or vehicle_events
             }
@@ -170,6 +190,7 @@ struct VehicleEventController: RouteCollection {
                     gpsSatellites:   p.gpsSatellites
                 )
                 try await dle.save(on: req.db)
+                stats.savedLifecycle += 1
                 if effectiveType == "ping" {
                     req.logger.info("📡 [ping] imei=\(imei) fix=\(p.gpsFixType.map{String($0)} ?? "?") lat=\(p.latitude.map{String($0)} ?? "-") lon=\(p.longitude.map{String($0)} ?? "-") sats=\(p.gpsSatellites.map{String($0)} ?? "-")")
                 } else {
@@ -198,8 +219,13 @@ struct VehicleEventController: RouteCollection {
                 .filter(\.$timestamp == evTs)
                 .first() != nil
             if isDuplicate {
+                stats.deduped += 1
                 req.logger.info("⚠️ [dedup] skipped duplicate imei=\(imei) type=\(eventType) ts=\(evTs)")
                 continue
+            }
+
+            if eventType != "journey_start" && eventType != "driving" && eventType != "journey_end" {
+                stats.nonStandardVehicleEventType += 1
             }
 
             // ── 6. Sauvegarde de l'événement ─────────────────────────────────────
@@ -212,6 +238,7 @@ struct VehicleEventController: RouteCollection {
                 from:        p
             )
             try await event.save(on: req.db)
+            stats.savedVehicleEvents += 1
 
             // ── 7. Upsert SensorReading pour que le tracker apparaisse dans sensorsLatest ──
             let sp = SensorPayload(
@@ -237,9 +264,10 @@ struct VehicleEventController: RouteCollection {
                 timestamp:         validTimestamp(p.timestamp)
             )
             try await SensorReading(from: sp).save(on: req.db)
+            stats.savedSensorRows += 1
         }
 
-        req.logger.info("vehicle-events saved: \(payloads.count)")
+        req.logger.notice("[ingest.vehicle-events] received=\(stats.received) saved_vehicle=\(stats.savedVehicleEvents) saved_behavior=\(stats.savedDriverBehavior) saved_lifecycle=\(stats.savedLifecycle) saved_sensor_rows=\(stats.savedSensorRows) deduped=\(stats.deduped) non_standard_vehicle_type=\(stats.nonStandardVehicleEventType)")
 
         // ── Piggyback: inject pending config into response ───────────────
         // Only include config when the stored schemaVersion is newer than what
@@ -303,13 +331,12 @@ struct VehicleEventController: RouteCollection {
         // Date-range filter: timestamp column is REAL (Unix seconds). Fluent's SQLite
         // driver encodes Date as a Double (timeIntervalSince1970) so the comparison
         // is REAL vs REAL — correct.
-        let isoRange = ISO8601DateFormatter()
         if let fromStr = try? req.query.get(String.self, at: "from"),
-           let fromDate = isoRange.date(from: fromStr) {
+           let fromDate = QueryDateParser.parse(fromStr) {
             q = q.filter(\.$timestamp >= fromDate)
         }
         if let toStr = try? req.query.get(String.self, at: "to"),
-           let toDate = isoRange.date(from: toStr) {
+           let toDate = QueryDateParser.parse(toStr) {
             q = q.filter(\.$timestamp <= toDate)
         }
         return try await q.limit(limit).all()
@@ -327,8 +354,8 @@ struct VehicleEventController: RouteCollection {
             var vehicle_id:               String
             var vehicle_name:             String
             var driver_id:                String?
-            var started_at:               String?
-            var ended_at:                 String?
+            var started_at:               Double?
+            var ended_at:                 Double?
             var total_distance_km:        Double?
             var total_fuel_consumed_l:    Double?
             var total_journey_fuel_consumed_l: Double?
@@ -344,12 +371,11 @@ struct VehicleEventController: RouteCollection {
         // are REAL vs REAL.  The timestamp column is stored as a REAL (Unix seconds)
         // in SQLite; binding an ISO8601 string would create a TEXT-typed parameter and
         // SQLite's type ordering (REAL < TEXT) would make the comparison always false.
-        let isoSanitiser = ISO8601DateFormatter()
         let fromBound: Double = (try? req.query.get(String.self, at: "from"))
-            .flatMap { isoSanitiser.date(from: $0) }
+            .flatMap { QueryDateParser.parse($0) }
             .map     { $0.timeIntervalSince1970 } ?? 0.0
         let toBound: Double = (try? req.query.get(String.self, at: "to"))
-            .flatMap { isoSanitiser.date(from: $0) }
+            .flatMap { QueryDateParser.parse($0) }
             .map     { $0.timeIntervalSince1970 } ?? Double.greatestFiniteMagnitude
         var accessFilterSQL = ""
         if let auth = req.authUser, !auth.isAdmin {
@@ -434,26 +460,15 @@ struct VehicleEventController: RouteCollection {
                 """).all(decoding: Row.self)
         }
 
-        let isoFull  = ISO8601DateFormatter()
-        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let isoBasic = ISO8601DateFormatter()
-
-        func parseDate(_ s: String?) -> Date? {
-            guard let s else { return nil }
-            return isoFull.date(from: s)
-                ?? isoBasic.date(from: s)
-                ?? Double(s).map { Date(timeIntervalSince1970: $0) }
-        }
-
         return rows.map { r in
             JourneySummary(
                 journeyID:               r.journey_id,
                 vehicleID:               r.vehicle_id,
                 vehicleName:             r.vehicle_name,
-                startedAt:               parseDate(r.started_at),
-                endedAt:                 parseDate(r.ended_at),
+                startedAt:               r.started_at.map { Date(timeIntervalSince1970: $0) },
+                endedAt:                 r.ended_at.map { Date(timeIntervalSince1970: $0) },
                 driverID:                r.driver_id,
-                totalDistanceKm:         r.total_distance_km.map { $0 / 1000.0 },   // tracker sends metres
+                totalDistanceKm:         normalizeJourneyDistanceKm(r.total_distance_km),
                 totalFuelConsumedL:      r.total_journey_fuel_consumed_l ?? r.total_fuel_consumed_l,
                 eventCount:              r.event_count
             )
@@ -487,13 +502,8 @@ struct VehicleEventController: RouteCollection {
               let toStr   = try? req.query.get(String.self, at: "to")
         else { throw Abort(.badRequest, reason: "from and to are required") }
 
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let isoBasic = ISO8601DateFormatter()
-        func parse(_ s: String) -> Date? {
-            iso.date(from: s) ?? isoBasic.date(from: s) ?? Double(s).map { Date(timeIntervalSince1970: $0) }
-        }
-        guard let from = parse(fromStr), let to = parse(toStr)
+        guard let from = QueryDateParser.parse(fromStr, allowUnixSeconds: true),
+              let to   = QueryDateParser.parse(toStr, allowUnixSeconds: true)
         else { throw Abort(.badRequest, reason: "Invalid date format") }
 
         guard let sql = req.db as? SQLDatabase else {
@@ -505,16 +515,16 @@ struct VehicleEventController: RouteCollection {
         let rows = try await sql.raw("""
             SELECT COUNT(*) AS n FROM vehicle_events
             WHERE imei = \(bind: imei)
-              AND CAST(timestamp AS REAL) >= \(bind: from.timeIntervalSince1970)
-              AND CAST(timestamp AS REAL) <= \(bind: to.timeIntervalSince1970)
+              AND timestamp >= \(bind: from.timeIntervalSince1970)
+              AND timestamp <= \(bind: to.timeIntervalSince1970)
             """).all(decoding: CountRow.self)
         let count = rows.first?.n ?? 0
 
         try await sql.raw("""
             DELETE FROM vehicle_events
             WHERE imei = \(bind: imei)
-              AND CAST(timestamp AS REAL) >= \(bind: from.timeIntervalSince1970)
-              AND CAST(timestamp AS REAL) <= \(bind: to.timeIntervalSince1970)
+              AND timestamp >= \(bind: from.timeIntervalSince1970)
+              AND timestamp <= \(bind: to.timeIntervalSince1970)
             """).run()
 
         req.logger.notice("Deleted \(count) vehicle_events for IMEI \(imei) from \(fromStr) to \(toStr)")

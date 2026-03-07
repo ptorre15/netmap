@@ -151,13 +151,8 @@ struct DriverBehaviorController: RouteCollection {
               let toStr   = try? req.query.get(String.self, at: "to")
         else { throw Abort(.badRequest, reason: "from and to are required") }
 
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let isoBasic = ISO8601DateFormatter()
-        func parse(_ s: String) -> Date? {
-            iso.date(from: s) ?? isoBasic.date(from: s) ?? Double(s).map { Date(timeIntervalSince1970: $0) }
-        }
-        guard let from = parse(fromStr), let to = parse(toStr)
+        guard let from = QueryDateParser.parse(fromStr, allowUnixSeconds: true),
+              let to   = QueryDateParser.parse(toStr, allowUnixSeconds: true)
         else { throw Abort(.badRequest, reason: "Invalid date format") }
 
         guard let sql = req.db as? SQLDatabase else {
@@ -168,16 +163,16 @@ struct DriverBehaviorController: RouteCollection {
         let rows = try await sql.raw("""
             SELECT COUNT(*) AS n FROM driver_behavior_events
             WHERE imei = \(bind: imei)
-              AND CAST(timestamp AS REAL) >= \(bind: from.timeIntervalSince1970)
-              AND CAST(timestamp AS REAL) <= \(bind: to.timeIntervalSince1970)
+              AND timestamp >= \(bind: from.timeIntervalSince1970)
+              AND timestamp <= \(bind: to.timeIntervalSince1970)
             """).all(decoding: CountRow.self)
         let count = rows.first?.n ?? 0
 
         try await sql.raw("""
             DELETE FROM driver_behavior_events
             WHERE imei = \(bind: imei)
-              AND CAST(timestamp AS REAL) >= \(bind: from.timeIntervalSince1970)
-              AND CAST(timestamp AS REAL) <= \(bind: to.timeIntervalSince1970)
+              AND timestamp >= \(bind: from.timeIntervalSince1970)
+              AND timestamp <= \(bind: to.timeIntervalSince1970)
             """).run()
 
         req.logger.notice("Deleted \(count) driver_behavior_events for IMEI \(imei) from \(fromStr) to \(toStr)")

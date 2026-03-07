@@ -1,0 +1,28 @@
+name: Swift Tests
+
+on:
+  push:
+    paths:
+      - "NetMapServer/**"
+      - ".github/workflows/swift-tests.yml"
+  pull_request:
+    paths:
+      - "NetMapServer/**"
+      - ".github/workflows/swift-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: NetMapServer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Swift Version
+        run: swift --version
+
+      - name: Run Tests
+        run: swift test

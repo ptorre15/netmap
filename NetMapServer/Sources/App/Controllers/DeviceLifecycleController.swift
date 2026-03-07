@@ -260,13 +260,8 @@ struct DeviceLifecycleController: RouteCollection {
               let toStr   = try? req.query.get(String.self, at: "to")
         else { throw Abort(.badRequest, reason: "from and to are required") }
 
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let isoBasic = ISO8601DateFormatter()
-        func parse(_ s: String) -> Date? {
-            iso.date(from: s) ?? isoBasic.date(from: s) ?? Double(s).map { Date(timeIntervalSince1970: $0) }
-        }
-        guard let from = parse(fromStr), let to = parse(toStr)
+        guard let from = QueryDateParser.parse(fromStr, allowUnixSeconds: true),
+              let to   = QueryDateParser.parse(toStr, allowUnixSeconds: true)
         else { throw Abort(.badRequest, reason: "Invalid date format") }
 
         guard let sql = req.db as? SQLDatabase else {
@@ -277,16 +272,16 @@ struct DeviceLifecycleController: RouteCollection {
         let rows = try await sql.raw("""
             SELECT COUNT(*) AS n FROM device_lifecycle_events
             WHERE imei = \(bind: imei)
-              AND CAST(timestamp AS REAL) >= \(bind: from.timeIntervalSince1970)
-              AND CAST(timestamp AS REAL) <= \(bind: to.timeIntervalSince1970)
+              AND timestamp >= \(bind: from.timeIntervalSince1970)
+              AND timestamp <= \(bind: to.timeIntervalSince1970)
             """).all(decoding: CountRow.self)
         let count = rows.first?.n ?? 0
 
         try await sql.raw("""
             DELETE FROM device_lifecycle_events
             WHERE imei = \(bind: imei)
-              AND CAST(timestamp AS REAL) >= \(bind: from.timeIntervalSince1970)
-              AND CAST(timestamp AS REAL) <= \(bind: to.timeIntervalSince1970)
+              AND timestamp >= \(bind: from.timeIntervalSince1970)
+              AND timestamp <= \(bind: to.timeIntervalSince1970)
             """).run()
 
         req.logger.notice("Deleted \(count) device_lifecycle_events for IMEI \(imei) from \(fromStr) to \(toStr)")
@@ -348,13 +343,8 @@ struct DeviceLifecycleController: RouteCollection {
         if let v = imeiParam      { query = query.filter(\.$imei      == v) }
         if let v = vehicleParam   { query = query.filter(\.$vehicleID == v) }
         if let v = eventTypeParam { query = query.filter(\.$eventType == v) }
-        if let s = sinceParam {
-            let fmt = ISO8601DateFormatter()
-            fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            let fmt2 = ISO8601DateFormatter()  // without fractional seconds
-            if let date = fmt.date(from: s) ?? fmt2.date(from: s) {
-                query = query.filter(\.$timestamp >= date)
-            }
+        if let s = sinceParam, let date = QueryDateParser.parse(s) {
+            query = query.filter(\.$timestamp >= date)
         }
 
         let events = try await query
@@ -490,9 +480,6 @@ struct DeviceLifecycleController: RouteCollection {
         }
 
         // ── Assemble response ───────────────────────────────────────────
-        let enc = JSONEncoder()
-        enc.dateEncodingStrategy = .iso8601
-
         let bootInfo = SummaryBootInfo(
             count:      bootCount,
             lastAt:     bootLast?.timestamp,
@@ -510,6 +497,9 @@ struct DeviceLifecycleController: RouteCollection {
             lastVoltageV:    wakeLast?.battery_voltage_v,
             sourceBreakdown: sourceBreakdown
         )
+
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .iso8601
 
         let response = LifecycleSummaryResponse(
             imei:        imei,

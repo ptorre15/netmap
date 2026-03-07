@@ -69,6 +69,7 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(AddGpsFixTypeToVehicleEvents())            // gps_fix_type on vehicle_events (spec v6)
     app.migrations.add(AddGpsToDeviceLifecycleEvents())           // GPS fields + gps_fix_type on device_lifecycle_events (spec v6)
     app.migrations.add(AddLastAppliedConfigVersion())             // last_applied_config_version on tracker_configs
+    app.migrations.add(AddTelemetryCompositeIndexes())            // composite telemetry indexes for hot filters
     try await app.autoMigrate()   // non-blocking in async context
 
     // ── Seed built-in asset types if absent ─────────────────────
@@ -134,6 +135,7 @@ public func configure(_ app: Application) async throws {
     // ── Periodic token cleanup ───────────────────────────────────────────
     app.lifecycle.use(TokenCleanupLifecycle())
     app.lifecycle.use(SecurityEventRetentionLifecycle())
+    app.lifecycle.use(TelemetryIntegrityLifecycle())
 
     // ── Routes ───────────────────────────────────────────────────────────
     try routes(app)

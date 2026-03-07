@@ -314,3 +314,13 @@ CREATE TABLE vehicle_events (
 ```
 
 Les trajets sont dérivés à la volée — il n'y a pas de table `journeys` séparée.
+### Distance Unit Compatibility Note
+
+The tracker payload contract remains unchanged (`*Km` fields).
+For backward compatibility with legacy firmware that sent meter values in these fields,
+the server normalizes journey summary output to kilometers:
+
+- values `< 1000` are treated as kilometers
+- values `>= 1000` are treated as meters and divided by `1000`
+
+Raw event storage keeps the original numeric value; normalization is applied when building journey summaries.
