@@ -173,7 +173,7 @@ struct RecordController: RouteCollection {
                 "pressureBar":  p.pressureBar as Any,
                 "temperatureC": p.temperatureC as Any,
                 "batteryPct":   p.batteryPct as Any,
-                "timestamp":    ISO8601DateFormatter().string(from: p.timestamp ?? Date()),
+                "timestamp":    ISO8601DateFormatter().string(from: p.timestamp),
             ]
             if let data = try? JSONSerialization.data(withJSONObject: event),
                let json = String(data: data, encoding: .utf8) {
