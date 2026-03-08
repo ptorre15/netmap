@@ -10,12 +10,9 @@ private func validTimestamp(_ candidate: Date?) -> Date {
     return ts
 }
 
-/// Normalizes persisted distance values to kilometers for API summaries.
-/// Legacy tracker firmware stored meters in km-named fields; modern payloads are true km.
-/// Heuristic: values >= 1000 are treated as meters.
 func normalizeJourneyDistanceKm(_ raw: Double?) -> Double? {
     guard let raw, raw >= 0 else { return nil }
-    return raw >= 1000 ? raw / 1000.0 : raw
+    return raw
 }
 
 // MARK: - Piggyback config response structs
@@ -172,6 +169,39 @@ struct VehicleEventController: RouteCollection {
                     effectiveType = "wake_up"
                 } else {
                     effectiveType = eventType
+                }
+
+                // ── On true reboot: auto-close any open journey ──────────────────
+                // If the tracker rebooted without sending journey_end (e.g. crash or
+                // power loss while parked), synthesize a journey_end so the journey
+                // is not left open in the database.
+                if effectiveType == "boot" {
+                    let lastVE = try await VehicleEvent.query(on: req.db)
+                        .filter(\.$imei == imei)
+                        .sort(\.$timestamp, .descending)
+                        .first()
+                    if let last = lastVE, last.eventType != "journey_end" {
+                        let synthEnd = VehicleEvent()
+                        synthEnd.id                  = UUID()
+                        synthEnd.imei                = imei
+                        synthEnd.sensorName          = nil
+                        synthEnd.journeyID           = last.journeyID
+                        synthEnd.vehicleID           = vehicleID
+                        synthEnd.vehicleName         = vehicleName
+                        synthEnd.eventType           = "journey_end"
+                        synthEnd.timestamp           = last.timestamp.addingTimeInterval(1)
+                        synthEnd.latitude            = last.latitude
+                        synthEnd.longitude           = last.longitude
+                        synthEnd.headingDeg          = last.headingDeg
+                        synthEnd.speedKmh            = 0.0
+                        synthEnd.odometerKm          = last.odometerKm
+                        synthEnd.journeyDistanceKm   = last.journeyDistanceKm
+                        synthEnd.journeyFuelConsumedL = last.journeyFuelConsumedL
+                        synthEnd.fuelLevelPct        = last.fuelLevelPct
+                        synthEnd.receivedAt          = Date()
+                        try await synthEnd.save(on: req.db)
+                        req.logger.notice("🔧 [boot-autoclose] synthesized journey_end for journey=\(last.journeyID) imei=\(imei) last_ts=\(last.timestamp)")
+                    }
                 }
 
                 let dle = DeviceLifecycleEvent(

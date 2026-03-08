@@ -2306,7 +2306,7 @@ async function renderTable() {
           if (hasSatsL)  cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
           if (hasSpeedL) cells += `<td>${e.speedKmh != null ? e.speedKmh.toFixed(0) + ' km/h' : '–'}</td>`;
           if (hasOdoL)   cells += `<td>${e.odometerKm != null ? (e.odometerKm / 1000).toFixed(1) + ' km' : '–'}</td>`;
-          if (hasDistL)  cells += `<td>${e.journeyDistanceKm != null ? (e.journeyDistanceKm / 1000).toFixed(2) + ' km' : '–'}</td>`;
+          if (hasDistL)  cells += `<td>${e.journeyDistanceKm != null ? e.journeyDistanceKm.toFixed(2) + ' km' : '–'}</td>`;
           if (hasRpmL)   cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + ' rpm' : '–'}</td>`;
           if (hasJFuelL) cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + ' L' : '–'}</td>`;
           if (hasFuelL)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
