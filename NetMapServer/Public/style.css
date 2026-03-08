@@ -336,8 +336,23 @@ body {
 .tab-action-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 6px 4px 10px; flex-shrink: 0; font-size: 12px; color: var(--fg2);
+  flex-wrap: wrap;
 }
 .tab-action-toolbar b { color: var(--fg1); }
+.ev-type-filter-wrap { position: relative; }
+.ev-type-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 200;
+  background: var(--bg2); border: 1px solid var(--sep); border-radius: var(--r);
+  box-shadow: var(--shadow); padding: 6px 0;
+  min-width: 160px; max-height: 260px; overflow-y: auto;
+  display: flex; flex-direction: column;
+}
+.ev-type-cb-row {
+  display: flex; align-items: center; gap: 6px; padding: 4px 10px;
+  font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.ev-type-cb-row:hover { background: var(--bg3); }
+.ev-type-cb-row input { cursor: pointer; }
 
 /* ── Tracker journey panel ── */
 #tracker-map-wrapper { flex: 1; display: flex; flex-direction: row; gap: 12px; min-height: 0; }

@@ -16,14 +16,10 @@ struct VehicleEventPayload: Content {
     var speedKmh:           Double?
     var driverIdent:        String?          // identifiant du conducteur (JSON key: "driverIdent")
     var odometerKm:         Double?
-    var distanceElapsedKm:  Double?
     var journeyDistanceKm:  Double?
     var fuelLevelPct:       Int?
-    var fuelConsumedL:      Double?         // carburant consommé sur cet événement
     var journeyFuelConsumedL: Double?       // cumul carburant consommé depuis le début du trajet
     var engineRpm:          Int?
-    var engineTempC:        Double?
-    var obdCode:            String?
 
     // ── Driver behavior fields (only for eventType = "driver_behavior") ──
     var driverBehaviorType: Int?            // raw integer from device
@@ -61,14 +57,10 @@ final class VehicleEvent: Model, Content, @unchecked Sendable {
     @OptionalField(key: "heading_deg")             var headingDeg:         Double?
     @OptionalField(key: "speed_kmh")               var speedKmh:           Double?
     @OptionalField(key: "odometer_km")             var odometerKm:         Double?
-    @OptionalField(key: "distance_elapsed_km")     var distanceElapsedKm:  Double?
     @OptionalField(key: "journey_distance_km")     var journeyDistanceKm:  Double?
     @OptionalField(key: "fuel_level_pct")          var fuelLevelPct:       Int?
-    @OptionalField(key: "fuel_consumed_l")         var fuelConsumedL:      Double?
     @OptionalField(key: "engine_rpm")              var engineRpm:          Int?
-    @OptionalField(key: "engine_temp_c")           var engineTempC:        Double?
-    @OptionalField(key: "driver_id")              var driverID:           String?
-    @OptionalField(key: "obd_code")                var obdCode:            String?
+    @OptionalField(key: "driver_id")               var driverID:           String?
     @OptionalField(key: "journey_fuel_consumed_l") var journeyFuelConsumedL: Double?
     @OptionalField(key: "gps_satellites")          var gpsSatellites:      Int?
     @OptionalField(key: "gps_fix_type")            var gpsFixType:         Int?
@@ -91,15 +83,11 @@ final class VehicleEvent: Model, Content, @unchecked Sendable {
         headingDeg            = p.headingDeg
         speedKmh              = p.speedKmh
         odometerKm            = p.odometerKm
-        distanceElapsedKm     = p.distanceElapsedKm
         journeyDistanceKm     = p.journeyDistanceKm
         driverID              = p.driverIdent
         fuelLevelPct          = p.fuelLevelPct
-        fuelConsumedL         = p.fuelConsumedL
         journeyFuelConsumedL  = p.journeyFuelConsumedL
         engineRpm             = p.engineRpm
-        engineTempC           = p.engineTempC
-        obdCode               = p.obdCode
         gpsSatellites         = p.gpsSatellites
         gpsFixType            = p.gpsFixType
         receivedAt            = Date()
@@ -135,17 +123,13 @@ struct CreateVehicleEvent: AsyncMigration {
             .field("longitude",           .double)
             .field("heading_deg",         .double)
             .field("speed_kmh",           .double)
-            .field("odometer_km",         .double)
-            .field("distance_elapsed_km", .double)
-            .field("journey_distance_km", .double)
-            .field("fuel_level_pct",      .int)
-            .field("driver_id",             .string)
-            .field("fuel_consumed_l",     .double)
-            .field("journey_fuel_consumed_l", .double)
-            .field("engine_rpm",          .int)
-            .field("engine_temp_c",       .double)
-            .field("obd_code",            .string)
-            .field("imei",                .string)
+            .field("odometer_km",             .double)
+            .field("journey_distance_km",     .double)
+            .field("fuel_level_pct",           .int)
+            .field("driver_id",                .string)
+            .field("journey_fuel_consumed_l",  .double)
+            .field("engine_rpm",               .int)
+            .field("imei",                     .string)
             .field("sensor_name",          .string)
             .field("received_at",          .datetime, .required)
             .create()

@@ -4,6 +4,10 @@ import SQLKit
 
 // MARK: - Alert type mapping
 
+// Wire contract: integer values must match alert_type_t in firmware (driver_behavior.c).
+// ALERT_NONE=0 (not sent), ALERT_REVVING=1, ALERT_BRAKE=2, ALERT_ACCEL=3,
+// ALERT_CORNERING=4, ALERT_IDLING=5, ALERT_OVERSPEED=6.
+// Do NOT reorder without updating the firmware enum.
 private let behaviorTypeMap: [Int: String] = [
     1: "revving",
     2: "braking",

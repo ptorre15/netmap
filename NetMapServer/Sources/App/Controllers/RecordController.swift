@@ -328,7 +328,7 @@ struct RecordController: RouteCollection {
                        'tracker' AS brand,
                        NULL AS wheel_position,
                        NULL AS pressure_bar,
-                       ve.engine_temp_c AS temperature_c,
+                       NULL AS temperature_c,
                        NULL AS vbatt_volts,
                        NULL AS target_pressure_bar,
                        NULL AS battery_pct,

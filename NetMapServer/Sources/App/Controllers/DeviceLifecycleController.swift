@@ -463,7 +463,7 @@ struct DeviceLifecycleController: RouteCollection {
         }()
 
         // ── Wake-up source breakdown ────────────────────────────────────
-        let knownSources = ["VOLTAGE_RISE", "CAN_ACTIVITY", "TIMER_BACKUP", "ESPNOW_HMI"]
+        let knownSources = ["VOLTAGE_RISE", "CAN_ACTIVITY", "TIMER_BACKUP", "ESPNOW_HMI", "IMU_MOTION"]
         var sourceBreakdown: [String: Int] = knownSources.reduce(into: [:]) { $0[$1] = 0 }
 
         if wakeCount > 0 {

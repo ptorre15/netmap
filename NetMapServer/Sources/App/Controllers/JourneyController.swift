@@ -98,7 +98,7 @@ struct VehicleEventController: RouteCollection {
             let imei      = p.imei
             let eventType = p.eventType ?? "driving"
 
-            req.logger.info("🛰 [tracker] imei=\(imei) type=\(eventType) ts=\(p.timestamp.map { String(format:"%.0f",$0.timeIntervalSince1970) } ?? "nil") lat=\(p.latitude.map{String($0)} ?? "nil") lon=\(p.longitude.map{String($0)} ?? "nil") spd=\(p.speedKmh.map{String($0)} ?? "nil") temp=\(p.engineTempC.map{String($0)} ?? "nil") fuel=\(p.fuelLevelPct.map{String($0)} ?? "nil")")
+            req.logger.info("🛰 [tracker] imei=\(imei) type=\(eventType) ts=\(p.timestamp.map { String(format:"%.0f",$0.timeIntervalSince1970) } ?? "nil") lat=\(p.latitude.map{String($0)} ?? "nil") lon=\(p.longitude.map{String($0)} ?? "nil") spd=\(p.speedKmh.map{String($0)} ?? "nil") fuel=\(p.fuelLevelPct.map{String($0)} ?? "nil")")
 
             // ── 1. Résolution du véhicule depuis l'IMEI ──────────────────────────
             let knownReading = try await SensorReading.query(on: req.db)
@@ -250,7 +250,7 @@ struct VehicleEventController: RouteCollection {
                 brand:             "tracker",
                 wheelPosition:     nil,
                 pressureBar:       nil,
-                temperatureC:      p.engineTempC,
+                temperatureC:      nil,
                 vbattVolts:        nil,
                 targetPressureBar: nil,
                 batteryPct:        nil,

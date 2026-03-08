@@ -713,7 +713,8 @@ struct AdminController: RouteCollection {
         (0..<24).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined()
     }
 
-    private let allowedWakeSources: Set<String> = ["ignition", "motion", "voltage_rise", "timer"]
+    // Must match the wakeup cause strings emitted by the tracker firmware (netmap_reporter.c → wakeup_cause_to_str())
+    private let allowedWakeSources: Set<String> = ["VOLTAGE_RISE", "CAN_ACTIVITY", "TIMER_BACKUP", "ESPNOW_HMI", "IMU_MOTION"]
 
     private func trackerExists(imei: String, on db: Database) async throws -> Bool {
         let inReadings = try await SensorReading.query(on: db)
@@ -743,7 +744,7 @@ struct AdminController: RouteCollection {
             system: TrackerConfigSystemPayload(
                 pingIntervalMin: 5,
                 sleepDelayMin: 15,
-                wakeUpSourcesEnabled: ["ignition", "motion", "voltage_rise"]
+                wakeUpSourcesEnabled: ["VOLTAGE_RISE", "CAN_ACTIVITY"]
             ),
             driverBehavior: TrackerConfigDriverBehaviorPayload(
                 thresholds: TrackerConfigThresholdsPayload(

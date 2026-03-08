@@ -1026,7 +1026,7 @@ function showMode(mode) {
   const noData = S.records.length === 0;
   D.chartCont.style.display  = mode === 'chart'  && !noData ? 'flex'  : 'none';
   D.mapCont.style.display    = mode === 'map'    && !noData ? 'flex'  : 'none';
-  D.tableCont.style.display  = mode === 'table'  && !noData ? 'block' : 'none';
+  D.tableCont.style.display  = mode === 'table'  && !noData ? 'flex'  : 'none';
   D.alertsCont.style.display = mode === 'alerts'            ? 'block' : 'none';
   D.deviceCont.style.display  = mode === 'device'            ? 'block' : 'none';
   D.wheelsCont.style.display  = mode === 'wheels'            ? 'block' : 'none';
@@ -2099,7 +2099,7 @@ async function renderTable() {
         journey_end:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 14h14v-9h-14v16"/></svg>',    label: 'Journey end',   color: '#f87171' },
         idle_start:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idle start',    color: '#a78bfa' },
         idle_end:      { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idle end',      color: '#a78bfa' },
-        idling:        { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idling',        color: '#a78bfa' },
+        stopped:       { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><rect x="4" y="4" width="16" height="16" rx="2"/></svg>',                                   label: 'Stopped',       color: '#fb923c' },
         gps_acquired:  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 20l4 -4"/><path d="M14 20l5 -5"/></svg>',  label: 'GPS acquired',  color: '#34d399' },
         gps_lost:      { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 20l4 -4"/><path d="M14 20l5 -5"/><path d="M3 3l18 18"/></svg>',      label: 'GPS lost',      color: '#f87171' },
         ping:          { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18.364 5.636a9 9 0 0 1 0 12.728"/><path d="M15.536 8.464a5 5 0 0 1 0 7.072"/><path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M5.636 5.636a9 9 0 0 0 0 12.728"/><path d="M8.464 8.464a5 5 0 0 0 0 7.072"/></svg>', label: 'Ping',          color: '#22d3ee' },
@@ -2167,42 +2167,63 @@ async function renderTable() {
         });
       }
 
-      if (!events.length) {
-        $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
-        D.tableBody.innerHTML = '<tr><td colspan="3" class="tbl-empty-cell"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg>No events in this period</td></tr>';
-      } else {
-        renderEventRows(events);
-      }
-
-      // Delete period toolbar + system-events toggle
+      // Delete period toolbar + system-events toggle + event-type filter
       D.tableCont.querySelector('#events-period-toolbar')?.remove();
       const evToolbar = document.createElement('div');
       evToolbar.id = 'events-period-toolbar';
       evToolbar.className = 'tab-action-toolbar';
       const { from: evFrom, to: evTo } = getRange();
       const dfShortEv = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      const visibleCount = () => showSysEvents()
-        ? allEvents.length + lifecycleEvents.length
-        : allEvents.filter(e => !GPS_TYPES.includes(e.eventType)).length;
+
+      // Unique event types from loaded events (GPS events excluded)
+      const uniqueEvTypes = [...new Set(allEvents.map(e => e.eventType).filter(Boolean))]
+        .filter(t => !GPS_TYPES.includes(t)).sort();
+      const typeCheckboxesHtml = uniqueEvTypes.map(t => {
+        const lbl = EVENT_LABELS[t]?.label ?? t;
+        return `<label class="ev-type-cb-row"><input type="checkbox" class="ev-type-cb" value="${escAttr(t)}" checked> ${escHTML(lbl)}</label>`;
+      }).join('');
+
       evToolbar.innerHTML =
-        `<span id="ev-toolbar-info">Period: <b>${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)}</b> · ${visibleCount()} event${visibleCount() !== 1 ? 's' : ''}</span>` +
+        `<span id="ev-toolbar-info"></span>` +
+        (uniqueEvTypes.length
+          ? `<div class="ev-type-filter-wrap" id="ev-type-filter-wrap"><button type="button" id="ev-type-filter-btn" class="admin-small-btn">All types <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M6 9l6 6 6-6"/></svg></button><div id="ev-type-dropdown" class="ev-type-dropdown" style="display:none">${typeCheckboxesHtml}</div></div>`
+          : '') +
         `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:12px">` +
         `<input type="checkbox" id="ev-show-system" style="cursor:pointer"${showSysEvents() ? ' checked' : ''}> Show system events</label>` +
         `<button class="modal-btn-danger admin-small-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg> Delete all</button>`;
       D.tableCont.prepend(evToolbar);
 
-      evToolbar.querySelector('#ev-show-system').addEventListener('change', async function() {
-        localStorage.setItem('ev_show_system', this.checked ? '1' : '0');
-        let filtered;
-        if (this.checked) {
+      function getSelectedTypes() {
+        const allCbs = [...evToolbar.querySelectorAll('.ev-type-cb')];
+        if (!allCbs.length) return null;
+        const checked = allCbs.filter(cb => cb.checked).map(cb => cb.value);
+        return checked.length === allCbs.length ? null : checked;
+      }
+
+      function updateTypeBtn() {
+        const allCbs = [...evToolbar.querySelectorAll('.ev-type-cb')];
+        if (!allCbs.length) return;
+        const checked = allCbs.filter(cb => cb.checked);
+        const btn = evToolbar.querySelector('#ev-type-filter-btn');
+        if (!btn) return;
+        const chevron = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M6 9l6 6 6-6"/></svg>`;
+        btn.innerHTML = (checked.length === allCbs.length ? 'All types' : `${checked.length} type${checked.length !== 1 ? 's' : ''}`) + ' ' + chevron;
+      }
+
+      async function getBaseEvents() {
+        if (showSysEvents()) {
           if (!lifecycleEvents.length) {
             const lc = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&since=${encodeURIComponent(evFrom.toISOString())}&limit=500`).catch(() => []);
             lifecycleEvents = lc.filter(e => new Date(e.timestamp) <= evTo).map(e => ({ ...e, _src: 'lifecycle' }));
           }
-          filtered = [...allEvents, ...lifecycleEvents].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        } else {
-          filtered = allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
+          return [...allEvents, ...lifecycleEvents].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         }
+        return allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
+      }
+
+      function applyFilters(base) {
+        const selectedTypes = getSelectedTypes();
+        const filtered = selectedTypes ? base.filter(e => selectedTypes.includes(e.eventType)) : base;
         if (!filtered.length) {
           $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
           D.tableBody.innerHTML = '<tr><td colspan="3" class="tbl-empty-cell"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg>No events in this period</td></tr>';
@@ -2210,11 +2231,39 @@ async function renderTable() {
           renderEventRows(filtered);
         }
         const count = filtered.length;
-        evToolbar.querySelector('#ev-toolbar-info').textContent =
-          `Period: ${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)} · ${count} event${count !== 1 ? 's' : ''}`;
+        evToolbar.querySelector('#ev-toolbar-info').innerHTML =
+          `Period: <b>${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)}</b> · ${count} event${count !== 1 ? 's' : ''}`;
+      }
+
+      // Initial render
+      applyFilters(events);
+
+      // Type filter dropdown – toggle + close on outside click
+      evToolbar.querySelector('#ev-type-filter-btn')?.addEventListener('click', ev => {
+        ev.stopPropagation();
+        const dd = $('ev-type-dropdown');
+        if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+      });
+      function closeEvTypeDD(e) {
+        const wrap = $('ev-type-filter-wrap');
+        if (!wrap) { document.removeEventListener('click', closeEvTypeDD); return; }
+        if (!wrap.contains(e.target)) $('ev-type-dropdown').style.display = 'none';
+      }
+      document.addEventListener('click', closeEvTypeDD);
+
+      evToolbar.querySelectorAll('.ev-type-cb').forEach(cb => {
+        cb.addEventListener('change', async () => {
+          updateTypeBtn();
+          applyFilters(await getBaseEvents());
+        });
       });
 
-      evToolbar.querySelector('button').addEventListener('click', () => {
+      evToolbar.querySelector('#ev-show-system').addEventListener('change', async function() {
+        localStorage.setItem('ev_show_system', this.checked ? '1' : '0');
+        applyFilters(await getBaseEvents());
+      });
+
+      evToolbar.querySelector('.modal-btn-danger').addEventListener('click', () => {
         showDeleteModal({
           title: 'Delete all events?',
           body: `Permanently delete <b>${allEvents.length} event${allEvents.length !== 1 ? 's' : ''}</b> for this period.<br><span style="color:var(--fg3);font-size:11px">${dfShortEv.format(evFrom)} – ${dfShortEv.format(evTo)}</span>`,
@@ -3202,7 +3251,8 @@ async function adminRenameSensor(sensorID, sensorName) {
 async function openTrackerConfigModal(imei) {
   const modal = $('tracker-config-modal');
   const body  = $('tracker-config-modal-body');
-  const WAKE_SOURCES = ['ignition', 'motion', 'voltage_rise', 'timer'];
+  // Must match wakeup_cause_to_str() values in firmware (netmap_reporter.c) — uppercase
+  const WAKE_SOURCES = ['VOLTAGE_RISE', 'CAN_ACTIVITY', 'TIMER_BACKUP', 'ESPNOW_HMI', 'IMU_MOTION'];
 
   const close = () => { modal.style.display = 'none'; };
   $('tracker-config-modal-close').onclick = close;
