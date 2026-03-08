@@ -335,6 +335,7 @@ const S = {
   ws: null, wsConnected: false,
   pChart: null, tChart: null, wovChart: null, wovTChart: null, leafletMap: null,
   mapMatchEnabled: false,
+  allJourneysMode: false,
   secAudit: { limit: 50, offset: 0, total: 0, action: '', actor: '' },
 };
 
@@ -1468,6 +1469,23 @@ async function loadDriverBehavior(journeyID) {
   catch (e) { console.warn('Driver behavior fetch failed:', e); return []; }
 }
 
+// Fetch all journey tracks with a concurrency cap of 5
+async function fetchAllTracks(journeys, onProgress) {
+  const LIMIT = 5;
+  const results = new Array(journeys.length).fill(null);
+  let cursor = 0, done = 0;
+  async function worker() {
+    while (cursor < journeys.length) {
+      const i = cursor++;
+      try { results[i] = await loadJourneyTrack(journeys[i].journeyID); }
+      catch(e) { console.warn('fetchAllTracks: failed', journeys[i].journeyID, e); results[i] = []; }
+      onProgress?.(++done, journeys.length);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(LIMIT, journeys.length) }, worker));
+  return results;
+}
+
 // Driver behavior icon config — Tabler.io SVG icons (currentColor, consistent with event badges)
 const BEHAVIOR_SVG = {
   // arrow-big-up-lines = harsh acceleration
@@ -1495,6 +1513,20 @@ const BEHAVIOR_CONFIG = {
   idling:       { label: 'Idling',        color: '#60a5fa', unit: 's'    },
   unknown:      { label: 'Alert',         color: '#94a3b8', unit: ''     },
 };
+
+// Palette for multi-journey overview mode — 10 visually distinct colors
+const JOURNEY_PALETTE = [
+  '#3b82f6', // blue
+  '#f59e0b', // amber
+  '#10b981', // emerald
+  '#f87171', // rose
+  '#a78bfa', // violet
+  '#fb923c', // orange
+  '#67e8f9', // cyan
+  '#4ade80', // green
+  '#f472b6', // pink
+  '#facc15', // yellow
+];
 
 function behaviorIcon(alertType) {
   const c   = BEHAVIOR_CONFIG[alertType] || BEHAVIOR_CONFIG.unknown;
@@ -1588,6 +1620,7 @@ async function mapMatchTrack(lls, journeyID) {
 
 async function renderTrackerMap(sensor) {
   D.mapCont.innerHTML = '';
+  S.allJourneysMode = false;
 
   // ── Delete-period toolbar ────────────────────────────────────────────────
   const toolbar = document.createElement('div');
@@ -1633,6 +1666,7 @@ async function renderTrackerMap(sensor) {
     `<div class="jlp-header">`+
     `<span class="jlp-header-title">Journeys</span>`+
     `</div>`+
+    `<label id="jlp-all-wrap" class="jlp-overview-bar"><input type="checkbox" id="jlp-all-cb"><span class="mm-toggle-track"><span class="mm-toggle-thumb"></span></span><span class="jlp-all-label">Show\u00a0all\u00a0on\u00a0map</span></label>`+
     `<div class="jlp-body"><div class="jlp-loading">Loading\u2026</div></div>`;
   wrapper.appendChild(panel);
 
@@ -1725,6 +1759,9 @@ async function renderTrackerMap(sensor) {
   // Track layers for current journey
   let trackLayers    = [];   // route + speed dots — cleared on map-match toggle
   let behaviorLayers = [];   // behavior markers   — survive map-match toggles
+  // Overview mode: all-journeys polylines + behavior markers for selected journey
+  const allPolylines      = new Map(); // journeyID → { polyline, color, lls }
+  let   allBehaviorLayers = [];
 
   // Clear route lines/dots and then re-add stored behavior markers on top
   function clearTrack() {
@@ -1749,6 +1786,44 @@ async function renderTrackerMap(sensor) {
   async function selectJourney(journey, rowEl) {
     panel.querySelectorAll('.jlp-row').forEach(r => r.classList.remove('active'));
     rowEl.classList.add('active');
+
+    // ── Overview mode: highlight selected route + load behavior markers ───────
+    if (S.allJourneysMode) {
+      const jData = allPolylines.get(journey.journeyID);
+      if (jData) {
+        // Journey has a polyline — highlight it and dim the rest
+        allPolylines.forEach(({ polyline }, jid) => polyline.setStyle({
+          weight:  jid === journey.journeyID ? 4.5 : 2,
+          opacity: jid === journey.journeyID ? 1.0 : 0.28,
+        }));
+        try { map.fitBounds(jData.lls, { padding: [30, 30], maxZoom: 16 }); } catch(_) {}
+      }
+      // else: journey has no GPS track in overview — leave all polylines as-is
+      allBehaviorLayers.forEach(l => map.removeLayer(l));
+      allBehaviorLayers = [];
+      try {
+        const behaviors = await loadDriverBehavior(journey.journeyID);
+        const alertBadge = rowEl.querySelector('.jlp-alert-badge');
+        const alertCount = behaviors.length;
+        if (alertBadge) alertBadge.innerHTML = alertCount > 0 ? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg> ${alertCount}` : '';
+        behaviors.forEach(b => {
+          if (b.latitude == null || b.longitude == null) return;
+          const cfg = BEHAVIOR_CONFIG[b.alertType] || BEHAVIOR_CONFIG.unknown;
+          const cfgColor = safeCssColor(cfg.color) || '#94a3b8';
+          const ts = fmtTs(b.timestamp);
+          const durS = b.alertDurationMs != null ? (b.alertDurationMs / 1000).toFixed(1) : '?';
+          const val = b.alertValueMax != null ? b.alertValueMax : null;
+          const valStr = val != null ? (cfg.unit ? `${val.toFixed(2)} ${cfg.unit}` : val.toFixed(2)) : '\u2014';
+          const spdStr = b.speedKmh != null ? `<br><span style="color:#94a3b8">${b.speedKmh.toFixed(0)} km/h</span>` : '';
+          const popup = `<div style="font-size:13px;min-width:140px"><div style="font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cfgColor};flex-shrink:0"></span>${escHTML(cfg.label)}</div><div style="color:#94a3b8;font-size:11px">${escHTML(ts)}</div><hr style="border:none;border-top:1px solid rgba(255,255,255,.1);margin:6px 0"><div>Peak: <b>${escHTML(valStr)}</b></div><div>Duration: <b>${escHTML(durS)}s</b></div>${spdStr}</div>`;
+          const m = L.marker([b.latitude, b.longitude], { icon: behaviorIcon(b.alertType) }).bindPopup(popup, { maxWidth: 220 });
+          allBehaviorLayers.push(m);
+          m.addTo(map);
+        });
+      } catch(e) { console.warn('overview behavior markers:', e); }
+      return;
+    }
+
     clearAll();   // new journey: remove everything
     matchDrawFn = null;
     matchCtrl.reset();
@@ -1888,6 +1963,7 @@ async function renderTrackerMap(sensor) {
       const meta   = [dist, fuel].filter(Boolean).join(' · ');
       row.innerHTML = `
         <div class="jlp-row-main">
+          <span class="jlp-row-color"></span>
           <div class="jlp-row-info">
             <div class="jlp-row-date">${escHTML(date)}${driver}</div>
             ${meta ? `<div class="jlp-row-meta">${meta}</div>` : ''}
@@ -1904,6 +1980,11 @@ async function renderTrackerMap(sensor) {
             { method: 'DELETE', headers: authHeaders() });
           if (!res.ok) throw new Error(await res.text());
           row.remove();
+          // Remove from overview polylines if shown
+          if (allPolylines.has(j.journeyID)) {
+            map.removeLayer(allPolylines.get(j.journeyID).polyline);
+            allPolylines.delete(j.journeyID);
+          }
           clearTrack();
           // If deleted row was selected, auto-select next remaining row
           const rows = [...body.querySelectorAll('.jlp-row')];
@@ -1916,6 +1997,85 @@ async function renderTrackerMap(sensor) {
       body.appendChild(row);
       // Auto-select first journey
       if (idx === 0) selectJourney(j, row);
+    });
+
+    // ── Overview toggle ──────────────────────────────────────────────────────
+    document.getElementById('jlp-all-cb').addEventListener('change', async function() {
+      if (this.checked) {
+        // Show progress overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'jlp-all-loading';
+        overlay.innerHTML = `<div>Loading tracks\u2026</div><div class="jlp-all-loading-bar"><div class="jlp-all-loading-fill" id="jlp-all-progress" style="width:0%"></div></div><div id="jlp-all-progress-txt" style="font-size:10px;opacity:.7">0\u00a0/\u00a0${journeys.length}</div>`;
+        panel.appendChild(overlay);
+        // Disable map-match during overview
+        const mmCb = document.getElementById('mm-checkbox');
+        if (mmCb) { mmCb.disabled = true; mmCb.checked = false; S.mapMatchEnabled = false; }
+        // Fetch all tracks
+        const allTracks = await fetchAllTracks(journeys, (done, total) => {
+          const fill = document.getElementById('jlp-all-progress');
+          const txt  = document.getElementById('jlp-all-progress-txt');
+          if (fill) fill.style.width = `${Math.round(done / total * 100)}%`;
+          if (txt)  txt.textContent  = `${done}\u00a0/\u00a0${total}`;
+        });
+        overlay.remove();
+        // Build polylines first — only switch to overview if we have tracks to show
+        const allBounds = [];
+        const pendingPolylines = [];
+        journeys.forEach((j, idx) => {
+          const events = allTracks[idx] || [];
+          const lls = events
+            .filter(e => e.latitude != null && e.longitude != null)
+            .map(e => [e.latitude, e.longitude])
+            .filter(([lat, lon]) => isFinite(lat) && isFinite(lon) && !(lat === 0 && lon === 0))
+            .filter(([lat, lon], i, arr) => i === 0 || lat !== arr[i-1][0] || lon !== arr[i-1][1]);
+          if (lls.length < 2) return;
+          const color = JOURNEY_PALETTE[idx % JOURNEY_PALETTE.length];
+          const pl = L.polyline(lls, { color, weight: 2.5, opacity: 0.75 });
+          pendingPolylines.push({ jid: j.journeyID, polyline: pl, color, lls, idx });
+          allBounds.push(...lls);
+        });
+        // If nothing drawable, abort — keep current single-journey view
+        if (!pendingPolylines.length) {
+          const cb = panel.querySelector('#jlp-all-cb');
+          if (cb) cb.checked = false;
+          return;
+        }
+        // Commit: clear existing track and switch to overview mode
+        clearAll();
+        pendingPolylines.forEach(({ jid, polyline, color, lls, idx: pidx }) => {
+          polyline.addTo(map);
+          allPolylines.set(jid, { polyline, color, lls });
+          const listRow = body.querySelectorAll('.jlp-row')[pidx];
+          if (listRow) { const dot = listRow.querySelector('.jlp-row-color'); if (dot) { dot.style.background = color; dot.style.display = 'block'; } }
+        });
+        body.classList.add('jlp-overview-mode');
+        if (allBounds.length > 1) {
+          try { map.fitBounds(allBounds, { padding: [20, 20], maxZoom: 14 }); } catch(_) {}
+        }
+        S.allJourneysMode = true;
+        // Highlight the current active journey
+        const activeRow = body.querySelector('.jlp-row.active');
+        const activeIdx = activeRow ? [...body.querySelectorAll('.jlp-row')].indexOf(activeRow) : -1;
+        if (activeIdx >= 0 && journeys[activeIdx]) {
+          allPolylines.forEach(({ polyline }) => polyline.setStyle({ weight: 2, opacity: 0.28 }));
+          const jData = allPolylines.get(journeys[activeIdx].journeyID);
+          if (jData) jData.polyline.setStyle({ weight: 4.5, opacity: 1.0 });
+        }
+      } else {
+        // Tear down overview mode
+        allPolylines.forEach(({ polyline }) => map.removeLayer(polyline));
+        allPolylines.clear();
+        allBehaviorLayers.forEach(l => map.removeLayer(l));
+        allBehaviorLayers = [];
+        body.querySelectorAll('.jlp-row-color').forEach(dot => { dot.style.display = 'none'; });
+        body.classList.remove('jlp-overview-mode');
+        const mmCb = document.getElementById('mm-checkbox');
+        if (mmCb) mmCb.disabled = false;
+        S.allJourneysMode = false;
+        const activeRow = body.querySelector('.jlp-row.active') || body.querySelector('.jlp-row');
+        const activeIdx = activeRow ? [...body.querySelectorAll('.jlp-row')].indexOf(activeRow) : 0;
+        if (activeRow && journeys[activeIdx]) selectJourney(journeys[activeIdx], activeRow);
+      }
     });
   } catch(e) {
     panel.querySelector('.jlp-body').innerHTML = '<div class="jlp-empty">Failed to load journeys.</div>';

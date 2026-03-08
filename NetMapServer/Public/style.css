@@ -557,6 +557,38 @@ body {
   padding: 24px 14px; font-size: 12px; color: var(--fg3); text-align: center;
 }
 
+/* ── Journey overview toggle bar ── */
+.jlp-overview-bar {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 10px; border-bottom: 1px solid var(--sep);
+  background: var(--bg3); flex-shrink: 0;
+  cursor: pointer; user-select: none;
+  font-size: 11px; font-weight: 600; font-family: inherit;
+  color: var(--fg2); transition: color .2s;
+}
+#jlp-all-wrap:has(#jlp-all-cb:checked) { color: var(--m-blue, #3b82f6); }
+#jlp-all-wrap #jlp-all-cb { display: none; }
+#jlp-all-wrap:has(#jlp-all-cb:checked) .mm-toggle-track { background: var(--m-blue, #3b82f6); }
+#jlp-all-wrap:has(#jlp-all-cb:checked) .mm-toggle-thumb { left: 15px; }
+.jlp-all-label { white-space: nowrap; }
+/* Colored dot — hidden by default, shown in overview mode */
+.jlp-row-color {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  display: none;
+}
+/* Loading overlay for overview mode fetch */
+.jlp-all-loading {
+  position: absolute; inset: 0; background: rgba(0,0,0,.6);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 10; gap: 9px; font-size: 12px; color: var(--fg2);
+}
+.jlp-all-loading-bar {
+  width: 120px; height: 4px; background: var(--sep); border-radius: 2px; overflow: hidden;
+}
+.jlp-all-loading-fill {
+  height: 100%; background: var(--m-blue, #3b82f6); border-radius: 2px; transition: width .15s;
+}
+
 /* ── Map-match toggle button (Leaflet control) ── */
 #mm-toggle-wrap {
   position: absolute;
