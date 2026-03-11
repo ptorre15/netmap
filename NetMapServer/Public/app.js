@@ -1,5 +1,7 @@
 'use strict';
 
+const WEB_VERSION = '1.0.0';
+
 // ─── Auth state ────────────────────────────────────────────────────────────────────────────────
 const AUTH = { token: null, username: null, role: null,
   get isAdmin() { return this.role === 'admin'; } };
@@ -1654,9 +1656,126 @@ async function renderTrackerMap(sensor) {
   wrapper.id = 'tracker-map-wrapper';
   D.mapCont.appendChild(wrapper);
 
+  // Column wrapper: leaflet map stacked above load chart
+  const mapColWrap = document.createElement('div');
+  mapColWrap.id = 'map-col-wrap';
+  wrapper.appendChild(mapColWrap);
+
   const mapDiv = document.createElement('div');
   mapDiv.id = 'leaflet-map';
-  wrapper.appendChild(mapDiv);
+  mapColWrap.appendChild(mapDiv);
+
+  // ── Load estimation chart (below map) ─────────────────────────
+  const loadChartWrap = document.createElement('div');
+  loadChartWrap.id = 'jlp-load-chart-wrap';
+  loadChartWrap.style.display = 'none';
+  loadChartWrap.innerHTML =
+    `<div class="jlp-load-chart-header">`+
+    `<span class="jlp-load-chart-title">&#9653; Load Estimation</span>`+
+    `<span id="jlp-load-chart-badge" class="jlp-load-chart-badge"></span>`+
+    `</div>`+
+    `<div class="jlp-load-chart-body"><canvas id="jlp-load-canvas"></canvas></div>`;
+  mapColWrap.appendChild(loadChartWrap);
+
+  let _loadChart = null;
+
+  function renderLoadChart(events) {
+    // Collect points that have load data
+    const pts = events
+      .filter(e => e.loadMLoadKg != null || e.loadMTotalKg != null)
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    if (!pts.length) { loadChartWrap.style.display = 'none'; return; }
+
+    loadChartWrap.style.display = 'flex';
+
+    // Update badge with final (last) load value and confidence
+    const last = pts[pts.length - 1];
+    const badge = document.getElementById('jlp-load-chart-badge');
+    if (badge) {
+      const conf = last.loadConfidence || '';
+      const kg   = last.loadMLoadKg != null ? `~${Math.round(last.loadMLoadKg)} kg payload` :
+                   last.loadMTotalKg != null ? `~${Math.round(last.loadMTotalKg)} kg total` : '';
+      badge.textContent = kg ? `${kg} (${conf})` : '';
+      badge.className = `jlp-load-chart-badge jlp-load-${conf}`;
+    }
+
+    const labels   = pts.map(e => new Date(e.timestamp));
+    const loadData = pts.map(e => e.loadMLoadKg  != null ? +e.loadMLoadKg.toFixed(1)  : null);
+    const totData  = pts.map(e => e.loadMTotalKg != null ? +e.loadMTotalKg.toFixed(1) : null);
+    const hasTot   = totData.some(v => v != null);
+
+    const datasets = [
+      {
+        label: 'Payload (kg)',
+        data: loadData,
+        borderColor: '#34d399',
+        backgroundColor: 'rgba(52,211,153,0.10)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+        spanGaps: true,
+      },
+    ];
+    if (hasTot) {
+      datasets.push({
+        label: 'Total mass (kg)',
+        data: totData,
+        borderColor: '#60a5fa',
+        backgroundColor: 'rgba(96,165,250,0.06)',
+        fill: false,
+        tension: 0.3,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+        borderDash: [4, 3],
+        spanGaps: true,
+      });
+    }
+
+    if (_loadChart) { _loadChart.destroy(); _loadChart = null; }
+    const cvs = document.getElementById('jlp-load-canvas');
+    if (!cvs) return;
+    _loadChart = new Chart(cvs, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            display: hasTot,
+            labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 16, padding: 10 },
+          },
+          tooltip: {
+            backgroundColor: '#1e293b',
+            titleColor: '#94a3b8',
+            bodyColor: '#e2e8f0',
+            callbacks: {
+              title: items => new Date(items[0].parsed.x).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              label: item => ` ${item.dataset.label}: ${item.parsed.y != null ? item.parsed.y + ' kg' : '—'}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: { unit: 'minute', displayFormats: { minute: 'HH:mm' } },
+            ticks: { color: '#64748b', font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+            grid: { color: 'rgba(255,255,255,0.04)' },
+          },
+          y: {
+            title: { display: true, text: 'kg', color: '#64748b', font: { size: 10 } },
+            ticks: { color: '#64748b', font: { size: 9 } },
+            grid: { color: 'rgba(255,255,255,0.06)' },
+            beginAtZero: false,
+          },
+        },
+      },
+    });
+  }
 
   const panel = document.createElement('div');
   panel.id = 'journey-list-panel';
@@ -1696,7 +1815,28 @@ async function renderTrackerMap(sensor) {
       return div;
     }
   });
-  new BehaviorLegend().addTo(map);
+  let behaviorLegendCtrl = new BehaviorLegend().addTo(map);
+
+  // Reposition the legend to whichever corner is furthest from both start and end markers
+  function repositionLegend(startLL, endLL) {
+    const bounds = map.getBounds();
+    if (!bounds || !bounds.isValid()) return;
+    const corners = {
+      topleft:     bounds.getNorthWest(),
+      topright:    bounds.getNorthEast(),
+      bottomleft:  bounds.getSouthWest(),
+      bottomright: bounds.getSouthEast(),
+    };
+    let best = 'bottomright', bestDist = -1;
+    for (const [pos, corner] of Object.entries(corners)) {
+      const d = Math.min(corner.distanceTo(startLL), corner.distanceTo(endLL));
+      if (d > bestDist) { bestDist = d; best = pos; }
+    }
+    if (best !== behaviorLegendCtrl.getPosition()) {
+      behaviorLegendCtrl.remove();
+      behaviorLegendCtrl = new BehaviorLegend({ position: best }).addTo(map);
+    }
+  }
 
   // Show latest position pin
   let latestMarker = null;
@@ -1776,6 +1916,10 @@ async function renderTrackerMap(sensor) {
     trackLayers = [];
     behaviorLayers.forEach(l => map.removeLayer(l));
     behaviorLayers = [];
+    // Destroy load chart if visible
+    if (_loadChart) { _loadChart.destroy(); _loadChart = null; }
+    const lcw = document.getElementById('jlp-load-chart-wrap');
+    if (lcw) lcw.style.display = 'none';
   }
   function reAddBehaviorLayers() {
     behaviorLayers.forEach(l => { trackLayers.push(l); l.addTo(map); });
@@ -1875,6 +2019,8 @@ async function renderTrackerMap(sensor) {
         });
         // Re-add behavior markers on top (persisted across map-match toggles)
         reAddBehaviorLayers();
+        // Reposition legend away from start/end flags (after fitBounds settles)
+        requestAnimationFrame(() => repositionLegend(L.latLng(rawLls[0]), L.latLng(rawLls.at(-1))));
       }
 
       // Draw raw GPS immediately
@@ -1934,6 +2080,9 @@ async function renderTrackerMap(sensor) {
       // Warn about GPS-less alerts in console (not silent)
       const noGps = behaviors.filter(b => b.latitude == null || b.longitude == null);
       if (noGps.length) console.debug(`[behavior] ${noGps.length} alert(s) have no GPS position — not shown on map.`);
+
+      // ── Load estimation chart ───────────────────────────────────────────
+      renderLoadChart(events);
     } catch(e) { console.error('selectJourney:', e); }
   }
 
@@ -1959,14 +2108,36 @@ async function renderTrackerMap(sensor) {
         if (j.totalDistanceKm > 0)
           fuel += ` <span style="color:var(--fg3)">(${(fuelL / j.totalDistanceKm * 100).toFixed(1)} L/100km)</span>`;
       }
-      const driver = j.driverID ? `<span class="jlp-driver">${escHTML(j.driverID)}</span>` : '';
-      const meta   = [dist, fuel].filter(Boolean).join(' · ');
+      let dur = '';
+      if (j.startedAt && j.endedAt) {
+        const secs = Math.round((new Date(j.endedAt) - new Date(j.startedAt)) / 1000);
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        dur = h > 0 ? `${h}h\u00a0${m}m` : m > 0 ? `${m}m\u00a0${s}s` : `${s}s`;
+      }
+      const spd    = j.maxSpeedKmh != null && j.maxSpeedKmh > 0 ? `max\u00a0${j.maxSpeedKmh.toFixed(0)}\u00a0km/h` : '';
+      const pts    = j.eventCount > 0 ? `${j.eventCount}\u00a0pts` : '';
+      // Load estimation badge
+      let loadStr = '';
+      if (j.loadConfidence && j.loadConfidence !== 'not_ready') {
+        if (j.loadMLoadKg != null && j.loadMLoadKg >= 0) {
+          loadStr = `<span class="jlp-load jlp-load-${escHTML(j.loadConfidence)}">~${Math.round(j.loadMLoadKg)}\u00a0kg payload</span>`;
+        } else if (j.loadMTotalKg != null && j.loadMTotalKg > 0) {
+          loadStr = `<span class="jlp-load jlp-load-${escHTML(j.loadConfidence)}">~${Math.round(j.loadMTotalKg)}\u00a0kg total mass</span>`;
+        }
+      }
+      const driver  = j.driverID ? `<span class="jlp-driver">${escHTML(j.driverID)}</span>` : '';
+      const meta    = [dist, fuel, dur, spd, pts].filter(Boolean).join(' · ');
+      const ongoing = !j.endedAt;
+      if (ongoing) row.classList.add('jlp-row-ongoing');
       row.innerHTML = `
         <div class="jlp-row-main">
           <span class="jlp-row-color"></span>
           <div class="jlp-row-info">
-            <div class="jlp-row-date">${escHTML(date)}${driver}</div>
+            <div class="jlp-row-date">${escHTML(date)}${driver}${ongoing ? ' <span class="jlp-ongoing-badge">● Live</span>' : ''}</div>
             ${meta ? `<div class="jlp-row-meta">${meta}</div>` : ''}
+            ${loadStr ? `<div class="jlp-load-line">${loadStr}</div>` : ''}
           </div>
           <span class="jlp-alert-badge"></span>
           <button class="jlp-delete-btn" title="Delete this journey">\uD83D\uDDD1\uFE0E</button>
@@ -2632,8 +2803,12 @@ async function renderDevice() {
   D.deviceCont.innerHTML = `<div class="bat-box"><div class="bat-header">Device events</div><table class="bat-table"><thead><tr><th>Time</th><th>Event</th><th>Reset reason</th><th>Wake source</th><th>Battery</th><th>GPS</th><th></th></tr></thead><tbody>${skeletonRows(6)}</tbody></table></div>`;
 
   let events = [];
+  let lifecycle_summary = null;
   try {
-    events = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&limit=500`);
+    [events, lifecycle_summary] = await Promise.all([
+      apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&limit=500`),
+      apiFetch(`/api/device-lifecycle/summary?imei=${encodeURIComponent(sensor.sensorID)}`).catch(() => null),
+    ]);
   } catch (err) {
     D.deviceCont.innerHTML = `<div class="bat-loading-full" style="color:var(--danger)">Failed to load device events.</div>`;
     return;
@@ -2644,12 +2819,48 @@ async function renderDevice() {
   // Sort descending by timestamp
   const allEvents = [...events].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+  // ── Lifecycle summary cards ──────────────────────────────────────────────
+  let summaryHtml = '';
+  if (lifecycle_summary) {
+    const ls = lifecycle_summary;
+    const dfS = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const fmtD = iso => iso ? dfS.format(new Date(iso)) : '–';
+    // Wake source breakdown
+    const wakeBreakdown = ls.wakeUp?.sourceBreakdown ? Object.entries(ls.wakeUp.sourceBreakdown)
+      .sort((a, b) => b[1] - a[1])
+      .map(([src, n]) => `<span style="color:var(--fg3)">${escHTML(src)}:</span>\u00a0${n}`)
+      .join('\u00a0\u00b7\u00a0') : '';
+    summaryHtml = `<div class="bat-box lc-summary-box">
+      <div class="bat-header">Device summary</div>
+      <div class="lc-summary-grid">
+        <div class="lc-summary-card">
+          <div class="lc-summary-val">${ls.boot?.count ?? 0}</div>
+          <div class="lc-summary-label">Boots</div>
+          ${ls.boot?.lastAt     ? `<div class="lc-summary-sub">${fmtD(ls.boot.lastAt)}</div>` : ''}
+          ${ls.boot?.lastReason ? `<div class="lc-summary-sub" style="color:var(--fg3)">${escHTML(ls.boot.lastReason)}</div>` : ''}
+        </div>
+        <div class="lc-summary-card">
+          <div class="lc-summary-val">${ls.sleep?.count ?? 0}</div>
+          <div class="lc-summary-label">Sleeps</div>
+          ${ls.sleep?.lastAt       ? `<div class="lc-summary-sub">${fmtD(ls.sleep.lastAt)}</div>` : ''}
+          ${ls.sleep?.lastVoltageV != null ? `<div class="lc-summary-sub" style="color:var(--fg3)">${ls.sleep.lastVoltageV.toFixed(2)}\u00a0V</div>` : ''}
+        </div>
+        <div class="lc-summary-card">
+          <div class="lc-summary-val">${ls.wakeUp?.count ?? 0}</div>
+          <div class="lc-summary-label">Wake-ups</div>
+          ${ls.wakeUp?.lastAt     ? `<div class="lc-summary-sub">${fmtD(ls.wakeUp.lastAt)}</div>` : ''}
+          ${wakeBreakdown         ? `<div class="lc-summary-sub" style="font-size:10px">${wakeBreakdown}</div>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }
+
   if (!allEvents.length) {
-    D.deviceCont.innerHTML = '<div class="bat-loading-full"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M9 12l2 2l4 -4"/></svg><br>No device lifecycle events recorded.</div>';
+    D.deviceCont.innerHTML = summaryHtml + '<div class="bat-loading-full"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M9 12l2 2l4 -4"/></svg><br>No device lifecycle events recorded.</div>';
     return;
   }
 
-  D.deviceCont.innerHTML = `
+  D.deviceCont.innerHTML = summaryHtml + `
     <div class="bat-box">
       <div class="bat-header">Device events <span class="bat-count">${allEvents.length}</span></div>
       <table class="bat-table">
@@ -4081,11 +4292,14 @@ async function main() {
     document.documentElement.setAttribute('data-theme', 'dark');
   }
 
-  // Show server version in sidebar footer (no auth required)
+  // Show server + web version in sidebar footer (no auth required)
   fetch('/health').then(r => r.json()).then(h => {
     const el = $('server-version');
-    if (el && h?.version) el.textContent = `Server v${h.version}`;
-  }).catch(() => {});
+    if (el) el.textContent = h?.version ? `Server v${h.version} · Web v${WEB_VERSION}` : `Web v${WEB_VERSION}`;
+  }).catch(() => {
+    const el = $('server-version');
+    if (el) el.textContent = `Web v${WEB_VERSION}`;
+  });
 
   setup();  // register all event listeners first (auth form needs to be live)
 
@@ -4212,7 +4426,7 @@ async function renderStatsPanel() {
       ${kpiCard('Sensor readings', fmtN(s.totalReadings), `${fmtN(s.readingsLast30d)} last 30 d`)}
       ${kpiCard('Tracker events', fmtN(s.totalVehicleEvents), `${fmtN(s.vehicleEventsLast30d)} last 30 d`)}
       ${kpiCard('Lifecycle events', fmtN(s.totalLifecycleEvents), `${fmtN(s.lifecycleEventsLast30d)} last 30 d`)}
-      ${kpiCard('Driver behavior', fmtN(s.totalDriverBehaviorEvents), '')}
+      ${kpiCard('Driver behavior', fmtN(s.totalDriverBehaviorEvents), `${fmtN(s.driverBehaviorEventsLast30d ?? 0)} last 30 d`)}
       ${kpiCard('Assets', fmtN(s.totalVehicles), '')}
       ${kpiCard('Users', fmtN(s.totalUsers), '')}
     </div>
@@ -4220,6 +4434,7 @@ async function renderStatsPanel() {
       ${barChart('Sensor readings / day', s.readingsPerDay, 'stats-canvas-readings')}
       ${barChart('Tracker events / day', s.vehicleEventsPerDay, 'stats-canvas-events')}
       ${barChart('Lifecycle events / day', s.lifecyclePerDay, 'stats-canvas-lifecycle')}
+      ${(s.driverBehaviorPerDay?.length ?? 0) > 0 ? barChart('Driver behavior / day', s.driverBehaviorPerDay, 'stats-canvas-behavior') : ''}
     </div>
     <div class="stats-charts-row">
       ${breakdownChart('Tracker event types (all time)', s.vehicleEventsByType)}

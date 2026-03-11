@@ -37,6 +37,39 @@ struct VehicleEventPayload: Content {
 
     // ── Config acknowledgment ──────────────────────────────────────────────
     var configVersion:      Int?            // schemaVersion the tracker currently has applied; nil = never received config
+
+    // ── Journey stats counters (only for eventType = "journey_stats") ──────
+    var journey:            JourneyStatsCounters?
+    var boot:               JourneyStatsCounters?
+    var lifetime:           JourneyStatsLifetime?
+
+    // ── Load estimation (journey_start / driving / journey_end) ─────────────
+    var load:               LoadEstimationPayload?
+}
+
+/// Load estimation snapshot sent by the tracker on driving events.
+struct LoadEstimationPayload: Content {
+    var confidence:  String   // "low" | "medium" | "high"
+    var samples:     Int?
+    var mTotalKg:    Double?  // estimated total vehicle mass; absent when unavailable
+    var mLoadKg:     Double?  // estimated payload (total − empty); absent when unavailable
+}
+
+// MARK: - journey_stats counter structs
+
+struct JourneyStatsCounters: Content {
+    var dbEventsSent: Int
+    var ffEventsSent: Int
+    var postFailures: Int
+}
+
+struct JourneyStatsLifetime: Content {
+    var dbEventsSent:     Int
+    var ffEventsSent:     Int
+    var postFailures:     Int
+    var rebootsTotal:     Int
+    var rebootsException: Int
+    var rebootsBrownout:  Int
 }
 
 // MARK: - Fluent Model
@@ -64,6 +97,10 @@ final class VehicleEvent: Model, Content, @unchecked Sendable {
     @OptionalField(key: "journey_fuel_consumed_l") var journeyFuelConsumedL: Double?
     @OptionalField(key: "gps_satellites")          var gpsSatellites:      Int?
     @OptionalField(key: "gps_fix_type")            var gpsFixType:         Int?
+    @OptionalField(key: "load_confidence")         var loadConfidence:     String?
+    @OptionalField(key: "load_samples")            var loadSamples:        Int?
+    @OptionalField(key: "load_m_total_kg")         var loadMTotalKg:       Double?
+    @OptionalField(key: "load_m_load_kg")          var loadMLoadKg:        Double?
     @Field(key: "received_at")                     var receivedAt:         Date
 
     init() {}
@@ -90,6 +127,10 @@ final class VehicleEvent: Model, Content, @unchecked Sendable {
         engineRpm             = p.engineRpm
         gpsSatellites         = p.gpsSatellites
         gpsFixType            = p.gpsFixType
+        loadConfidence        = p.load?.confidence
+        loadSamples           = p.load?.samples
+        loadMTotalKg          = p.load?.mTotalKg
+        loadMLoadKg           = p.load?.mLoadKg
         receivedAt            = Date()
     }
 }
@@ -105,7 +146,13 @@ struct JourneySummary: Content {
     var driverID:           String?
     var totalDistanceKm:    Double?
     var totalFuelConsumedL: Double?
+    var maxSpeedKmh:        Double?
     var eventCount:         Int
+    // Load estimation (best across the journey; nil when no data available)
+    var loadConfidence:     String?
+    var loadSamples:        Int?
+    var loadMTotalKg:       Double?
+    var loadMLoadKg:        Double?
 }
 
 // MARK: - Migration
@@ -199,4 +246,17 @@ struct AddGpsFixTypeToVehicleEvents: AsyncMigration {
         try? await sql.raw("ALTER TABLE vehicle_events ADD COLUMN gps_fix_type INTEGER").run()
     }
     func revert(on db: Database) async throws { /* SQLite ne supporte pas DROP COLUMN */ }
+}
+
+// MARK: - Migration: ajoute les champs load_estimator sur vehicle_events
+
+struct AddLoadEstimationToVehicleEvents: AsyncMigration {
+    func prepare(on db: Database) async throws {
+        guard let sql = db as? SQLDatabase else { return }
+        try? await sql.raw("ALTER TABLE vehicle_events ADD COLUMN load_confidence TEXT").run()
+        try? await sql.raw("ALTER TABLE vehicle_events ADD COLUMN load_samples INTEGER").run()
+        try? await sql.raw("ALTER TABLE vehicle_events ADD COLUMN load_m_total_kg REAL").run()
+        try? await sql.raw("ALTER TABLE vehicle_events ADD COLUMN load_m_load_kg REAL").run()
+    }
+    func revert(on db: Database) async throws { /* SQLite does not support DROP COLUMN */ }
 }

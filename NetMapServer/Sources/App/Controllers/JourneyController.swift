@@ -71,6 +71,7 @@ struct VehicleEventController: RouteCollection {
             var received: Int = 0
             var savedVehicleEvents: Int = 0
             var savedDriverBehavior: Int = 0
+            var savedJourneyStats: Int = 0
             var savedLifecycle: Int = 0
             var savedSensorRows: Int = 0
             var deduped: Int = 0
@@ -155,7 +156,42 @@ struct VehicleEventController: RouteCollection {
                 continue   // do NOT feed into journey state machine or vehicle_events
             }
 
-            // ── 3. Device lifecycle events: store in separate table, skip journey logic ──
+            // ── 3. Journey stats: store in separate table, skip journey logic ──────────
+            if eventType == "journey_stats" {
+                guard let j = p.journey, let b = p.boot, let lt = p.lifetime else {
+                    throw Abort(.badRequest, reason: "journey_stats requires journey, boot and lifetime objects")
+                }
+                let lastVE = try await VehicleEvent.query(on: req.db)
+                    .filter(\.$imei == imei)
+                    .sort(\.$timestamp, .descending)
+                    .first()
+                let statsJourneyID = lastVE?.journeyID ?? "no-journey"
+
+                let row = DeviceJourneyStats(
+                    imei:        imei,
+                    vehicleID:   vehicleID,
+                    vehicleName: vehicleName,
+                    journeyID:   statsJourneyID,
+                    timestamp:   validTimestamp(p.timestamp),
+                    journey:     j,
+                    boot:        b,
+                    lifetime:    lt
+                )
+                try await row.save(on: req.db)
+                stats.savedJourneyStats += 1
+
+                // Broadcast to live dashboard clients
+                let wsPayload = "{\"type\":\"journey_stats\",\"imei\":\"\(imei)\",\"ltRebootsTotal\":\(lt.rebootsTotal),\"ltRebootsException\":\(lt.rebootsException),\"ltRebootsBrownout\":\(lt.rebootsBrownout),\"jPostFailures\":\(j.postFailures)}"
+                Task { await WebSocketBroadcaster.shared.broadcast(wsPayload) }
+
+                if lt.rebootsException > 0 || lt.rebootsBrownout > 0 {
+                    req.logger.warning("⚠️ [journey_stats] imei=\(imei) exception_reboots=\(lt.rebootsException) brownout=\(lt.rebootsBrownout)")
+                }
+                req.logger.info("📊 [journey_stats] imei=\(imei) j_db=\(j.dbEventsSent) j_ff=\(j.ffEventsSent) lt_reboots=\(lt.rebootsTotal)")
+                continue   // do NOT feed into journey state machine or vehicle_events
+            }
+
+            // ── 4. Device lifecycle events: store in separate table, skip journey logic ──
             if eventType == "boot" || eventType == "sleep" || eventType == "wake_up" || eventType == "ping"
                 || eventType == "gps_acquired" || eventType == "gps_lost" {
                 // batteryVoltageV < 0 → treat as unavailable
@@ -298,7 +334,7 @@ struct VehicleEventController: RouteCollection {
             stats.savedSensorRows += 1
         }
 
-        req.logger.notice("[ingest.vehicle-events] received=\(stats.received) saved_vehicle=\(stats.savedVehicleEvents) saved_behavior=\(stats.savedDriverBehavior) saved_lifecycle=\(stats.savedLifecycle) saved_sensor_rows=\(stats.savedSensorRows) deduped=\(stats.deduped) non_standard_vehicle_type=\(stats.nonStandardVehicleEventType)")
+        req.logger.notice("[ingest.vehicle-events] received=\(stats.received) saved_vehicle=\(stats.savedVehicleEvents) saved_behavior=\(stats.savedDriverBehavior) saved_journey_stats=\(stats.savedJourneyStats) saved_lifecycle=\(stats.savedLifecycle) saved_sensor_rows=\(stats.savedSensorRows) deduped=\(stats.deduped) non_standard_vehicle_type=\(stats.nonStandardVehicleEventType)")
 
         // ── Piggyback: inject pending config into response ───────────────
         // Only include config when the stored schemaVersion is newer than what
@@ -389,8 +425,12 @@ struct VehicleEventController: RouteCollection {
             var ended_at:                 Double?
             var total_distance_km:        Double?
             var total_fuel_consumed_l:    Double?
-            var total_journey_fuel_consumed_l: Double?
+            var max_speed_kmh:            Double?
             var event_count:              Int
+            var load_confidence:          String?
+            var load_samples:             Int?
+            var load_m_total_kg:          Double?
+            var load_m_load_kg:           Double?
         }
 
         // Clamp limit to a sane range and avoid raw interpolation.
@@ -435,9 +475,14 @@ struct VehicleEventController: RouteCollection {
                         CASE WHEN SUM(CASE WHEN event_type = 'journey_end' THEN 1 ELSE 0 END) > 0
                              THEN MAX(timestamp) ELSE NULL END AS ended_at,
                         MAX(journey_distance_km) AS total_distance_km,
-                        SUM(COALESCE(fuel_consumed_l, 0)) AS total_fuel_consumed_l,
-                        MAX(COALESCE(journey_fuel_consumed_l, 0)) AS total_journey_fuel_consumed_l,
-                        COUNT(*) AS event_count
+                        MAX(COALESCE(journey_fuel_consumed_l, 0)) AS total_fuel_consumed_l,
+                        MAX(speed_kmh) AS max_speed_kmh,
+                        COUNT(*) AS event_count,
+                        CASE MAX(CASE COALESCE(load_confidence,'') WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END)
+                             WHEN 3 THEN 'high' WHEN 2 THEN 'medium' WHEN 1 THEN 'low' ELSE NULL END AS load_confidence,
+                        MAX(COALESCE(load_samples, 0)) AS load_samples,
+                        COALESCE(MAX(CASE WHEN event_type = 'journey_end' THEN load_m_total_kg END), MAX(load_m_total_kg)) AS load_m_total_kg,
+                        COALESCE(MAX(CASE WHEN event_type = 'journey_end' THEN load_m_load_kg END), MAX(load_m_load_kg)) AS load_m_load_kg
                     FROM vehicle_events
                     WHERE vehicle_id = \(bind: vehicleID)
                     GROUP BY journey_id
@@ -456,9 +501,14 @@ struct VehicleEventController: RouteCollection {
                         CASE WHEN SUM(CASE WHEN event_type = 'journey_end' THEN 1 ELSE 0 END) > 0
                              THEN MAX(timestamp) ELSE NULL END AS ended_at,
                         MAX(journey_distance_km) AS total_distance_km,
-                        SUM(COALESCE(fuel_consumed_l, 0)) AS total_fuel_consumed_l,
-                        MAX(COALESCE(journey_fuel_consumed_l, 0)) AS total_journey_fuel_consumed_l,
-                        COUNT(*) AS event_count
+                        MAX(COALESCE(journey_fuel_consumed_l, 0)) AS total_fuel_consumed_l,
+                        MAX(speed_kmh) AS max_speed_kmh,
+                        COUNT(*) AS event_count,
+                        CASE MAX(CASE COALESCE(load_confidence,'') WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END)
+                             WHEN 3 THEN 'high' WHEN 2 THEN 'medium' WHEN 1 THEN 'low' ELSE NULL END AS load_confidence,
+                        MAX(COALESCE(load_samples, 0)) AS load_samples,
+                        COALESCE(MAX(CASE WHEN event_type = 'journey_end' THEN load_m_total_kg END), MAX(load_m_total_kg)) AS load_m_total_kg,
+                        COALESCE(MAX(CASE WHEN event_type = 'journey_end' THEN load_m_load_kg END), MAX(load_m_load_kg)) AS load_m_load_kg
                     FROM vehicle_events
                     WHERE vehicle_id = \(bind: vehicleID) AND \(unsafeRaw: accessFilterSQL)
                     GROUP BY journey_id
@@ -479,9 +529,14 @@ struct VehicleEventController: RouteCollection {
                     CASE WHEN SUM(CASE WHEN event_type = 'journey_end' THEN 1 ELSE 0 END) > 0
                          THEN MAX(timestamp) ELSE NULL END AS ended_at,
                     MAX(journey_distance_km) AS total_distance_km,
-                    SUM(COALESCE(fuel_consumed_l, 0)) AS total_fuel_consumed_l,
-                    MAX(COALESCE(journey_fuel_consumed_l, 0)) AS total_journey_fuel_consumed_l,
-                    COUNT(*) AS event_count
+                    MAX(COALESCE(journey_fuel_consumed_l, 0)) AS total_fuel_consumed_l,
+                    MAX(speed_kmh) AS max_speed_kmh,
+                    COUNT(*) AS event_count,
+                    CASE MAX(CASE COALESCE(load_confidence,'') WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END)
+                         WHEN 3 THEN 'high' WHEN 2 THEN 'medium' WHEN 1 THEN 'low' ELSE NULL END AS load_confidence,
+                    MAX(COALESCE(load_samples, 0)) AS load_samples,
+                    COALESCE(MAX(CASE WHEN event_type = 'journey_end' THEN load_m_total_kg END), MAX(load_m_total_kg)) AS load_m_total_kg,
+                    COALESCE(MAX(CASE WHEN event_type = 'journey_end' THEN load_m_load_kg END), MAX(load_m_load_kg)) AS load_m_load_kg
                 FROM vehicle_events
                 \(unsafeRaw: whereClause)
                 GROUP BY journey_id
@@ -500,8 +555,13 @@ struct VehicleEventController: RouteCollection {
                 endedAt:                 r.ended_at.map { Date(timeIntervalSince1970: $0) },
                 driverID:                r.driver_id,
                 totalDistanceKm:         normalizeJourneyDistanceKm(r.total_distance_km),
-                totalFuelConsumedL:      r.total_journey_fuel_consumed_l ?? r.total_fuel_consumed_l,
-                eventCount:              r.event_count
+                totalFuelConsumedL:      r.total_fuel_consumed_l,
+                maxSpeedKmh:             r.max_speed_kmh,
+                eventCount:              r.event_count,
+                loadConfidence:          r.load_confidence,
+                loadSamples:             (r.load_samples ?? 0) > 0 ? r.load_samples : nil,
+                loadMTotalKg:            r.load_m_total_kg,
+                loadMLoadKg:             r.load_m_load_kg
             )
         }
     }

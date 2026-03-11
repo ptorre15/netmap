@@ -4,7 +4,7 @@
         {
             "label": "NetMap: Build (Debug)",
             "type": "shell",
-            "command": "xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Debug -destination 'platform=macOS' build 2>&1 | /Users/phil/.gem/ruby/2.6.0/bin/xcpretty --color || true",
+            "command": "xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Debug -destination 'platform=macOS' build 2>&1 || true",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -30,7 +30,7 @@
         {
             "label": "NetMap: Build & Run",
             "type": "shell",
-            "command": "xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Debug -destination 'platform=macOS' build 2>&1 | /Users/phil/.gem/ruby/2.6.0/bin/xcpretty --color || true && open \"$(xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Debug -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR' | awk '{print $3}')/NetMap.app\"",
+            "command": "xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Debug -destination 'platform=macOS' build 2>&1 || true && open \"$(xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Debug -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR' | awk '{print $3}')/NetMap.app\"",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -59,7 +59,7 @@
         {
             "label": "NetMap: Build (Release)",
             "type": "shell",
-            "command": "xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Release -destination 'platform=macOS' build 2>&1 | /Users/phil/.gem/ruby/2.6.0/bin/xcpretty --color || true",
+            "command": "xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Release -destination 'platform=macOS' build 2>&1 || true",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -71,7 +71,7 @@
         {
             "label": "Server: Build",
             "type": "shell",
-            "command": "cd '${workspaceFolder}/NetMapServer' && swift build 2>&1 && '${workspaceFolder}/NetMapServer/bump-version.sh' && echo \"📦 $(cat '${workspaceFolder}/NetMapServer/VERSION')\"",
+            "command": "SWIFT=$(command -v swift 2>/dev/null || echo /usr/local/swift-6.0.3-RELEASE-ubuntu22.04/usr/bin/swift) && cd '${workspaceFolder}/NetMapServer' && \"$SWIFT\" build 2>&1 && '${workspaceFolder}/NetMapServer/bump-version.sh' && echo \"📦 $(cat '${workspaceFolder}/NetMapServer/VERSION')\"",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -119,7 +119,7 @@
         {
             "label": "iPhone: Build & Install",
             "type": "shell",
-            "command": "xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Release -destination 'platform=iOS,id=00008101-000C28493EF1001E' build 2>&1 | /Users/phil/.gem/ruby/2.6.0/bin/xcpretty --color || true && xcrun devicectl device install app --device 00008101-000C28493EF1001E \"$(xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Release -destination 'platform=iOS,id=00008101-000C28493EF1001E' -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR' | awk '{print $3}')/NetMap.app\" 2>&1",
+            "command": "xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Release -destination 'platform=iOS,id=00008101-000C28493EF1001E' build 2>&1 || true && xcrun devicectl device install app --device 00008101-000C28493EF1001E \"$(xcodebuild -project '${workspaceFolder}/NetMapApp/NetMap.xcodeproj' -scheme NetMap -configuration Release -destination 'platform=iOS,id=00008101-000C28493EF1001E' -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR' | awk '{print $3}')/NetMap.app\" 2>&1",
             "group": "build",
             "presentation": {
                 "reveal": "always",

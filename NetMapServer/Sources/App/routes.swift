@@ -25,4 +25,5 @@ func routes(_ app: Application) throws {
     try app.register(collection: VehicleEventController())
     try app.register(collection: DriverBehaviorController())
     try app.register(collection: DeviceLifecycleController())
+    try app.register(collection: JourneyStatsController())
 }

@@ -993,9 +993,11 @@ struct AdminController: RouteCollection {
         var readingsLast30d: Int
         var vehicleEventsLast30d: Int
         var lifecycleEventsLast30d: Int
+        var driverBehaviorEventsLast30d: Int
         var readingsPerDay: [DayCount]
         var vehicleEventsPerDay: [DayCount]
         var lifecyclePerDay: [DayCount]
+        var driverBehaviorPerDay: [DayCount]
         var vehicleEventsByType: [TypeCount]
         var lifecycleByType: [TypeCount]
         var topTrackers: [TrackerStat]
@@ -1029,10 +1031,12 @@ struct AdminController: RouteCollection {
         async let readings30d     = sql.raw("SELECT COUNT(*) AS n FROM sensor_readings WHERE timestamp >= \(bind: threshold30)").first(decoding: CountRow.self)
         async let vehEv30d        = sql.raw("SELECT COUNT(*) AS n FROM vehicle_events WHERE timestamp >= \(bind: threshold30)").first(decoding: CountRow.self)
         async let lc30d           = sql.raw("SELECT COUNT(*) AS n FROM device_lifecycle_events WHERE timestamp >= \(bind: threshold30)").first(decoding: CountRow.self)
+        async let db30d           = sql.raw("SELECT COUNT(*) AS n FROM driver_behavior_events WHERE timestamp >= \(bind: threshold30)").first(decoding: CountRow.self)
 
         async let readPerDay      = sql.raw("SELECT date(timestamp,'unixepoch') AS day, COUNT(*) AS n FROM sensor_readings WHERE timestamp >= \(bind: threshold30) GROUP BY day ORDER BY day").all(decoding: DayRow.self)
         async let vehEvPerDay     = sql.raw("SELECT date(timestamp,'unixepoch') AS day, COUNT(*) AS n FROM vehicle_events WHERE timestamp >= \(bind: threshold30) GROUP BY day ORDER BY day").all(decoding: DayRow.self)
         async let lcPerDay        = sql.raw("SELECT date(timestamp,'unixepoch') AS day, COUNT(*) AS n FROM device_lifecycle_events WHERE timestamp >= \(bind: threshold30) GROUP BY day ORDER BY day").all(decoding: DayRow.self)
+        async let dbPerDay        = sql.raw("SELECT date(timestamp,'unixepoch') AS day, COUNT(*) AS n FROM driver_behavior_events WHERE timestamp >= \(bind: threshold30) GROUP BY day ORDER BY day").all(decoding: DayRow.self)
 
         async let vehEvByType     = sql.raw("SELECT event_type AS t, COUNT(*) AS n FROM vehicle_events GROUP BY t ORDER BY n DESC").all(decoding: TypeRow.self)
         async let lcByType        = sql.raw("SELECT event_type AS t, COUNT(*) AS n FROM device_lifecycle_events GROUP BY t ORDER BY n DESC").all(decoding: TypeRow.self)
@@ -1043,10 +1047,10 @@ struct AdminController: RouteCollection {
         async let newestR         = sql.raw("SELECT MAX(received_at) AS ts FROM sensor_readings").first(decoding: DateRow.self)
         async let dbPages         = sql.raw("SELECT page_count, page_size FROM pragma_page_count(), pragma_page_size()").first(decoding: PageRow.self)
 
-        let (tr, tv, tlc, tdb, tvh, tu, r30, v30, l30, rpd, vpd, lpd, vbt, lbt, top, oldest, newest, pages) = try await (
+        let (tr, tv, tlc, tdb, tvh, tu, r30, v30, l30, d30, rpd, vpd, lpd, dpd, vbt, lbt, top, oldest, newest, pages) = try await (
             totalReadings, totalVehEv, totalLC, totalDB, totalVehicles, totalUsers,
-            readings30d, vehEv30d, lc30d,
-            readPerDay, vehEvPerDay, lcPerDay,
+            readings30d, vehEv30d, lc30d, db30d,
+            readPerDay, vehEvPerDay, lcPerDay, dbPerDay,
             vehEvByType, lcByType, topTrackers,
             oldestR, newestR, dbPages
         )
@@ -1063,9 +1067,11 @@ struct AdminController: RouteCollection {
             readingsLast30d:            r30?.n ?? 0,
             vehicleEventsLast30d:       v30?.n ?? 0,
             lifecycleEventsLast30d:     l30?.n ?? 0,
+            driverBehaviorEventsLast30d: d30?.n ?? 0,
             readingsPerDay:    rpd.map { DayCount(date: $0.day, count: $0.n) },
             vehicleEventsPerDay: vpd.map { DayCount(date: $0.day, count: $0.n) },
             lifecyclePerDay:   lpd.map { DayCount(date: $0.day, count: $0.n) },
+            driverBehaviorPerDay: dpd.map { DayCount(date: $0.day, count: $0.n) },
             vehicleEventsByType: vbt.map { TypeCount(type: $0.t, count: $0.n) },
             lifecycleByType:   lbt.map { TypeCount(type: $0.t, count: $0.n) },
             topTrackers: top.map { TrackerStat(imei: $0.imei, name: $0.name, events7d: $0.n, lastSeenAt: $0.last_ts.map { Date(timeIntervalSince1970: $0) }) },

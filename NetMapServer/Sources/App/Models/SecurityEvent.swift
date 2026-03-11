@@ -1,8 +1,12 @@
 import Vapor
 import Fluent
 import SQLKit
-import CryptoKit
 import Foundation
+#if canImport(CryptoKit)
+import CryptoKit
+#else
+import Crypto
+#endif
 
 /// Append-only audit log for privileged security-relevant actions.
 final class SecurityEvent: Model, Content, @unchecked Sendable {

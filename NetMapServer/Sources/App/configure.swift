@@ -26,8 +26,20 @@ public func configure(_ app: Application) async throws {
     app.http.server.configuration.hostname = Environment.get("BIND_HOST") ?? "127.0.0.1"
 
     // ── ISO-8601 JSON dates ──────────────────────────────────────────────
+    // Custom decoder that also accepts fractional seconds (e.g. JS toISOString() → "2026-03-10T20:57:18.123Z")
     let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
-    let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+    let dec = JSONDecoder()
+    dec.dateDecodingStrategy = .custom { decoder in
+        let s = try decoder.singleValueContainer().decode(String.self)
+        let fmtFrac = ISO8601DateFormatter()
+        fmtFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = fmtFrac.date(from: s) { return d }
+        let fmt = ISO8601DateFormatter()
+        fmt.formatOptions = [.withInternetDateTime]
+        if let d = fmt.date(from: s) { return d }
+        throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(),
+            debugDescription: "Cannot decode date: \(s)")
+    }
     ContentConfiguration.global.use(encoder: enc, for: .json)
     ContentConfiguration.global.use(decoder: dec, for: .json)
     // Global request body cap to reduce DoS risk from oversized payloads.
@@ -67,9 +79,11 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(CreateDeviceLifecycleEvent())              // device power lifecycle events (boot/sleep/wake_up)
     app.migrations.add(AddVehicleEventIndexes())                  // idx_ve_imei_ts + idx_ve_journey (README_JOURNEY_API.md)
     app.migrations.add(AddGpsFixTypeToVehicleEvents())            // gps_fix_type on vehicle_events (spec v6)
+    app.migrations.add(AddLoadEstimationToVehicleEvents())        // load_confidence/samples/m_total_kg/m_load_kg on vehicle_events
     app.migrations.add(AddGpsToDeviceLifecycleEvents())           // GPS fields + gps_fix_type on device_lifecycle_events (spec v6)
     app.migrations.add(AddLastAppliedConfigVersion())             // last_applied_config_version on tracker_configs
     app.migrations.add(AddTelemetryCompositeIndexes())            // composite telemetry indexes for hot filters
+    app.migrations.add(CreateDeviceJourneyStats())                // journey_stats device counters (spec v6)
     try await app.autoMigrate()   // non-blocking in async context
 
     // ── Seed built-in asset types if absent ─────────────────────
