@@ -254,7 +254,7 @@ body {
 #content.loading { opacity: .55; pointer-events: none; }
 
 #breadcrumb {
-  padding: 12px 20px 10px; font-size: 12px; color: var(--fg3);
+  padding: 7px 20px 8px; font-size: 12px; color: var(--fg3);
   flex-shrink: 0; display: flex; align-items: center; gap: 5px;
   border-bottom: 1px solid var(--sep); background: var(--bg2);
 }
@@ -321,7 +321,7 @@ body {
 .chart-wrap-sm { position: relative; height: 120px; }
 
 /* ── Map ── */
-#map-container { flex: 1; padding: 16px 20px; min-height: 0; display: flex; flex-direction: column; }
+#map-container { flex: 1; padding: 10px 20px; min-height: 0; display: flex; flex-direction: column; }
 #leaflet-map { flex: 1; border-radius: var(--r); overflow: hidden; min-height: 300px; border: 1px solid var(--sep); box-shadow: var(--shadow); }
 
 /* ── Tracker toolbar ── */
@@ -485,29 +485,36 @@ body {
 .jlp-load-medium { color: #60a5fa; background: rgba(96,165,250,.13); }
 .jlp-load-high   { color: #34d399; background: rgba(52,211,153,.13); }
 
-/* ── Load estimation chart panel ───────────────────────────────────────── */
-#jlp-load-chart-wrap {
+/* ── Telemetry chart panel (Speed / Fuel / Load tabs) ─────────────────── */
+#jlp-telemetry-wrap {
   flex-direction: column;
   background: var(--bg2);
   border: 1px solid var(--sep);
   border-top: none;
   border-radius: 0 0 var(--r) var(--r);
-  padding: 10px 14px 12px;
+  padding: 8px 14px 10px;
   flex-shrink: 0;
 }
-.jlp-load-chart-header {
+.jlp-telemetry-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
-.jlp-load-chart-title {
-  font-size: 11px; font-weight: 700; letter-spacing: .04em;
-  color: var(--fg2, #94a3b8); text-transform: uppercase;
+.jlp-tab-pills {
+  display: flex; gap: 4px;
 }
-.jlp-load-chart-badge {
+.jlp-tab-pill {
+  background: var(--bg3); border: 1px solid var(--sep); border-radius: 20px;
+  padding: 2px 10px; font-size: 10px; font-weight: 600; cursor: pointer;
+  color: var(--fg3); font-family: var(--font); transition: all var(--trans);
+  letter-spacing: .03em; text-transform: uppercase;
+}
+.jlp-tab-pill:hover { background: rgba(255,255,255,.1); color: var(--fg1); }
+.jlp-tab-pill.active { background: var(--m-blue); color: #fff; border-color: var(--m-blue-dk); }
+.jlp-telemetry-badge {
   font-size: 10px; font-weight: 600;
   padding: 1px 8px; border-radius: 4px; white-space: nowrap;
 }
-.jlp-load-chart-body {
+.jlp-telemetry-body {
   height: 130px; position: relative;
 }
 .jlp-row-main { display: flex; align-items: center; gap: 6px; }
@@ -1121,12 +1128,19 @@ body {
   border-bottom: 1px solid var(--sep);
   background: var(--bg2);
 }
+#sensor-info-card.si-tracker { padding: 5px 18px 6px; }
+#sensor-info-card.si-tracker .si-header { margin-bottom: 2px; }
+#sensor-info-card.si-tracker .si-name { font-size: 13px; }
+#sensor-info-card.si-tracker .si-rows { gap: 2px 14px; }
+#sensor-info-card.si-tracker .si-label { font-size: 10px; min-width: 56px; }
+#sensor-info-card.si-tracker .si-val { font-size: 11px; }
+#sensor-info-card.si-tracker .si-actions { padding: 4px 12px 3px; }
 .si-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
+  margin-bottom: 6px;
+  flex-wrap: nowrap;
 }
 .si-brand {
   font-size: 10px;
@@ -1150,7 +1164,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px 4px;
+  padding: 4px 0 4px;
 }
 .si-rename-input {
   font-size: 13px;
@@ -1228,29 +1242,52 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .si-actions {
-  padding: 10px 12px 6px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: flex-end;
+  display: none; /* kept for legacy, replaced by si-inline-actions */
 }
 .si-rename-action-btn {
   font-size: 11px;
   font-weight: 600;
-  color: var(--fg2);
+  color: var(--fg3);
   background: none;
-  border: 1px solid var(--sep);
+  border: 1px solid transparent;
   border-radius: 5px;
-  padding: 3px 9px;
+  padding: 2px 5px;
   cursor: pointer;
+  line-height: 1;
   transition: border-color .15s, color .15s;
 }
-.si-rename-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+.si-rename-action-btn:hover { border-color: var(--sep); color: var(--accent); }
 
 
-/* ═══════════════════════════════════════════════════════════════
-   Asset identity card (sidebar)
-   ═══════════════════════════════════════════════════════════════ */
+/* inline action buttons in si-header */
+.si-inline-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.si-inline-actions .si-rename-action-btn,
+.si-inline-actions .si-config-btn {
+  color: var(--fg3);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 4px;
+  cursor: pointer;
+  line-height: 1;
+  transition: border-color .15s, color .15s;
+  font-size: 10px;
+}
+.si-inline-actions .si-rename-action-btn:hover,
+.si-inline-actions .si-config-btn:hover { border-color: var(--sep); color: var(--accent); }
+.si-unpair-inline {
+  font-size: 9px !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+}
+
+
 #asset-card { flex-shrink: 0; }
 .asset-card {
   padding: 12px 14px;

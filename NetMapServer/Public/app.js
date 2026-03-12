@@ -776,8 +776,9 @@ function renderSensorInfoCard() {
   const el = $('sensor-info-card');
   if (!el) return;
   const s = S.sensors.find(x => x.sensorID === S.selected);
-  if (!s) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  if (!s) { el.innerHTML = ''; el.style.display = 'none'; el.className = ''; return; }
   el.style.display = '';
+  el.className = s.brand === 'tracker' ? 'si-tracker' : '';
   const rawBrandLabel = BRAND_LABELS[s.brand] ?? s.brand;
   const brandLabel = escHTML(rawBrandLabel);
   const stale = isStale(s.latestTimestamp, s.brand);
@@ -901,16 +902,17 @@ function renderSensorInfoCard() {
   } else {
     var battBadge = '';
   }
-  const actionsBar = AUTH.isAdmin ? `<div class="si-actions">
-    <button class="si-rename-action-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg> Rename</button>
-    ${s.brand === 'tracker' ? `<button class="si-config-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg> Config</button>` : ''}
-    ${s.brand !== 'tracker' ? `<button class="si-unpair-btn modal-btn-danger" data-sid="${escAttr(s.sensorID)}">Unpair sensor</button>` : ''}
-  </div>` : '';
+  const inlineActions = AUTH.isAdmin ? `<span class="si-inline-actions">
+    <button class="si-rename-action-btn" title="Rename"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg></button>
+    ${s.brand === 'tracker' ? `<button class="si-config-btn" title="Config"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg></button>` : ''}
+    ${s.brand !== 'tracker' ? `<button class="si-unpair-btn modal-btn-danger si-unpair-inline" data-sid="${escAttr(s.sensorID)}">Unpair</button>` : ''}
+  </span>` : '';
   el.innerHTML = `<div class="si-header">
     <span class="si-brand" data-brand="${escAttr(s.brand)}">${brandLabel}</span>
     <span class="si-name">${mainLabel}</span>
     ${liveBadge}
     <span class="si-badges">${tgtBadge}${battBadge}</span>
+    ${inlineActions}
   </div>
   <div class="si-rows">${rows.join('')}</div>
   <form class="si-rename-form" style="display:none">
@@ -918,19 +920,18 @@ function renderSensorInfoCard() {
     <button type="submit" class="si-rename-save">Save</button>
     <button type="button" class="si-rename-cancel">Cancel</button>
   </form>
-  ${actionsBar}
   <div id="threshold-editor"></div>`;
   renderThresholdEditor(s.sensorID);
 
   el.querySelector('.si-rename-action-btn')?.addEventListener('click', () => {
     const form = el.querySelector('.si-rename-form');
-    el.querySelector('.si-actions').style.display = 'none';
+    el.querySelector('.si-inline-actions').style.display = 'none';
     form.style.display = '';
     form.querySelector('.si-rename-input').select();
   });
   el.querySelector('.si-rename-cancel')?.addEventListener('click', () => {
     el.querySelector('.si-rename-form').style.display = 'none';
-    el.querySelector('.si-actions').style.display = '';
+    el.querySelector('.si-inline-actions').style.display = '';
   });
   el.querySelector('.si-rename-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1666,115 +1667,158 @@ async function renderTrackerMap(sensor) {
   mapColWrap.appendChild(mapDiv);
 
   // ── Load estimation chart (below map) ─────────────────────────
-  const loadChartWrap = document.createElement('div');
-  loadChartWrap.id = 'jlp-load-chart-wrap';
-  loadChartWrap.style.display = 'none';
-  loadChartWrap.innerHTML =
-    `<div class="jlp-load-chart-header">`+
-    `<span class="jlp-load-chart-title">&#9653; Load Estimation</span>`+
-    `<span id="jlp-load-chart-badge" class="jlp-load-chart-badge"></span>`+
+  // ── Journey telemetry chart panel (Speed / Fuel / Load tabs) ─────────────
+  const telemetryWrap = document.createElement('div');
+  telemetryWrap.id = 'jlp-telemetry-wrap';
+  telemetryWrap.style.display = 'none';
+  telemetryWrap.innerHTML =
+    `<div class="jlp-telemetry-header">`+
+    `<div class="jlp-tab-pills">`+
+    `<button class="jlp-tab-pill active" data-tab="speed">&#9654; Speed</button>`+
+    `<button class="jlp-tab-pill" data-tab="fuel">&#9651; Fuel</button>`+
+    `<button class="jlp-tab-pill" data-tab="load">&#9647; Load</button>`+
     `</div>`+
-    `<div class="jlp-load-chart-body"><canvas id="jlp-load-canvas"></canvas></div>`;
-  mapColWrap.appendChild(loadChartWrap);
+    `<span id="jlp-telemetry-badge" class="jlp-telemetry-badge"></span>`+
+    `</div>`+
+    `<div class="jlp-telemetry-body"><canvas id="jlp-telemetry-canvas"></canvas></div>`;
+  mapColWrap.appendChild(telemetryWrap);
 
-  let _loadChart = null;
+  // Tab pill clicks
+  telemetryWrap.querySelectorAll('.jlp-tab-pill').forEach(btn =>
+    btn.addEventListener('click', () => {
+      if (_telemetryEvents) {
+        _telemetryTab = btn.dataset.tab;
+        telemetryWrap.querySelectorAll('.jlp-tab-pill').forEach(p => p.classList.toggle('active', p === btn));
+        _drawTelemetryChart();
+      }
+    })
+  );
 
-  function renderLoadChart(events) {
-    // Collect points that have load data
-    const pts = events
-      .filter(e => e.loadMLoadKg != null || e.loadMTotalKg != null)
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  let _telemetryChart = null;
+  let _telemetryEvents = null;
+  let _telemetryTab = 'speed';
 
-    if (!pts.length) { loadChartWrap.style.display = 'none'; return; }
-
-    loadChartWrap.style.display = 'flex';
-
-    // Update badge with final (last) load value and confidence
-    const last = pts[pts.length - 1];
-    const badge = document.getElementById('jlp-load-chart-badge');
-    if (badge) {
-      const conf = last.loadConfidence || '';
-      const kg   = last.loadMLoadKg != null ? `~${Math.round(last.loadMLoadKg)} kg payload` :
-                   last.loadMTotalKg != null ? `~${Math.round(last.loadMTotalKg)} kg total` : '';
-      badge.textContent = kg ? `${kg} (${conf})` : '';
-      badge.className = `jlp-load-chart-badge jlp-load-${conf}`;
-    }
-
-    const labels   = pts.map(e => new Date(e.timestamp));
-    const loadData = pts.map(e => e.loadMLoadKg  != null ? +e.loadMLoadKg.toFixed(1)  : null);
-    const totData  = pts.map(e => e.loadMTotalKg != null ? +e.loadMTotalKg.toFixed(1) : null);
-    const hasTot   = totData.some(v => v != null);
-
-    const datasets = [
-      {
-        label: 'Payload (kg)',
-        data: loadData,
-        borderColor: '#34d399',
-        backgroundColor: 'rgba(52,211,153,0.10)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: 2,
-        pointHoverRadius: 5,
-        spanGaps: true,
+  // Shared x-axis config and base Chart.js options
+  const _txScale = {
+    type: 'time',
+    time: { unit: 'minute', displayFormats: { minute: 'HH:mm' } },
+    ticks: { color: '#64748b', font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+    grid: { color: 'rgba(255,255,255,0.04)' },
+  };
+  const _baseOpts = {
+    animation: false, responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      tooltip: {
+        backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#e2e8f0',
+        callbacks: { title: items => new Date(items[0].parsed.x).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) },
       },
-    ];
-    if (hasTot) {
-      datasets.push({
-        label: 'Total mass (kg)',
-        data: totData,
-        borderColor: '#60a5fa',
-        backgroundColor: 'rgba(96,165,250,0.06)',
-        fill: false,
-        tension: 0.3,
-        pointRadius: 2,
-        pointHoverRadius: 5,
-        borderDash: [4, 3],
-        spanGaps: true,
+    },
+  };
+
+  function _drawTelemetryChart() {
+    if (_telemetryChart) { _telemetryChart.destroy(); _telemetryChart = null; }
+    const cvs   = document.getElementById('jlp-telemetry-canvas');
+    const badge = document.getElementById('jlp-telemetry-badge');
+    if (!cvs || !_telemetryEvents) return;
+    const events = _telemetryEvents;
+
+    if (_telemetryTab === 'speed') {
+      const pts = events.filter(e => e.speedKmh != null).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      if (!pts.length) return;
+      const maxSpd = Math.max(...pts.map(e => e.speedKmh));
+      if (badge) { badge.textContent = `max\u00a0${maxSpd.toFixed(0)}\u00a0km/h`; badge.style.cssText = 'color:#60a5fa'; badge.className = 'jlp-telemetry-badge'; }
+      _telemetryChart = new Chart(cvs, {
+        type: 'line',
+        data: { labels: pts.map(e => new Date(e.timestamp)), datasets: [{
+          label: 'Speed (km/h)', data: pts.map(e => +e.speedKmh.toFixed(1)),
+          borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.12)',
+          fill: true, tension: 0.35, pointRadius: 0, pointHoverRadius: 4, spanGaps: true,
+        }] },
+        options: { ..._baseOpts,
+          plugins: { ..._baseOpts.plugins, legend: { display: false },
+            tooltip: { ..._baseOpts.plugins.tooltip, callbacks: { ..._baseOpts.plugins.tooltip.callbacks,
+              label: item => `\u00a0${item.parsed.y != null ? item.parsed.y + ' km/h' : '\u2014'}` } } },
+          scales: { x: _txScale, y: {
+            title: { display: true, text: 'km/h', color: '#64748b', font: { size: 10 } },
+            ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true } },
+        },
+      });
+
+    } else if (_telemetryTab === 'fuel') {
+      const fPts = events.filter(e => e.journeyFuelConsumedL != null).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const lPts = events.filter(e => e.fuelLevelPct      != null).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      if (!fPts.length && !lPts.length) return;
+      const lastFuel = fPts.length ? fPts[fPts.length - 1].journeyFuelConsumedL : null;
+      if (badge) { badge.textContent = lastFuel != null ? `${lastFuel.toFixed(2)}\u00a0L consumed` : ''; badge.style.cssText = 'color:#f59e0b'; badge.className = 'jlp-telemetry-badge'; }
+      const refPts = fPts.length ? fPts : lPts;
+      const datasets = [];
+      if (fPts.length) datasets.push({
+        label: 'Journey fuel (L)', yAxisID: 'yL', data: fPts.map(e => +e.journeyFuelConsumedL.toFixed(3)),
+        borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.10)',
+        fill: true, tension: 0.3, pointRadius: 0, pointHoverRadius: 4, spanGaps: true,
+      });
+      if (lPts.length) datasets.push({
+        label: 'Fuel level (%)', yAxisID: 'yPct', data: lPts.map(e => e.fuelLevelPct),
+        borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.05)',
+        fill: false, tension: 0.3, pointRadius: 0, pointHoverRadius: 4, borderDash: [4, 3], spanGaps: true,
+      });
+      const yScales = {};
+      if (fPts.length) yScales.yL   = { type: 'linear', position: 'left',  title: { display: true, text: 'L',  color: '#64748b', font: { size: 10 } }, ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true };
+      if (lPts.length) yScales.yPct = { type: 'linear', position: 'right', title: { display: true, text: '%',  color: '#64748b', font: { size: 10 } }, ticks: { color: '#64748b', font: { size: 9 } }, grid: { display: !fPts.length }, min: 0, max: 100 };
+      _telemetryChart = new Chart(cvs, {
+        type: 'line',
+        data: { labels: refPts.map(e => new Date(e.timestamp)), datasets },
+        options: { ..._baseOpts,
+          plugins: { ..._baseOpts.plugins,
+            legend: { display: fPts.length > 0 && lPts.length > 0, labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 16, padding: 10 } } },
+          scales: { x: _txScale, ...yScales },
+        },
+      });
+
+    } else if (_telemetryTab === 'load') {
+      const pts = events.filter(e => e.loadMLoadKg != null || e.loadMTotalKg != null).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      if (!pts.length) return;
+      const last = pts[pts.length - 1];
+      const conf = last.loadConfidence || '';
+      const kg   = last.loadMLoadKg != null ? `~${Math.round(last.loadMLoadKg)}\u00a0kg payload` : last.loadMTotalKg != null ? `~${Math.round(last.loadMTotalKg)}\u00a0kg total` : '';
+      if (badge) { badge.textContent = kg ? `${kg}${conf ? ` (${conf})` : ''}` : ''; badge.className = `jlp-telemetry-badge jlp-load-${conf}`; badge.style.cssText = ''; }
+      const loadData = pts.map(e => e.loadMLoadKg  != null ? +e.loadMLoadKg.toFixed(1)  : null);
+      const totData  = pts.map(e => e.loadMTotalKg != null ? +e.loadMTotalKg.toFixed(1) : null);
+      const hasTot   = totData.some(v => v != null);
+      const datasets = [{ label: 'Payload (kg)', data: loadData, borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.10)', fill: true, tension: 0.3, pointRadius: 2, pointHoverRadius: 5, spanGaps: true }];
+      if (hasTot) datasets.push({ label: 'Total mass (kg)', data: totData, borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.06)', fill: false, tension: 0.3, pointRadius: 2, pointHoverRadius: 5, borderDash: [4, 3], spanGaps: true });
+      _telemetryChart = new Chart(cvs, {
+        type: 'line',
+        data: { labels: pts.map(e => new Date(e.timestamp)), datasets },
+        options: { ..._baseOpts,
+          plugins: { ..._baseOpts.plugins,
+            legend: { display: hasTot, labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 16, padding: 10 } },
+            tooltip: { ..._baseOpts.plugins.tooltip, callbacks: { ..._baseOpts.plugins.tooltip.callbacks,
+              label: item => ` ${item.dataset.label}: ${item.parsed.y != null ? item.parsed.y + ' kg' : '\u2014'}` } } },
+          scales: { x: _txScale, y: { title: { display: true, text: 'kg', color: '#64748b', font: { size: 10 } }, ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: false } },
+        },
       });
     }
+  }
 
-    if (_loadChart) { _loadChart.destroy(); _loadChart = null; }
-    const cvs = document.getElementById('jlp-load-canvas');
-    if (!cvs) return;
-    _loadChart = new Chart(cvs, {
-      type: 'line',
-      data: { labels, datasets },
-      options: {
-        animation: false,
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: {
-            display: hasTot,
-            labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 16, padding: 10 },
-          },
-          tooltip: {
-            backgroundColor: '#1e293b',
-            titleColor: '#94a3b8',
-            bodyColor: '#e2e8f0',
-            callbacks: {
-              title: items => new Date(items[0].parsed.x).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              label: item => ` ${item.dataset.label}: ${item.parsed.y != null ? item.parsed.y + ' kg' : '—'}`,
-            },
-          },
-        },
-        scales: {
-          x: {
-            type: 'time',
-            time: { unit: 'minute', displayFormats: { minute: 'HH:mm' } },
-            ticks: { color: '#64748b', font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
-            grid: { color: 'rgba(255,255,255,0.04)' },
-          },
-          y: {
-            title: { display: true, text: 'kg', color: '#64748b', font: { size: 10 } },
-            ticks: { color: '#64748b', font: { size: 9 } },
-            grid: { color: 'rgba(255,255,255,0.06)' },
-            beginAtZero: false,
-          },
-        },
-      },
+  function renderLoadChart(events) {
+    const wrap = document.getElementById('jlp-telemetry-wrap');
+    if (!wrap) return;
+    const hasSpeed = events.some(e => e.speedKmh != null);
+    const hasFuel  = events.some(e => e.journeyFuelConsumedL != null || e.fuelLevelPct != null);
+    const hasLoad  = events.some(e => e.loadMLoadKg != null || e.loadMTotalKg != null);
+    if (!hasSpeed && !hasFuel && !hasLoad) { wrap.style.display = 'none'; return; }
+    // Show/hide individual tab pills based on available data
+    wrap.querySelectorAll('.jlp-tab-pill').forEach(p => {
+      const t = p.dataset.tab;
+      p.style.display = (t === 'speed' && hasSpeed) || (t === 'fuel' && hasFuel) || (t === 'load' && hasLoad) ? '' : 'none';
     });
+    _telemetryTab = hasSpeed ? 'speed' : hasFuel ? 'fuel' : 'load';
+    wrap.querySelectorAll('.jlp-tab-pill').forEach(p => p.classList.toggle('active', p.dataset.tab === _telemetryTab));
+    _telemetryEvents = events;
+    wrap.style.display = 'flex';
+    _drawTelemetryChart();
   }
 
   const panel = document.createElement('div');
@@ -1916,9 +1960,10 @@ async function renderTrackerMap(sensor) {
     trackLayers = [];
     behaviorLayers.forEach(l => map.removeLayer(l));
     behaviorLayers = [];
-    // Destroy load chart if visible
-    if (_loadChart) { _loadChart.destroy(); _loadChart = null; }
-    const lcw = document.getElementById('jlp-load-chart-wrap');
+    // Destroy telemetry chart if visible
+    if (_telemetryChart) { _telemetryChart.destroy(); _telemetryChart = null; }
+    _telemetryEvents = null;
+    const lcw = document.getElementById('jlp-telemetry-wrap');
     if (lcw) lcw.style.display = 'none';
   }
   function reAddBehaviorLayers() {
