@@ -100,7 +100,7 @@ body {
   gap: 12px;
   z-index: 100;
   flex-shrink: 0;
-  border-bottom: 3px solid var(--m-yellow);
+  box-shadow: 0 2px 10px rgba(0,0,0,.30), 0 1px 3px rgba(0,0,0,.18);
 }
 .logo {
   display: flex; align-items: center; gap: 10px;
@@ -125,22 +125,20 @@ body {
 }
 .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.35); }
 .status-pill.live { background: rgba(26,140,78,0.25); border-color: rgba(26,140,78,0.5); color: #7DE8A8; }
-.status-pill.live .dot { background: #7DE8A8; animation: pulse 2s infinite; }
+.status-pill.live .dot { background: #7DE8A8; animation: pulse 3s ease-in-out infinite; }
 @keyframes pulse {
-  0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(125,232,168,0.5); }
-  50%      { opacity:.6; box-shadow: 0 0 0 4px rgba(125,232,168,0); }
+  0%,100% { opacity: 1; }
+  50%      { opacity: .4; }
 }
 
 .spacer { flex: 1; }
 .icon-btn {
   background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.15);
-  width: 40px; height: 40px; padding: 0;
+  width: 36px; height: 36px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--r-sm); cursor: pointer;
-  color: rgba(255,255,255,0.80); font-size: 22px; font-weight: 700; line-height: 1; transition: all var(--trans);
+  color: rgba(255,255,255,0.80); font-size: 16px; font-weight: 600; line-height: 1; transition: all var(--trans);
 }
-#autorefresh-btn, #refresh-btn, #admin-btn, #logout-btn { font-size: 30px; }
-#theme-btn { font-size: 18px; }
 
 .icon-btn:hover  { background: rgba(255,255,255,0.18); color: #fff; }
 .icon-btn.active { background: var(--m-yellow); color: var(--m-navy); border-color: var(--m-yellow); }
@@ -239,11 +237,20 @@ body {
 .s-info { flex: 1; min-width: 0; }
 .s-name { font-size: 13px; font-weight: 500; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .s-sub  { font-size: 11px; color: var(--fg3); white-space: normal; overflow: visible; text-overflow: unset; margin-top: 2px; line-height: 1.6; }
-.s-brand { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 20px; vertical-align: middle; margin-right: 3px; background: rgba(255,149,0,.15); color: #FF9500; }
-.s-brand[data-brand="stihl"]   { background: rgba(255,204,0,.15);  color: #FFCC00; }
-.s-brand[data-brand="ela"]     { background: rgba(50,173,230,.15); color: #32ADE6; }
-.s-brand[data-brand="airtag"]  { background: rgba(0,122,255,.15);  color: #007AFF; }
-.s-brand[data-brand="tracker"] { background: rgba(52,199,89,.15);  color: #34C759; }
+.s-brand {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 4px;
+  vertical-align: middle; margin-right: 3px;
+  background: var(--bg3); color: var(--fg3); border: 1px solid var(--sep);
+}
+.s-brand::before {
+  content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+  background: #FF9500; /* default: michelin/orange */
+}
+.s-brand[data-brand="stihl"]::before   { background: #FFCC00; }
+.s-brand[data-brand="ela"]::before     { background: #32ADE6; }
+.s-brand[data-brand="airtag"]::before  { background: #007AFF; }
+.s-brand[data-brand="tracker"]::before { background: #34C759; }
 .s-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
 .sidebar-footer { padding: 9px 14px; font-size: 11px; color: var(--fg3); border-top: 1px solid var(--sep); flex-shrink: 0; background: var(--bg); }
 
@@ -315,7 +322,6 @@ body {
   border: 1px solid var(--sep); box-shadow: var(--shadow); position: relative; overflow: hidden;
 }
 .chart-card:last-child { margin-bottom: 16px; }
-.chart-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--m-yellow); }
 .chart-title { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--fg2); margin-bottom: 14px; }
 .chart-wrap    { position: relative; height: 210px; }
 .chart-wrap-sm { position: relative; height: 120px; }
@@ -469,11 +475,11 @@ body {
   font-size: 10px; font-weight: 700; color: #34d399;
   background: rgba(52,211,153,.15); border-radius: 99px;
   padding: 2px 7px; white-space: nowrap; letter-spacing: .3px;
-  animation: jlp-pulse 1.8s ease-in-out infinite;
+  animation: jlp-pulse 3s ease-in-out infinite;
 }
 @keyframes jlp-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: .45; }
+  50% { opacity: .6; }
 }
 /* Load estimation badges */
 .jlp-load-line { margin-top: 3px; }
@@ -1143,18 +1149,18 @@ body {
   flex-wrap: nowrap;
 }
 .si-brand {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 20px;
-  /* default = michelin / orange */
-  background: rgba(255,149,0,.15);
-  color: #FF9500;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+  background: var(--bg3); color: var(--fg3); border: 1px solid var(--sep);
 }
-.si-brand[data-brand="stihl"]   { background: rgba(255,204,0,.15);  color: #FFCC00; }
-.si-brand[data-brand="ela"]     { background: rgba(50,173,230,.15); color: #32ADE6; }
-.si-brand[data-brand="airtag"]  { background: rgba(0,122,255,.15);  color: #007AFF; font-size: 12px; }
-.si-brand[data-brand="tracker"] { background: rgba(52,199,89,.15);  color: #34C759; }
+.si-brand::before {
+  content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+  background: #FF9500;
+}
+.si-brand[data-brand="stihl"]::before   { background: #FFCC00; }
+.si-brand[data-brand="ela"]::before     { background: #32ADE6; }
+.si-brand[data-brand="airtag"]::before  { background: #007AFF; }
+.si-brand[data-brand="tracker"]::before { background: #34C759; }
 .si-name {
   font-size: 14px;
   font-weight: 600;
