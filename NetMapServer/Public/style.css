@@ -358,6 +358,19 @@ body {
   font-size: 12px; cursor: pointer; white-space: nowrap;
 }
 .ev-type-cb-row:hover { background: var(--bg3); }
+/* Sub-tab pills within Events / Alerts containers */
+.events-sub-tabs {
+  display: flex; gap: 4px; padding: 6px 10px 4px; flex-shrink: 0;
+  border-bottom: 1px solid var(--sep);
+}
+.events-sub-tab {
+  background: none; border: none; padding: 3px 10px; border-radius: 20px;
+  cursor: pointer; font-size: 12px; color: var(--fg2); line-height: 1.4;
+  transition: background .15s, color .15s; display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font);
+}
+.events-sub-tab:hover { background: var(--bg3); color: var(--fg1); }
+.events-sub-tab.active { background: var(--bg3); color: var(--fg); font-weight: 600; }
 .ev-type-cb-row input { cursor: pointer; }
 
 /* ── Tracker journey panel ── */
@@ -934,6 +947,7 @@ body {
 .admin-nav-btn.active .admin-nav-count { background: rgba(255,218,0,.25); color: var(--m-navy); }
 [data-theme="dark"] .admin-nav-btn.active .admin-nav-count { color: var(--m-yellow); }
 .admin-nav-count:empty { display: none; }
+.admin-nav-divider { border: none; border-top: 1px solid var(--sep); margin: 4px 8px; width: calc(100% - 16px); }
 
 /* Content column */
 .admin-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; min-width: 0; }

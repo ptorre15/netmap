@@ -1026,7 +1026,10 @@ function renderStats() {
 // ─── Show/hide content areas ──────────────────────────────────────────────────
 function showMode(mode) {
   S.mode = mode;
-  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  // 'alerts' is a sub-mode of the Events (table) tab — keep its button active
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active',
+    b.dataset.mode === mode || (mode === 'alerts' && b.dataset.mode === 'table')
+  ));
   const noData = S.records.length === 0;
   D.chartCont.style.display  = mode === 'chart'  && !noData ? 'flex'  : 'none';
   D.mapCont.style.display    = mode === 'map'    && !noData ? 'flex'  : 'none';
@@ -1037,6 +1040,8 @@ function showMode(mode) {
   D.errorsCont.style.display  = mode === 'errors'            ? 'block' : 'none';
   D.fleetCont.style.display   = mode === 'fleet'             ? 'block' : 'none';
   D.emptyState.style.display = noData && !['alerts','device','wheels','errors','fleet'].includes(mode) ? 'flex' : 'none';
+  // Period bar: hide for modes that don't use a time range
+  $('period-bar').style.display = ['fleet', 'device', 'errors'].includes(mode) ? 'none' : '';
 }
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
@@ -2657,6 +2662,19 @@ async function renderTable() {
       });
     }
 
+    // Sub-tab nav: Events | Driver Alerts (tracker sensors only)
+    D.tableCont.querySelector('#events-sub-tabs')?.remove();
+    const subTabs = document.createElement('div');
+    subTabs.id = 'events-sub-tabs';
+    subTabs.className = 'events-sub-tabs';
+    subTabs.innerHTML =
+      `<button class="events-sub-tab active" data-sub="events"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 5h8"/><path d="M13 9h5"/><path d="M13 15h8"/><path d="M13 19h5"/><path d="M3 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M3 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/></svg> Events</button>` +
+      `<button class="events-sub-tab" data-sub="alerts"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg> Driver Alerts</button>`;
+    D.tableCont.prepend(subTabs);
+    subTabs.querySelector('[data-sub="alerts"]').addEventListener('click', () => {
+      showMode('alerts');
+      renderAlerts();
+    });
     return;
   }
 
@@ -3048,6 +3066,19 @@ async function renderAlerts() {
       }
     });
   });
+  // Sub-tab nav: Events | Driver Alerts
+  D.alertsCont.querySelector('#alerts-sub-tabs')?.remove();
+  const subTabsAl = document.createElement('div');
+  subTabsAl.id = 'alerts-sub-tabs';
+  subTabsAl.className = 'events-sub-tabs';
+  subTabsAl.innerHTML =
+    `<button class="events-sub-tab" data-sub="events"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 5h8"/><path d="M13 9h5"/><path d="M13 15h8"/><path d="M13 19h5"/><path d="M3 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M3 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/></svg> Events</button>` +
+    `<button class="events-sub-tab active" data-sub="alerts"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg> Driver Alerts</button>`;
+  D.alertsCont.prepend(subTabsAl);
+  subTabsAl.querySelector('[data-sub="events"]').addEventListener('click', () => {
+    showMode('table');
+    renderTable();
+  });
 }
 
 // ─── Master render ────────────────────────────────────────────────────────────
@@ -3060,19 +3091,14 @@ function renderAll() {
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
   const hasChart   = sensor && sensor.brand !== 'airtag' && sensor.brand !== 'tracker';
   const hasAlerts  = isTracker(sensor);
-  const hasDevice  = isTracker(sensor);
   // Has wheels overview: current selected sensor is TPMS and vehicle has ≥2 TPMS
   const _wovGroups = groupByVehicle();
   const _wovEntry  = S.vehicleFilter ? _wovGroups[S.vehicleFilter] : null;
   const hasWheels  = isTpms(sensor) && (_wovEntry?.sensors ?? []).filter(s => isTpms(s)).length >= 2;
   const chartBtn   = document.querySelector('.mode-btn[data-mode="chart"]');
   const wheelsBtn  = document.querySelector('.mode-btn[data-mode="wheels"]');
-  const alertsBtn  = document.querySelector('.mode-btn[data-mode="alerts"]');
-  const deviceBtn  = document.querySelector('.mode-btn[data-mode="device"]');
   if (chartBtn)  chartBtn.style.display  = hasChart  ? '' : 'none';
   if (wheelsBtn) wheelsBtn.style.display = hasWheels ? '' : 'none';
-  if (alertsBtn) alertsBtn.style.display = hasAlerts ? '' : 'none';
-  if (deviceBtn) deviceBtn.style.display = hasDevice ? '' : 'none';
   // Fallback if current mode is no longer valid
   // AirTag: prefer the Events (table) tab since readings rarely carry GPS
   if (!hasChart  && S.mode === 'chart')  { S.mode = sensor?.brand === 'airtag' ? 'table' : 'map'; _fixModeBtn(); }
@@ -4175,6 +4201,9 @@ async function renderTrackersPanel() {
 }
 
 function switchAdminTab(tab) {
+  // Diagnostic views live in the main pane, not in the drawer
+  if (tab === 'device') { closeAdminPanel(); showMode('device'); renderDevice(); return; }
+  if (tab === 'errors') { closeAdminPanel(); showMode('errors'); renderErrors(); return; }
   document.querySelectorAll('.admin-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.admin-tab-pane').forEach(p => p.classList.toggle('active', p.id === 'admin-tab-' + tab));
   if (tab === 'users')    renderUsersPanel();
