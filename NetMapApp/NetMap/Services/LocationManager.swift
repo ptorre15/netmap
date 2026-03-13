@@ -44,14 +44,25 @@ final class LocationManager: NSObject, ObservableObject {
 
     // MARK: - Convenience
 
-    /// Current latitude — nil if unavailable, not authorized, or fix is older than 60 s
+    /// Max age for a location fix to be considered valid.
+    /// iOS: 60 s (device moves frequently).
+    /// macOS: 3600 s (Mac is stationary — CoreLocation only fires on movement).
+    private var locationMaxAge: TimeInterval {
+        #if os(macOS)
+        return 3600
+        #else
+        return 60
+        #endif
+    }
+
+    /// Current latitude — nil if unavailable, not authorized, or fix is too old.
     var currentLatitude: Double? {
-        guard let loc = location, -loc.timestamp.timeIntervalSinceNow < 60 else { return nil }
+        guard let loc = location, -loc.timestamp.timeIntervalSinceNow < locationMaxAge else { return nil }
         return loc.coordinate.latitude
     }
-    /// Current longitude — nil if unavailable, not authorized, or fix is older than 60 s
+    /// Current longitude — nil if unavailable, not authorized, or fix is too old.
     var currentLongitude: Double? {
-        guard let loc = location, -loc.timestamp.timeIntervalSinceNow < 60 else { return nil }
+        guard let loc = location, -loc.timestamp.timeIntervalSinceNow < locationMaxAge else { return nil }
         return loc.coordinate.longitude
     }
 
