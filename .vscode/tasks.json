@@ -94,7 +94,7 @@
         {
             "label": "Server: Restart",
             "type": "shell",
-            "command": "launchctl unload ~/Library/LaunchAgents/com.netmap.server.plist 2>/dev/null; lsof -ti tcp:8092 | xargs kill -9 2>/dev/null; echo '⏹  Ancien processus arrêté'; sleep 1; cd '${workspaceFolder}/NetMapServer' && nohup .build/debug/App >> /tmp/netmap_server.log 2>&1 & disown\nsleep 5 && tail -8 /tmp/netmap_server.log",
+            "command": "launchctl unload ~/Library/LaunchAgents/com.netmap.server.plist 2>/dev/null; lsof -ti tcp:8092 | xargs kill -9 2>/dev/null; echo '⏹  Ancien processus arrêté'; sleep 1; cd '${workspaceFolder}/NetMapServer' && nohup .build/debug/App >> /tmp/netmap_server.log 2>&1 & disown\nsleep 2 && sudo caddy reload --config '${workspaceFolder}/NetMapServer/Caddyfile' --adapter caddyfile 2>/dev/null || sudo caddy start --config '${workspaceFolder}/NetMapServer/Caddyfile' --adapter caddyfile 2>/dev/null; sleep 3 && tail -8 /tmp/netmap_server.log",
             "group": "build",
             "presentation": {
                 "reveal": "always",
