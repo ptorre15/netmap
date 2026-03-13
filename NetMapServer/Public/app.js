@@ -4828,4 +4828,49 @@ async function renderStatsPanel() {
       <div class="stats-info-row"><span>Total driver behavior</span><span>${fmtN(s.totalDriverBehaviorEvents)}</span></div>
       <div class="stats-info-row"><span>Size on disk</span><span>${s.dbSizeBytes != null ? fmtBytes(s.dbSizeBytes) : '–'}</span></div>
     </div>`;
+
+  // ── Initialize Chart.js sparklines for per-day bars ──────────────────
+  const STATS_CHART_COLORS = {
+    'stats-canvas-readings':  'rgba(96,165,250,0.75)',
+    'stats-canvas-events':    'rgba(52,211,153,0.75)',
+    'stats-canvas-lifecycle': 'rgba(167,139,250,0.75)',
+    'stats-canvas-behavior':  'rgba(251,146,60,0.75)',
+  };
+  [
+    { id: 'stats-canvas-readings',  data: s.readingsPerDay },
+    { id: 'stats-canvas-events',    data: s.vehicleEventsPerDay },
+    { id: 'stats-canvas-lifecycle', data: s.lifecyclePerDay },
+    { id: 'stats-canvas-behavior',  data: s.driverBehaviorPerDay },
+  ].forEach(({ id, data }) => {
+    if (!data?.length) return;
+    const cvs = document.getElementById(id);
+    if (!cvs) return;
+    new Chart(cvs, {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.date),
+        datasets: [{
+          data: data.map(d => d.count),
+          backgroundColor: STATS_CHART_COLORS[id] ?? 'rgba(96,165,250,0.75)',
+          borderRadius: 3,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: {
+            title: items => items[0].label,
+            label: item => item.raw.toLocaleString(),
+          }}
+        },
+        scales: {
+          x: { display: false },
+          y: { display: false, beginAtZero: true }
+        }
+      }
+    });
+  });
 }
