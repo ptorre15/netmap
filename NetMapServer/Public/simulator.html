@@ -983,16 +983,23 @@ async function sendBehavior(type, value, ms) {
   const name = BNAMES[type] || `type${type}`;
   log(`🧠 driver_behavior  ${name}  val=${value.toFixed(1)}  ms=${Math.round(ms)}`, 'info');
   const ok = await post({
-    imei:               cfgV('cfgImei'),
-    eventType:          'driver_behavior',
-    timestamp:          ts(),
-    driverBehaviorType: type,
-    alertValueMax:      Math.round(value * 10) / 10,
-    alertDurationMs:    Math.round(ms),
-    latitude:           +(sim.lat.toFixed(6)),
-    longitude:          +(sim.lon.toFixed(6)),
-    headingDeg:         Math.round(sim.heading),
-    speedKmh:           sim.speedTarget,
+    imei:                cfgV('cfgImei'),
+    eventType:           'driver_behavior',
+    timestamp:           ts(),
+    driverBehaviorType:  type,
+    alertValueMax:       Math.round(value * 10) / 10,
+    alertDurationMs:     Math.round(ms),
+    latitude:            +(sim.lat.toFixed(6)),
+    longitude:           +(sim.lon.toFixed(6)),
+    headingDeg:          Math.round(sim.heading),
+    speedKmh:            sim.speedTarget,
+    engineRpm:           sim.rpm,
+    fuelLevelPct:        Math.round(sim.fuelPct),
+    odometerKm:          Math.round(sim.odometer * 10) / 10,
+    journeyDistanceKm:   Math.round(sim.jDistKm * 100) / 100,
+    journeyFuelConsumedL:Math.round(sim.jFuelL  * 100) / 100,
+    gpsSatellites:       sim.gpsSat,
+    gpsFixType:          sim.gpsFixType,
   });
   if (ok) log(`✅ ${name}  val=${value.toFixed(1)} ms=${Math.round(ms)}`, 'ok');
 }

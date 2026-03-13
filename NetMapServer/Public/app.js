@@ -527,7 +527,7 @@ function renderSensors() {
   // ──── Asset card ──────────────────────────────────────────────────────────
   if (!entry) {
     D.assetCard.innerHTML = '';
-    D.sensorList.innerHTML = '<div class="sidebar-hint">Select a vehicle</div>';
+    D.sensorList.innerHTML = '<div class="sidebar-hint sidebar-hint-arrow">↑ Pick an asset from the dropdown above</div>';
     return;
   }
   const sv      = entry.serverVehicle;
@@ -903,9 +903,9 @@ function renderSensorInfoCard() {
     var battBadge = '';
   }
   const inlineActions = AUTH.isAdmin ? `<span class="si-inline-actions">
-    <button class="si-rename-action-btn" title="Rename"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg></button>
-    ${s.brand === 'tracker' ? `<button class="si-config-btn" title="Config"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg></button>` : ''}
-    ${s.brand !== 'tracker' ? `<button class="si-unpair-btn modal-btn-danger si-unpair-inline" data-sid="${escAttr(s.sensorID)}">Unpair</button>` : ''}
+    <button class="si-rename-action-btn" title="Rename"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg></button>
+    ${s.brand === 'tracker' ? `<button class="si-config-btn" title="Config"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg></button>` : ''}
+    <button class="si-unpair-btn modal-btn-danger si-unpair-inline" data-sid="${escAttr(s.sensorID)}">Unpair</button>
   </span>` : '';
   el.innerHTML = `<div class="si-header">
     <span class="si-brand" data-brand="${escAttr(s.brand)}">${brandLabel}</span>
@@ -957,15 +957,22 @@ function renderSensorInfoCard() {
 
   el.querySelector('.si-unpair-btn')?.addEventListener('click', async () => {
     if (!confirm(`Remove sensor "${rawMainLabel}" from server? This will delete all its readings.`)) return;
-    const res = await fetch(`/api/sensors/pair/${encodeURIComponent(s.sensorID)}`, { method: 'DELETE', headers: authHeaders() });
-    if (res.ok || res.status === 204) {
+    try {
+      if (s.brand === 'tracker') {
+        await adminUnpairTracker(s.sensorID);
+      } else {
+        const res = await fetch(`/api/sensors/pair/${encodeURIComponent(s.sensorID)}`, { method: 'DELETE', headers: authHeaders() });
+        if (!res.ok && res.status !== 204) {
+          const msg = await res.text().catch(() => res.status);
+          throw new Error(msg);
+        }
+      }
       S.selected = null;
       await loadSensors();
       renderAll();
       showToast('Sensor removed from server.');
-    } else {
-      const msg = await res.text().catch(() => res.status);
-      alert(`Failed to unpair sensor: ${msg}`);
+    } catch (err) {
+      alert(`Failed to unpair sensor: ${err.message}`);
     }
   });
 
@@ -1042,6 +1049,36 @@ function showMode(mode) {
   D.emptyState.style.display = noData && !['alerts','device','wheels','errors','fleet'].includes(mode) ? 'flex' : 'none';
   // Period bar: hide for modes that don't use a time range
   $('period-bar').style.display = ['fleet', 'device', 'errors'].includes(mode) ? 'none' : '';
+  // Hide top toolbar + stats bar when nothing meaningful to show
+  // (still visible in fleet mode which works without a sensor selection)
+  const _fleetOrSpecial = ['fleet'].includes(mode);
+  $('top-toolbar').style.display = (S.selected || _fleetOrSpecial) ? '' : 'none';
+  $('stats-bar').style.display   = S.selected ? '' : 'none';
+  // Contextual empty state messaging
+  const _vsEl = $('vehicle-select');
+  if (D.emptyState.style.display === 'flex') {
+    const _noAssets = !S.sensors.length && !S.serverVehicles.length;
+    if (_noAssets) {
+      D.emptyState.innerHTML =
+        `<div class="empty-icon"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12l0 9"/><path d="M12 12l-8 -4.5"/><path d="M16 5.25l-8 4.5"/></svg></div>` +
+        `<p>Welcome to NetMap</p>` +
+        `<small>Get started: click the <strong>Administration</strong> button (top-right ⚙) to add your first asset and pair sensors.</small>`;
+    } else if (!S.vehicleFilter) {
+      D.emptyState.innerHTML =
+        `<div class="empty-icon"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 5a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14z"/><path d="M9 11l3 3l3 -3"/></svg></div>` +
+        `<p>Select an asset to get started</p>` +
+        `<small>Use the dropdown at the top-left to choose an asset, then click a sensor in the list to view its data.</small>` +
+        `<span class="empty-select-hint">← Pick an asset from the left panel</span>`;
+      if (_vsEl) _vsEl.classList.add('select-pulse');
+    } else {
+      D.emptyState.innerHTML =
+        `<div class="empty-icon"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg></div>` +
+        `<p>No data for this period</p>` +
+        `<small>Try a wider time range using the period buttons above — or check that the sensor is actively recording data.</small>`;
+    }
+  } else {
+    if (_vsEl) _vsEl.classList.remove('select-pulse');
+  }
 }
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
@@ -1276,8 +1313,8 @@ function renderChartTpms(sensor) {
   if (S.pChart) { S.pChart.destroy(); S.pChart = null; }
   const pDatasets = [{
     data: pVals,
-    borderColor: '#009FE3',
-    backgroundColor: 'rgba(0,159,227,0.10)',
+    borderColor: '#6366F1',
+    backgroundColor: 'rgba(99,102,241,0.10)',
     fill: true, tension: 0.4,
     pointRadius: ptColors ? 3 : 0, pointHoverRadius: 5,
     pointBackgroundColor: ptColors,
@@ -2443,6 +2480,8 @@ async function renderTable() {
   const target = sensor?.targetPressureBar ?? null;
   const df     = new Intl.DateTimeFormat([], { dateStyle: 'short', timeStyle: 'medium' });
   const rows   = [...S.records].reverse().slice(0, 2000);
+  const tblToolbar = D.tableCont.querySelector('.table-toolbar');
+  if (tblToolbar) tblToolbar.style.display = '';
 
   if (isTracker(sensor)) {
     // Skeleton while loading
@@ -2452,8 +2491,11 @@ async function renderTable() {
     let events = [];
     let allEvents = [];
     let lifecycleEvents = [];
+    let alertEvents     = [];
     const GPS_TYPES = ['gps_acquired', 'gps_lost'];
     const showSysEvents = () => localStorage.getItem('ev_show_system') === '1';
+    const showErrors    = () => localStorage.getItem('ev_show_errors')  === '1';
+    const showAlerts    = () => localStorage.getItem('ev_show_alerts')  === '1';
     try {
       const { from, to } = getRange();
       events = await apiFetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&limit=2000`);
@@ -2462,17 +2504,21 @@ async function renderTable() {
         const lc = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&since=${encodeURIComponent(from.toISOString())}&limit=500`).catch(() => []);
         lifecycleEvents = lc.filter(e => new Date(e.timestamp) <= to).map(e => ({ ...e, _src: 'lifecycle' }));
       }
-      events = showSysEvents()
-        ? [...allEvents, ...lifecycleEvents].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        : allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
+      if (showAlerts()) {
+        const al = await apiFetch(`/api/driver-behavior?imei=${encodeURIComponent(sensor.sensorID)}&limit=1000`).catch(() => []);
+        alertEvents = al.map(b => ({ ...b, _src: 'alert' }));
+      }
+      let evBase = showSysEvents() ? [...allEvents, ...lifecycleEvents] : allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
+      if (showAlerts()) evBase = [...evBase, ...alertEvents];
+      events = evBase.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     } catch(err) {
       D.tableBody.innerHTML = `<tr><td colspan="11" style="color:var(--danger)">${escHTML(err.message)}</td></tr>`;
       return;
     }
 
     if (!allEvents.length) {
-      $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
-      D.tableBody.innerHTML = '<tr><td colspan="3" class="tbl-empty-cell"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg>No events in this period</td></tr>';
+      $('table-head').innerHTML = '<tr><th>Time</th><th>Delay</th><th>Event</th><th>GPS</th></tr>';
+      D.tableBody.innerHTML = '<tr><td colspan="4" class="tbl-empty-cell"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg>No events in this period</td></tr>';
     } else {
       const EVENT_LABELS = {
         journey_start: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 14h14v-9h-14v16"/></svg>',   label: 'Journey start', color: '#34d399' },
@@ -2489,6 +2535,25 @@ async function renderTable() {
         wake_up:       { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up',       color: '#fbbf24' },
       };
 
+      function fmtDelay(sec) {
+        if (sec < 60)   return sec + 's';
+        if (sec < 3600) return Math.round(sec / 60) + 'm';
+        if (sec < 86400) return Math.round(sec / 3600) + 'h';
+        return Math.round(sec / 86400) + 'd';
+      }
+      function delayCell(e) {
+        if (!e.receivedAt) return `<td class="td-delay" title="No reception timestamp">–</td>`;
+        const sec = (new Date(e.receivedAt) - new Date(e.timestamp)) / 1000;
+        if (sec < -5)  return `<td class="td-delay td-delay-bad" title="Event timestamp is AFTER reception (device clock issue): ${fmtDelay(Math.abs(sec))}">⚠ invalid</td>`;
+        let cls, tip;
+        if      (sec <  30)   { cls = 'td-delay-rt';  tip = 'Real-time (< 30 s)'; }
+        else if (sec <  300)  { cls = 'td-delay-ok';  tip = 'Near real-time (< 5 min)'; }
+        else if (sec < 3600)  { cls = 'td-delay-mid'; tip = 'Delayed (< 1 h)'; }
+        else if (sec < 86400) { cls = 'td-delay-hi';  tip = 'Highly delayed (< 24 h)'; }
+        else                  { cls = 'td-delay-off';  tip = 'Offline batch (> 24 h)'; }
+        return `<td class="td-delay ${cls}" title="${escAttr(tip)} — received ${fmtDelay(sec)} after generation">${fmtDelay(sec)}</td>`;
+      }
+
       function renderEventRows(evList) {
         const hasSatsL  = evList.some(e => e.gpsSatellites != null);
         const hasSpeedL = evList.some(e => e.speedKmh != null);
@@ -2498,7 +2563,7 @@ async function renderTable() {
         const hasJFuelL = evList.some(e => e.journeyFuelConsumedL != null);
         const hasFuelL  = evList.some(e => e.fuelLevelPct != null);
 
-        const hdrs2 = ['Time', 'Event', 'GPS / Fix'];
+        const hdrs2 = ['Time', 'Delay', 'Event', 'GPS / Fix'];
         if (hasSatsL)  hdrs2.push('Sats');
         if (hasSpeedL) hdrs2.push('Speed');
         if (hasOdoL)   hdrs2.push('Odometer');
@@ -2517,11 +2582,32 @@ async function renderTable() {
             if (idx > 0) sep = `<tr class="journey-sep-row"><td colspan="${colCount2}"></td></tr>`;
             lastJID2 = e.journeyID;
           }
+          if (e._src === 'alert') {
+            const cfg    = BEHAVIOR_CONFIG[e.alertType] || BEHAVIOR_CONFIG.unknown;
+            const svgIco = BEHAVIOR_SVG[e.alertType]   || BEHAVIOR_SVG.unknown;
+            const evColor = safeCssColor(cfg.color) || 'var(--fg2)';
+            const fuelCol = e.fuelLevelPct != null
+              ? (e.fuelLevelPct > 50 ? '#34d399' : e.fuelLevelPct > 20 ? '#fbbf24' : '#f87171') : '';
+            let cells = `<td class="td-ts-compact">${fmtTs(e.timestamp)}</td>`;
+            cells += delayCell(e);
+            cells += `<td><span style="display:inline-flex;align-items:center;gap:4px"><span class="ev-badge" style="--ev-color:${evColor}">${svgIco} ${escHTML(cfg.label)}</span><button class="row-alert-detail-btn" data-alert-id="${escAttr(e.id)}" title="Alert details"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z"/></svg></button></span></td>`;
+            cells += `<td>${gpsCell(e)}</td>`;
+            if (hasSatsL)  cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
+            if (hasSpeedL) cells += `<td>${e.speedKmh != null ? e.speedKmh.toFixed(0) + '\u00a0km/h' : '–'}</td>`;
+            if (hasOdoL)   cells += `<td>${e.odometerKm != null ? (e.odometerKm / 1000).toFixed(1) + '\u00a0km' : '–'}</td>`;
+            if (hasDistL)  cells += `<td>${e.journeyDistanceKm != null ? e.journeyDistanceKm.toFixed(2) + '\u00a0km' : '–'}</td>`;
+            if (hasRpmL)   cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + '\u00a0rpm' : '–'}</td>`;
+            if (hasJFuelL) cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + '\u00a0L' : '–'}</td>`;
+            if (hasFuelL)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
+            cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" data-src="alert" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>`;
+            return sep + `<tr class="ev-alert-row" data-alert-id="${escAttr(e.id)}">${cells}</tr>`;
+          }
           const ev2     = EVENT_LABELS[e.eventType] ?? { icon: '○', label: e.eventType ?? '–', color: 'var(--fg2)' };
           const fuelCol = e.fuelLevelPct != null
             ? (e.fuelLevelPct > 50 ? '#34d399' : e.fuelLevelPct > 20 ? '#fbbf24' : '#f87171') : '';
           const evColor = safeCssColor(ev2.color) || 'var(--fg2)';
           let cells = `<td class="td-ts-compact">${fmtTs(e.timestamp)}</td>`;
+          cells += delayCell(e);
           cells += `<td><span class="ev-badge" style="--ev-color:${evColor}">${ev2.icon} ${escHTML(ev2.label)}</span></td>`;
           cells += `<td>${gpsCell(e)}</td>`;
           if (hasSatsL)  cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
@@ -2531,7 +2617,7 @@ async function renderTable() {
           if (hasRpmL)   cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + ' rpm' : '–'}</td>`;
           if (hasJFuelL) cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + ' L' : '–'}</td>`;
           if (hasFuelL)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
-          cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" data-src="${e._src === 'lifecycle' ? 'lifecycle' : 'vehicle'}" title="Delete"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>`;
+          cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" data-src="${e._src === 'lifecycle' ? 'lifecycle' : 'vehicle'}" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>`;
           return sep + `<tr>${cells}</tr>`;
         }).join('');
 
@@ -2540,10 +2626,50 @@ async function renderTable() {
             const row = evClick.target.closest('tr');
             const id  = btn.dataset.id;
             if (!id) return;
-            const url = btn.dataset.src === 'lifecycle' ? `/api/device-lifecycle/${id}` : `/api/vehicle-events/${id}`;
+            let url;
+            if (btn.dataset.src === 'lifecycle') url = `/api/device-lifecycle/${id}`;
+            else if (btn.dataset.src === 'alert') url = `/api/driver-behavior/${id}`;
+            else url = `/api/vehicle-events/${id}`;
             const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
-            if (res.ok || res.status === 204) { row.remove(); showToast('Event deleted'); }
+            if (res.ok || res.status === 204) {
+              // also remove expanded detail row if present
+              row.nextElementSibling?.classList.contains('ev-alert-detail-expanded') && row.nextElementSibling.remove();
+              row.remove(); showToast('Event deleted');
+            }
             else showToast('Delete failed', 'error');
+          });
+        });
+
+        D.tableBody.querySelectorAll('.row-alert-detail-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const tr = btn.closest('tr');
+            const existing = tr.nextElementSibling;
+            if (existing?.classList.contains('ev-alert-detail-expanded')) {
+              existing.remove();
+              btn.classList.remove('active');
+              return;
+            }
+            btn.classList.add('active');
+            const alertId = btn.dataset.alertId;
+            const b = alertEvents.find(a => String(a.id) === String(alertId));
+            if (!b) return;
+            const cfg    = BEHAVIOR_CONFIG[b.alertType] || BEHAVIOR_CONFIG.unknown;
+            const durS   = b.alertDurationMs != null ? (b.alertDurationMs / 1000).toFixed(1) + '\u00a0s' : null;
+            const val    = b.alertValueMax   != null ? b.alertValueMax : null;
+            const valStr = val != null ? (cfg.unit ? `${val.toFixed(2)}\u00a0${cfg.unit}` : val.toFixed(2)) : null;
+            const spd    = b.speedKmh        != null ? `${b.speedKmh.toFixed(0)}\u00a0km/h` : null;
+            const hdg    = b.headingDeg      != null ? `${Math.round(b.headingDeg)}\u00b0` : null;
+            const chips  = [
+              valStr ? `<span class="ev-alerts-detail-chip"><b>Peak:</b> ${escHTML(valStr)}</span>` : '',
+              durS   ? `<span class="ev-alerts-detail-chip"><b>Duration:</b> ${escHTML(durS)}</span>` : '',
+              spd    ? `<span class="ev-alerts-detail-chip"><b>Speed:</b> ${escHTML(spd)}</span>` : '',
+              hdg    ? `<span class="ev-alerts-detail-chip"><b>Heading:</b> ${escHTML(hdg)}</span>` : '',
+            ].filter(Boolean).join('');
+            const colCount = $('table-head').querySelectorAll('th').length;
+            const detailTr = document.createElement('tr');
+            detailTr.className = 'ev-alert-detail-expanded';
+            detailTr.innerHTML = `<td class="ev-alert-detail-cell" colspan="${colCount}"><div class="ev-alert-detail-content">${chips || 'No additional details available'}</div></td>`;
+            tr.insertAdjacentElement('afterend', detailTr);
           });
         });
       }
@@ -2569,10 +2695,16 @@ async function renderTable() {
         (uniqueEvTypes.length
           ? `<div class="ev-type-filter-wrap" id="ev-type-filter-wrap"><button type="button" id="ev-type-filter-btn" class="admin-small-btn">All types <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M6 9l6 6 6-6"/></svg></button><div id="ev-type-dropdown" class="ev-type-dropdown" style="display:none">${typeCheckboxesHtml}</div></div>`
           : '') +
-        `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:12px">` +
-        `<input type="checkbox" id="ev-show-system" style="cursor:pointer"${showSysEvents() ? ' checked' : ''}> Show system events</label>` +
-        `<button class="modal-btn-danger admin-small-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg> Delete all</button>`;
+        `<div class="ev-pill-toggles">` +
+        `<button type="button" id="ev-show-system" class="ev-pill-toggle${showSysEvents() ? ' active' : ''}" title="Lifecycle events: boot / sleep / wake / ping"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37a1.724 1.724 0 0 0 2.573 -1.066z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg> System</button>` +
+        `<button type="button" id="ev-show-errors" class="ev-pill-toggle ev-pill-errors${showErrors() ? ' active' : ''}" title="Events with invalid timestamp (device clock issue)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg> Errors</button>` +
+        `<button type="button" id="ev-show-alerts" class="ev-pill-toggle ev-pill-alerts${showAlerts() ? ' active' : ''}" title="Driver behaviour alerts"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg> Alerts</button>` +
+        `</div>` +
+        `<button class="modal-btn-danger admin-small-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg> Delete all</button>` +
+        `<button class="ev-export-csv-btn modal-btn admin-small-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4l0 12"/></svg> Export CSV</button>`;
       D.tableCont.prepend(evToolbar);
+      if (tblToolbar) tblToolbar.style.display = 'none';
+      evToolbar.querySelector('.ev-export-csv-btn')?.addEventListener('click', exportCSV);
 
       function getSelectedTypes() {
         const allCbs = [...evToolbar.querySelectorAll('.ev-type-cb')];
@@ -2592,22 +2724,25 @@ async function renderTable() {
       }
 
       async function getBaseEvents() {
-        if (showSysEvents()) {
-          if (!lifecycleEvents.length) {
-            const lc = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&since=${encodeURIComponent(evFrom.toISOString())}&limit=500`).catch(() => []);
-            lifecycleEvents = lc.filter(e => new Date(e.timestamp) <= evTo).map(e => ({ ...e, _src: 'lifecycle' }));
-          }
-          return [...allEvents, ...lifecycleEvents].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        if (showSysEvents() && !lifecycleEvents.length) {
+          const lc = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&since=${encodeURIComponent(evFrom.toISOString())}&limit=500`).catch(() => []);
+          lifecycleEvents = lc.filter(e => new Date(e.timestamp) <= evTo).map(e => ({ ...e, _src: 'lifecycle' }));
         }
-        return allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
+        if (showAlerts() && !alertEvents.length) {
+          const al = await apiFetch(`/api/driver-behavior?imei=${encodeURIComponent(sensor.sensorID)}&limit=1000`).catch(() => []);
+          alertEvents = al.map(b => ({ ...b, _src: 'alert' }));
+        }
+        let base = showSysEvents() ? [...allEvents, ...lifecycleEvents] : allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
+        if (showAlerts()) base = [...base, ...alertEvents];
+        return base.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       }
 
       function applyFilters(base) {
         const selectedTypes = getSelectedTypes();
         const filtered = selectedTypes ? base.filter(e => selectedTypes.includes(e.eventType)) : base;
         if (!filtered.length) {
-          $('table-head').innerHTML = '<tr><th>Time</th><th>Event</th><th>GPS</th></tr>';
-          D.tableBody.innerHTML = '<tr><td colspan="3" class="tbl-empty-cell"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg>No events in this period</td></tr>';
+          $('table-head').innerHTML = '<tr><th>Time</th><th>Delay</th><th>Event</th><th>GPS</th></tr>';
+          D.tableBody.innerHTML = '<tr><td colspan="4" class="tbl-empty-cell"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg>No events in this period</td></tr>';
         } else {
           renderEventRows(filtered);
         }
@@ -2639,8 +2774,21 @@ async function renderTable() {
         });
       });
 
-      evToolbar.querySelector('#ev-show-system').addEventListener('change', async function() {
-        localStorage.setItem('ev_show_system', this.checked ? '1' : '0');
+      evToolbar.querySelector('#ev-show-system').addEventListener('click', async function() {
+        this.classList.toggle('active');
+        localStorage.setItem('ev_show_system', this.classList.contains('active') ? '1' : '0');
+        applyFilters(await getBaseEvents());
+      });
+      evToolbar.querySelector('#ev-show-errors').addEventListener('click', function() {
+        this.classList.toggle('active');
+        const on = this.classList.contains('active');
+        localStorage.setItem('ev_show_errors', on ? '1' : '0');
+        renderErrorsInline(sensor, on);
+      });
+      if (showErrors()) renderErrorsInline(sensor, true);
+      evToolbar.querySelector('#ev-show-alerts').addEventListener('click', async function() {
+        this.classList.toggle('active');
+        localStorage.setItem('ev_show_alerts', this.classList.contains('active') ? '1' : '0');
         applyFilters(await getBaseEvents());
       });
 
@@ -2662,19 +2810,6 @@ async function renderTable() {
       });
     }
 
-    // Sub-tab nav: Events | Driver Alerts (tracker sensors only)
-    D.tableCont.querySelector('#events-sub-tabs')?.remove();
-    const subTabs = document.createElement('div');
-    subTabs.id = 'events-sub-tabs';
-    subTabs.className = 'events-sub-tabs';
-    subTabs.innerHTML =
-      `<button class="events-sub-tab active" data-sub="events"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 5h8"/><path d="M13 9h5"/><path d="M13 15h8"/><path d="M13 19h5"/><path d="M3 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M3 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/></svg> Events</button>` +
-      `<button class="events-sub-tab" data-sub="alerts"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg> Driver Alerts</button>`;
-    D.tableCont.prepend(subTabs);
-    subTabs.querySelector('[data-sub="alerts"]').addEventListener('click', () => {
-      showMode('alerts');
-      renderAlerts();
-    });
     return;
   }
 
@@ -2774,6 +2909,158 @@ async function renderTable() {
         </tr>`;
       }).join('');
     }
+  }
+}
+
+// ─── Alerts inline: renders a card inside the Events tab ─────────────────────
+async function renderAlertsInline(sensor, show) {
+  D.tableCont.querySelector('#ev-alerts-inline')?.remove();
+  if (!show) return;
+
+  const card = document.createElement('div');
+  card.id = 'ev-alerts-inline';
+  card.className = 'ev-alerts-card';
+  card.innerHTML = `<div class="ev-alerts-card-loading">Loading driver alerts…</div>`;
+  const toolbar = D.tableCont.querySelector('#events-period-toolbar');
+  if (toolbar) toolbar.after(card); else D.tableCont.prepend(card);
+
+  let behaviors = [];
+  try {
+    behaviors = await apiFetch(`/api/driver-behavior?imei=${encodeURIComponent(sensor.sensorID)}&limit=1000`);
+  } catch (e) {
+    card.innerHTML = `<div class="ev-alerts-card-loading" style="color:var(--danger)">Failed to load alerts.</div>`;
+    return;
+  }
+  behaviors.reverse(); // most recent first
+
+  if (!behaviors.length) {
+    card.innerHTML = `<div class="ev-alerts-card-empty"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M9 12l2 2l4 -4"/></svg> No driver alerts recorded</div>`;
+    return;
+  }
+
+  const df2 = new Intl.DateTimeFormat([], { dateStyle: 'short', timeStyle: 'short' });
+  card.innerHTML =
+    `<div class="ev-alerts-card-header">` +
+    `<span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/></svg> ${behaviors.length} driver alert${behaviors.length !== 1 ? 's' : ''}</span>` +
+    `<button class="modal-btn-danger admin-small-btn ev-alerts-delete-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg> Delete all</button>` +
+    `</div>` +
+    `<div class="ev-alerts-card-rows">` +
+    behaviors.map(b => {
+      const cfg    = BEHAVIOR_CONFIG[b.alertType] || BEHAVIOR_CONFIG.unknown;
+      const svgIco = BEHAVIOR_SVG[b.alertType]   || BEHAVIOR_SVG.unknown;
+      const durS   = b.alertDurationMs != null ? (b.alertDurationMs / 1000).toFixed(1) + '\u00a0s' : null;
+      const val    = b.alertValueMax != null ? b.alertValueMax : null;
+      const valStr = val != null ? (cfg.unit ? `${val.toFixed(2)}\u00a0${cfg.unit}` : val.toFixed(2)) : null;
+      const spd    = b.speedKmh != null ? `${b.speedKmh.toFixed(0)}\u00a0km/h` : null;
+      const href   = osmHref(b.latitude, b.longitude);
+      const gpsLink = href ? `<a href="${href}" target="_blank" rel="noopener noreferrer" class="bat-gps-yes">\ud83d\udccd</a>` : null;
+      const details = [
+        valStr  ? `<span class="ev-alerts-detail-chip"><b>Peak:</b> ${escHTML(valStr)}</span>` : '',
+        durS    ? `<span class="ev-alerts-detail-chip"><b>Duration:</b> ${escHTML(durS)}</span>` : '',
+        spd     ? `<span class="ev-alerts-detail-chip"><b>Speed:</b> ${escHTML(spd)}</span>` : '',
+        b.journeyID ? `<span class="ev-alerts-detail-chip"><b>Journey:</b> <span style="font-family:monospace;font-size:10px">${escHTML(b.journeyID.slice(0,8))}\u2026</span></span>` : '',
+        gpsLink ? `<span class="ev-alerts-detail-chip">${gpsLink}</span>` : '',
+      ].filter(Boolean).join('');
+      return `<div class="ev-alerts-card-row" data-id="${escAttr(b.id)}">` +
+        `<span class="ev-alerts-ts">${escHTML(df2.format(new Date(b.timestamp)))}</span>` +
+        `<span class="ev-badge" style="--ev-color:${safeCssColor(cfg.color) || 'var(--fg2)'}">${svgIco} ${escHTML(cfg.label)}</span>` +
+        `<span class="ev-alerts-detail-row">${details}</span>` +
+        `<button class="ev-alerts-delete-row-btn" title="Delete alert"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button>` +
+        `</div>`;
+    }).join('') +
+    (behaviors.length > 50 ? `<div class="ev-alerts-card-more">\u2026 and ${behaviors.length - 50} more</div>` : '') +
+    `</div>`;
+
+  // Delete all button
+  card.querySelector('.ev-alerts-delete-btn').addEventListener('click', () => {
+    const { from: alFrom, to: alTo } = getRange();
+    const dfLbl = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    showDeleteModal({
+      title: 'Delete all alerts?',
+      body: `Permanently delete <b>${behaviors.length} alert${behaviors.length !== 1 ? 's' : ''}</b> for this period.<br><span style="color:var(--fg3);font-size:11px">${dfLbl.format(alFrom)} – ${dfLbl.format(alTo)}</span>`,
+      confirmLabel: `Delete ${behaviors.length} alerts`,
+      onConfirm: async () => {
+        const res = await fetch(`/api/driver-behavior?imei=${encodeURIComponent(sensor.sensorID)}&from=${alFrom.toISOString()}&to=${alTo.toISOString()}`, { method: 'DELETE', headers: authHeaders() });
+        if (res.ok) {
+          showToast('Alerts deleted');
+          card.remove();
+          const alertsBtn = D.tableCont.querySelector('#ev-show-alerts');
+          if (alertsBtn) { alertsBtn.classList.remove('active'); localStorage.removeItem('ev_show_alerts'); }
+        } else showToast('Delete failed', 'error');
+      }
+    });
+  });
+
+  // Per-row delete buttons
+  card.querySelectorAll('.ev-alerts-delete-row-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('.ev-alerts-card-row');
+      const id  = row?.dataset.id;
+      if (!id) return;
+      const res = await fetch(`/api/driver-behavior/${id}`, { method: 'DELETE', headers: authHeaders() });
+      if (res.ok || res.status === 204) { row.remove(); showToast('Alert deleted'); }
+      else showToast('Delete failed', 'error');
+    });
+  });
+
+  // Show only first 50 initially, more rows already in DOM (they render all)
+}
+
+// ─── Errors inline: renders a card inside the Events tab ─────────────────────
+async function renderErrorsInline(sensor, show) {
+  D.tableCont.querySelector('#ev-errors-inline')?.remove();
+  if (!show) return;
+
+  const card = document.createElement('div');
+  card.id = 'ev-errors-inline';
+  card.className = 'ev-errors-card';
+  card.innerHTML = `<div class="ev-errors-card-loading">Checking for timing errors…</div>`;
+  const toolbar = D.tableCont.querySelector('#events-period-toolbar');
+  if (toolbar) toolbar.after(card); else D.tableCont.prepend(card);
+
+  const THRESHOLD = new Date('2026-01-01T00:00:00Z').getTime();
+  const df2 = new Intl.DateTimeFormat([], { dateStyle: 'short', timeStyle: 'short' });
+  try {
+    const events = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&limit=2000`);
+    const invalid = events.filter(e => new Date(e.timestamp).getTime() < THRESHOLD);
+    if (!invalid.length) {
+      card.innerHTML = `<div class="ev-errors-card-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M9 12l2 2l4 -4"/></svg> No timing errors found</div>`;
+      return;
+    }
+    card.innerHTML =
+      `<div class="ev-errors-card-header"><span>⚠ ${invalid.length} event${invalid.length !== 1 ? 's' : ''} with invalid timestamp</span>` +
+      `<button class="modal-btn-danger admin-small-btn ev-errors-delete-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg> Delete all</button></div>` +
+      `<div class="ev-errors-card-rows">` +
+      invalid.slice(0, 50).map(e =>
+        `<div class="ev-errors-card-row">` +
+        `<span class="ev-errors-bad-ts" title="Bad device timestamp">${escHTML(df2.format(new Date(e.timestamp)))}</span>` +
+        `<span class="ev-errors-received" title="Actual received time">→ ${escHTML(df2.format(new Date(e.receivedAt)))}</span>` +
+        `<span class="ev-badge" style="--ev-color:#f87171">${escHTML(e.eventType)}</span>` +
+        `</div>`
+      ).join('') +
+      (invalid.length > 50 ? `<div class="ev-errors-card-more">… and ${invalid.length - 50} more</div>` : '') +
+      `</div>`;
+    card.querySelector('.ev-errors-delete-btn').addEventListener('click', () => {
+      showDeleteModal({
+        title: 'Delete timing errors?',
+        body: `Permanently delete <b>${invalid.length}</b> lifecycle event${invalid.length !== 1 ? 's' : ''} with timestamps before 2026 (device clock issue).`,
+        confirmLabel: `Delete ${invalid.length} events`,
+        onConfirm: async () => {
+          const res = await fetch(
+            `/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&from=1970-01-01T00:00:00Z&to=2025-12-31T23:59:59Z`,
+            { method: 'DELETE', headers: authHeaders() }
+          );
+          if (res.ok) {
+            showToast('Timing errors deleted');
+            card.remove();
+            const errBtn = D.tableCont.querySelector('#ev-show-errors');
+            if (errBtn) { errBtn.classList.remove('active'); localStorage.removeItem('ev_show_errors'); }
+          } else showToast('Delete failed', 'error');
+        }
+      });
+    });
+  } catch (err) {
+    card.innerHTML = `<div class="ev-errors-card-loading" style="color:var(--danger)">Failed to load lifecycle events.</div>`;
   }
 }
 
@@ -3000,13 +3287,27 @@ async function renderAlerts() {
     return;
   }
 
+  const alHasRpm    = behaviors.some(b => b.engineRpm          != null);
+  const alHasFuel   = behaviors.some(b => b.fuelLevelPct       != null);
+  const alHasOdo    = behaviors.some(b => b.odometerKm         != null);
+  const alHasDist   = behaviors.some(b => b.journeyDistanceKm  != null);
+  const alHasJFuel  = behaviors.some(b => b.journeyFuelConsumedL != null);
+  const alHasSats   = behaviors.some(b => b.gpsSatellites      != null);
+
+  const alHdrs = ['Time','Type','Peak','Duration','Speed'];
+  if (alHasRpm)   alHdrs.push('RPM');
+  if (alHasFuel)  alHdrs.push('Fuel');
+  if (alHasOdo)   alHdrs.push('Odometer');
+  if (alHasDist)  alHdrs.push('Journey dist.');
+  if (alHasJFuel) alHdrs.push('Journey fuel');
+  if (alHasSats)  alHdrs.push('Sats');
+  alHdrs.push('Journey', 'Position', '');
+
   D.alertsCont.innerHTML = `
     <div class="bat-box">
       <div class="bat-header">Driver behaviour alerts <span class="bat-count">${behaviors.length}</span></div>
       <table class="bat-table">
-        <thead><tr>
-          <th>Time</th><th>Type</th><th>Peak</th><th>Duration</th><th>Speed</th><th>Journey</th><th>Position</th><th></th>
-        </tr></thead>
+        <thead><tr>${alHdrs.map(h => `<th>${h}</th>`).join('')}</tr></thead>
         <tbody>${behaviors.map(b => {
         const cfg    = BEHAVIOR_CONFIG[b.alertType] || BEHAVIOR_CONFIG.unknown;
         const durS   = b.alertDurationMs != null ? (b.alertDurationMs / 1000).toFixed(1) + ' s' : '\u2014';
@@ -3019,16 +3320,23 @@ async function renderAlerts() {
           ? `<a href="${href}" target="_blank" rel="noopener noreferrer" class="bat-gps-yes">\ud83d\udccd map</a>`
           : `<span class="bat-gps-no">no GPS</span>`;
         const svgIco = BEHAVIOR_SVG[b.alertType] || BEHAVIOR_SVG.unknown;
-        return `<tr data-id="${escAttr(b.id)}">
-          <td class="td-ts-compact">${fmtTs(b.timestamp)}</td>
-          <td><span class="ev-badge" style="--ev-color:${safeCssColor(cfg.color) || 'var(--fg2)'}">${svgIco} ${escHTML(cfg.label)}</span></td>
-          <td>${valStr}</td>
-          <td>${durS}</td>
-          <td>${spd}</td>
-          <td>${journey}</td>
-          <td>${gps}</td>
-          <td><button class="row-delete-btn" title="Delete"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>
-        </tr>`;
+        const fuelCol = b.fuelLevelPct != null
+          ? (b.fuelLevelPct > 50 ? '#34d399' : b.fuelLevelPct > 20 ? '#fbbf24' : '#f87171') : '';
+        let cells = `<td class="td-ts-compact">${fmtTs(b.timestamp)}</td>`;
+        cells += `<td><span class="ev-badge" style="--ev-color:${safeCssColor(cfg.color) || 'var(--fg2)'}">${svgIco} ${escHTML(cfg.label)}</span></td>`;
+        cells += `<td>${valStr}</td>`;
+        cells += `<td>${durS}</td>`;
+        cells += `<td>${spd}</td>`;
+        if (alHasRpm)   cells += `<td>${b.engineRpm != null ? b.engineRpm.toLocaleString() + '\u00a0rpm' : '\u2013'}</td>`;
+        if (alHasFuel)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${b.fuelLevelPct != null ? b.fuelLevelPct + '%' : '\u2013'}</td>`;
+        if (alHasOdo)   cells += `<td>${b.odometerKm != null ? (b.odometerKm / 1000).toFixed(1) + '\u00a0km' : '\u2013'}</td>`;
+        if (alHasDist)  cells += `<td>${b.journeyDistanceKm != null ? b.journeyDistanceKm.toFixed(2) + '\u00a0km' : '\u2013'}</td>`;
+        if (alHasJFuel) cells += `<td>${b.journeyFuelConsumedL != null ? b.journeyFuelConsumedL.toFixed(3) + '\u00a0L' : '\u2013'}</td>`;
+        if (alHasSats)  cells += `<td>${b.gpsSatellites != null ? b.gpsSatellites : '\u2013'}</td>`;
+        cells += `<td>${journey}</td>`;
+        cells += `<td>${gps}</td>`;
+        cells += `<td><button class="row-delete-btn" title="Delete"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>`;
+        return `<tr data-id="${escAttr(b.id)}">${cells}</tr>`;
       }).join('')}</tbody>
       </table>
     </div>`;

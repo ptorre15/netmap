@@ -79,6 +79,7 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(CreateDeviceLifecycleEvent())              // device power lifecycle events (boot/sleep/wake_up)
     app.migrations.add(AddVehicleEventIndexes())                  // idx_ve_imei_ts + idx_ve_journey (README_JOURNEY_API.md)
     app.migrations.add(AddGpsFixTypeToVehicleEvents())            // gps_fix_type on vehicle_events (spec v6)
+    app.migrations.add(AddTelemetryToDriverBehaviorEvents())      // odometer/fuel/rpm/gps telemetry snapshot on driver_behavior_events
     app.migrations.add(AddLoadEstimationToVehicleEvents())        // load_confidence/samples/m_total_kg/m_load_kg on vehicle_events
     app.migrations.add(AddGpsToDeviceLifecycleEvents())           // GPS fields + gps_fix_type on device_lifecycle_events (spec v6)
     app.migrations.add(AddLastAppliedConfigVersion())             // last_applied_config_version on tracker_configs

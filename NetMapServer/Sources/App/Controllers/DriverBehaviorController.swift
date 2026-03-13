@@ -36,32 +36,49 @@ final class DriverBehaviorEvent: Model, Content, @unchecked Sendable {
     @Field(key: "alert_value_max")             var alertValueMax:   Double
     @Field(key: "alert_duration_ms")           var alertDurationMs: Int
     @Field(key: "timestamp")                   var timestamp:       Date
-    @OptionalField(key: "latitude")            var latitude:        Double?
-    @OptionalField(key: "longitude")           var longitude:       Double?
-    @OptionalField(key: "heading_deg")         var headingDeg:      Double?
-    @OptionalField(key: "speed_kmh")           var speedKmh:        Double?
-    @Field(key: "received_at")                 var receivedAt:      Date
+    @OptionalField(key: "latitude")                var latitude:             Double?
+    @OptionalField(key: "longitude")               var longitude:            Double?
+    @OptionalField(key: "heading_deg")             var headingDeg:           Double?
+    @OptionalField(key: "speed_kmh")               var speedKmh:             Double?
+    @OptionalField(key: "odometer_km")             var odometerKm:           Double?
+    @OptionalField(key: "journey_distance_km")     var journeyDistanceKm:    Double?
+    @OptionalField(key: "fuel_level_pct")          var fuelLevelPct:         Int?
+    @OptionalField(key: "journey_fuel_consumed_l") var journeyFuelConsumedL: Double?
+    @OptionalField(key: "engine_rpm")              var engineRpm:            Int?
+    @OptionalField(key: "gps_satellites")          var gpsSatellites:        Int?
+    @OptionalField(key: "gps_fix_type")            var gpsFixType:           Int?
+    @Field(key: "received_at")                     var receivedAt:           Date
 
     init() {}
 
     init(imei: String, journeyID: String, vehicleID: String, vehicleName: String,
          alertTypeInt: Int, alertValueMax: Double, alertDurationMs: Int,
          timestamp: Date, latitude: Double?, longitude: Double?,
-         headingDeg: Double?, speedKmh: Double?) {
-        self.imei            = imei
-        self.journeyID       = journeyID
-        self.vehicleID       = vehicleID
-        self.vehicleName     = vehicleName
-        self.alertTypeInt    = alertTypeInt
-        self.alertType       = behaviorTypeName(alertTypeInt)
-        self.alertValueMax   = alertValueMax
-        self.alertDurationMs = alertDurationMs
-        self.timestamp       = timestamp
-        self.latitude        = latitude
-        self.longitude       = longitude
-        self.headingDeg      = headingDeg
-        self.speedKmh        = speedKmh
-        self.receivedAt      = Date()
+         headingDeg: Double?, speedKmh: Double?,
+         odometerKm: Double?, journeyDistanceKm: Double?,
+         fuelLevelPct: Int?, journeyFuelConsumedL: Double?,
+         engineRpm: Int?, gpsSatellites: Int?, gpsFixType: Int?) {
+        self.imei                 = imei
+        self.journeyID            = journeyID
+        self.vehicleID            = vehicleID
+        self.vehicleName          = vehicleName
+        self.alertTypeInt         = alertTypeInt
+        self.alertType            = behaviorTypeName(alertTypeInt)
+        self.alertValueMax        = alertValueMax
+        self.alertDurationMs      = alertDurationMs
+        self.timestamp            = timestamp
+        self.latitude             = latitude
+        self.longitude            = longitude
+        self.headingDeg           = headingDeg
+        self.speedKmh             = speedKmh
+        self.odometerKm           = odometerKm
+        self.journeyDistanceKm    = journeyDistanceKm
+        self.fuelLevelPct         = fuelLevelPct
+        self.journeyFuelConsumedL = journeyFuelConsumedL
+        self.engineRpm            = engineRpm
+        self.gpsSatellites        = gpsSatellites
+        self.gpsFixType           = gpsFixType
+        self.receivedAt           = Date()
     }
 }
 
@@ -80,11 +97,11 @@ struct CreateDriverBehaviorEvent: AsyncMigration {
             .field("alert_value_max",  .double,   .required)
             .field("alert_duration_ms",.int,      .required)
             .field("timestamp",        .datetime, .required)
-            .field("latitude",         .double)
-            .field("longitude",        .double)
-            .field("heading_deg",      .double)
-            .field("speed_kmh",        .double)
-            .field("received_at",      .datetime, .required)
+            .field("latitude",                 .double)
+            .field("longitude",                .double)
+            .field("heading_deg",              .double)
+            .field("speed_kmh",                .double)
+            .field("received_at",              .datetime, .required)
             .create()
 
         // Indexes for common query patterns
@@ -101,6 +118,20 @@ struct CreateDriverBehaviorEvent: AsyncMigration {
     }
 }
 
+struct AddTelemetryToDriverBehaviorEvents: AsyncMigration {
+    func prepare(on db: Database) async throws {
+        guard let sql = db as? SQLDatabase else { return }
+        try? await sql.raw("ALTER TABLE driver_behavior_events ADD COLUMN odometer_km REAL").run()
+        try? await sql.raw("ALTER TABLE driver_behavior_events ADD COLUMN journey_distance_km REAL").run()
+        try? await sql.raw("ALTER TABLE driver_behavior_events ADD COLUMN fuel_level_pct INTEGER").run()
+        try? await sql.raw("ALTER TABLE driver_behavior_events ADD COLUMN journey_fuel_consumed_l REAL").run()
+        try? await sql.raw("ALTER TABLE driver_behavior_events ADD COLUMN engine_rpm INTEGER").run()
+        try? await sql.raw("ALTER TABLE driver_behavior_events ADD COLUMN gps_satellites INTEGER").run()
+        try? await sql.raw("ALTER TABLE driver_behavior_events ADD COLUMN gps_fix_type INTEGER").run()
+    }
+    func revert(on db: Database) async throws { /* SQLite does not support DROP COLUMN */ }
+}
+
 // MARK: - Response DTOs
 
 struct DriverBehaviorEventResponse: Content {
@@ -115,8 +146,16 @@ struct DriverBehaviorEventResponse: Content {
     var timestamp:       Date
     var latitude:        Double?
     var longitude:       Double?
-    var headingDeg:      Double?
-    var speedKmh:        Double?
+    var headingDeg:           Double?
+    var speedKmh:             Double?
+    var odometerKm:           Double?
+    var journeyDistanceKm:    Double?
+    var fuelLevelPct:         Int?
+    var journeyFuelConsumedL: Double?
+    var engineRpm:            Int?
+    var gpsSatellites:        Int?
+    var gpsFixType:           Int?
+    var receivedAt:           Date
 }
 
 struct BehaviorTypeStat: Content {
@@ -239,8 +278,16 @@ struct DriverBehaviorController: RouteCollection {
                 timestamp:       r.timestamp,
                 latitude:        r.latitude,
                 longitude:       r.longitude,
-                headingDeg:      r.headingDeg,
-                speedKmh:        r.speedKmh
+                headingDeg:           r.headingDeg,
+                speedKmh:             r.speedKmh,
+                odometerKm:           r.odometerKm,
+                journeyDistanceKm:    r.journeyDistanceKm,
+                fuelLevelPct:         r.fuelLevelPct,
+                journeyFuelConsumedL: r.journeyFuelConsumedL,
+                engineRpm:            r.engineRpm,
+                gpsSatellites:        r.gpsSatellites,
+                gpsFixType:           r.gpsFixType,
+                receivedAt:           r.receivedAt
             )
         }
     }

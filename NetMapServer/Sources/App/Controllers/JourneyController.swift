@@ -137,18 +137,25 @@ struct VehicleEventController: RouteCollection {
                     behaviorJourneyID = lastEvent?.journeyID ?? "no-journey"
                 }
                 let dbe = DriverBehaviorEvent(
-                    imei:            imei,
-                    journeyID:       behaviorJourneyID,
-                    vehicleID:       vehicleID,
-                    vehicleName:     vehicleName,
-                    alertTypeInt:    rawType,
-                    alertValueMax:   alertValue,
-                    alertDurationMs: alertMs,
-                    timestamp:       validTimestamp(p.timestamp),
-                    latitude:        p.latitude,
-                    longitude:       p.longitude,
-                    headingDeg:      p.headingDeg,
-                    speedKmh:        p.speedKmh
+                    imei:                 imei,
+                    journeyID:            behaviorJourneyID,
+                    vehicleID:            vehicleID,
+                    vehicleName:          vehicleName,
+                    alertTypeInt:         rawType,
+                    alertValueMax:        alertValue,
+                    alertDurationMs:      alertMs,
+                    timestamp:            validTimestamp(p.timestamp),
+                    latitude:             p.latitude,
+                    longitude:            p.longitude,
+                    headingDeg:           p.headingDeg,
+                    speedKmh:             p.speedKmh,
+                    odometerKm:           p.odometerKm,
+                    journeyDistanceKm:    p.journeyDistanceKm,
+                    fuelLevelPct:         p.fuelLevelPct,
+                    journeyFuelConsumedL: p.journeyFuelConsumedL,
+                    engineRpm:            p.engineRpm,
+                    gpsSatellites:        p.gpsSatellites,
+                    gpsFixType:           p.gpsFixType
                 )
                 try await dbe.save(on: req.db)
                 stats.savedDriverBehavior += 1

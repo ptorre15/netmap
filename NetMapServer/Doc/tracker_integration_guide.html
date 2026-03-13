@@ -192,7 +192,7 @@
   <div class="meta">
     <span>Server: <strong>https://92-137-172-240.nip.io</strong></span>
     <span>TLS: <strong>TLS 1.3 / HTTP2 (Let's Encrypt)</strong></span>
-    <span>Version: <strong>1.0 — 4 mars 2026</strong></span>
+    <span>Version: <strong>1.1 — 13 mars 2026</strong></span>
   </div>
 </header>
 
@@ -494,16 +494,14 @@
       <tr><td class="field">longitude</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">—</td></tr>
       <tr><td class="field">headingDeg</td><td class="type">number 0–360</td><td class="opt">Optional</td><td class="desc">—</td></tr>
       <tr><td class="field">speedKmh</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">—</td></tr>
-      <tr><td class="field">odometerKm</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">—</td></tr>
-      <tr><td class="field">distanceElapsedKm</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">Distance since last event</td></tr>
-      <tr><td class="field">journeyDistanceKm</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">Cumulative journey distance</td></tr>
-      <tr><td class="field">fuelLevelPct</td><td class="type">integer 0–100</td><td class="opt">Optional</td><td class="desc">—</td></tr>
-      <tr><td class="field">fuelConsumedL</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">Fuel used since last event (L)</td></tr>
-      <tr><td class="field">journeyFuelConsumedL</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">Cumulative fuel since journey_start (L)</td></tr>
-      <tr><td class="field">engineRpm</td><td class="type">integer</td><td class="opt">Optional</td><td class="desc">—</td></tr>
-      <tr><td class="field">engineTempC</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">—</td></tr>
-      <tr><td class="field">obdCode</td><td class="type">string</td><td class="opt">Optional</td><td class="desc">e.g. <code class="inline">"P0300"</code></td></tr>
-      <tr><td class="field">driverID</td><td class="type">string</td><td class="opt">Optional</td><td class="desc">Driver identifier (NFC card, PIN, etc.)</td></tr>
+      <tr><td class="field">odometerKm</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">Absolute odometer reading (km)</td></tr>
+      <tr><td class="field">journeyDistanceKm</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">Cumulative distance since journey_start (km)</td></tr>
+      <tr><td class="field">fuelLevelPct</td><td class="type">integer 0–100</td><td class="opt">Optional</td><td class="desc">OBD fuel tank level (%)</td></tr>
+      <tr><td class="field">journeyFuelConsumedL</td><td class="type">number</td><td class="opt">Optional</td><td class="desc">Cumulative fuel consumed since journey_start (L)</td></tr>
+      <tr><td class="field">engineRpm</td><td class="type">integer</td><td class="opt">Optional</td><td class="desc">OBD engine RPM</td></tr>
+      <tr><td class="field">gpsSatellites</td><td class="type">integer</td><td class="opt">Optional</td><td class="desc">Number of satellites used in the GPS fix</td></tr>
+      <tr><td class="field">gpsFixType</td><td class="type">integer</td><td class="opt">Optional</td><td class="desc">0 = no fix · 2 = 2D · 3 = 3D · 4 = GNSS+DR</td></tr>
+      <tr><td class="field">driverIdent</td><td class="type">string</td><td class="opt">Optional</td><td class="desc">Driver identifier (NFC card, PIN, etc.)</td></tr>
     </table>
 
     <h3>Example — minimal journey (single object)</h3>
@@ -527,11 +525,11 @@
     <span class="k">"longitude"</span>:             <span class="n">2.3541</span>,
     <span class="k">"speedKmh"</span>:              <span class="n">47.2</span>,
     <span class="k">"headingDeg"</span>:            <span class="n">83</span>,
-    <span class="k">"engineRpm"</span>:             <span class="n">1820</span>,
-    <span class="k">"engineTempC"</span>:           <span class="n">88.5</span>,
-    <span class="k">"fuelLevelPct"</span>:          <span class="n">62</span>,
-    <span class="k">"distanceElapsedKm"</span>:    <span class="n">0.22</span>,
-    <span class="k">"journeyDistanceKm"</span>:    <span class="n">0.22</span>
+    <span class="k">"engineRpm"</span>:          <span class="n">1820</span>,
+    <span class="k">"fuelLevelPct"</span>:       <span class="n">62</span>,
+    <span class="k">"gpsSatellites"</span>:      <span class="n">10</span>,
+    <span class="k">"gpsFixType"</span>:         <span class="n">3</span>,       <span class="cm">// 3D fix</span>
+    <span class="k">"journeyDistanceKm"</span>:  <span class="n">0.22</span>
   }
 ]</code></pre>
 
@@ -559,14 +557,15 @@
     <p>Sent to the same <code class="inline">POST /api/vehicle-events</code> endpoint with <code class="inline">eventType = "driver_behavior"</code>. Stored in a separate table — does not affect journey state.</p>
 
     <h3>Alert type codes</h3>
+    <p>Codes match <code class="inline">alert_type_t</code> in the tracker firmware (<code class="inline">driver_behavior.c</code>). Code 0 (<code class="inline">ALERT_NONE</code>) is never sent.</p>
     <table>
       <tr><th>driverBehaviorType</th><th>Alert</th><th>alertValueMax unit</th></tr>
-      <tr><td class="type">0</td><td>Harsh acceleration</td><td class="desc">m/s²</td></tr>
-      <tr><td class="type">1</td><td>Hard braking</td><td class="desc">m/s²</td></tr>
-      <tr><td class="type">2</td><td>Sharp cornering</td><td class="desc">m/s² (lateral)</td></tr>
-      <tr><td class="type">3</td><td>Overspeed</td><td class="desc">km/h (peak)</td></tr>
-      <tr><td class="type">4</td><td>Over-revving</td><td class="desc">RPM</td></tr>
+      <tr><td class="type">1</td><td>Over-revving</td><td class="desc">RPM</td></tr>
+      <tr><td class="type">2</td><td>Hard braking</td><td class="desc">m/s²</td></tr>
+      <tr><td class="type">3</td><td>Harsh acceleration</td><td class="desc">m/s²</td></tr>
+      <tr><td class="type">4</td><td>Sharp cornering</td><td class="desc">m/s² (lateral)</td></tr>
       <tr><td class="type">5</td><td>Prolonged idling</td><td class="desc">seconds</td></tr>
+      <tr><td class="type">6</td><td>Overspeed</td><td class="desc">km/h (peak)</td></tr>
     </table>
 
     <h3>Required fields (on top of imei)</h3>
@@ -577,18 +576,42 @@
       <tr><td class="field">alertDurationMs</td><td class="type">integer ≥ 0</td><td class="req">Yes</td><td class="desc">Duration of the alert in milliseconds</td></tr>
     </table>
 
-    <pre><code><span class="cm">// Hard braking alert</span>
+    <h3>Optional telemetry snapshot (same fields as driving events)</h3>
+    <p>Include these fields to capture a vehicle snapshot at the moment of the alert. They are stored alongside the alert and displayed in the dashboard.</p>
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+      <tr><td class="field">latitude</td><td class="type">number</td><td class="desc">GPS latitude (decimal degrees)</td></tr>
+      <tr><td class="field">longitude</td><td class="type">number</td><td class="desc">GPS longitude (decimal degrees)</td></tr>
+      <tr><td class="field">headingDeg</td><td class="type">integer</td><td class="desc">Heading in degrees (0–360)</td></tr>
+      <tr><td class="field">speedKmh</td><td class="type">number</td><td class="desc">Speed in km/h</td></tr>
+      <tr><td class="field">engineRpm</td><td class="type">integer</td><td class="desc">Engine RPM</td></tr>
+      <tr><td class="field">fuelLevelPct</td><td class="type">integer</td><td class="desc">Fuel level as a percentage (0–100)</td></tr>
+      <tr><td class="field">odometerKm</td><td class="type">number</td><td class="desc">Total odometer in km (raw from OBD, divide by 1000 for display)</td></tr>
+      <tr><td class="field">journeyDistanceKm</td><td class="type">number</td><td class="desc">Distance travelled since journey start (km)</td></tr>
+      <tr><td class="field">journeyFuelConsumedL</td><td class="type">number</td><td class="desc">Fuel consumed since journey start (litres)</td></tr>
+      <tr><td class="field">gpsSatellites</td><td class="type">integer</td><td class="desc">Number of GPS satellites in view</td></tr>
+      <tr><td class="field">gpsFixType</td><td class="type">integer</td><td class="desc">GPS fix quality (0 = none, 1 = GPS, 2 = DGPS, 3 = RTK)</td></tr>
+    </table>
+
+    <pre><code><span class="cm">// Hard braking alert (type 2)</span>
 {
   <span class="k">"imei"</span>:                <span class="s">"354678901234567"</span>,
   <span class="k">"eventType"</span>:           <span class="s">"driver_behavior"</span>,
   <span class="k">"timestamp"</span>:           <span class="s">"2026-03-04T09:22:14Z"</span>,
-  <span class="k">"driverBehaviorType"</span>:  <span class="n">1</span>,
-  <span class="k">"alertValueMax"</span>:       <span class="n">9.4</span>,    <span class="cm">// 9.4 m/s²</span>
-  <span class="k">"alertDurationMs"</span>:     <span class="n">1200</span>,   <span class="cm">// 1.2 seconds</span>
+  <span class="k">"driverBehaviorType"</span>:  <span class="n">2</span>,    <span class="cm">// 2 = braking</span>
+  <span class="k">"alertValueMax"</span>:       <span class="n">9.4</span>,  <span class="cm">// 9.4 m/s²</span>
+  <span class="k">"alertDurationMs"</span>:     <span class="n">1200</span>, <span class="cm">// 1.2 seconds</span>
   <span class="k">"latitude"</span>:            <span class="n">48.8712</span>,
   <span class="k">"longitude"</span>:           <span class="n">2.3899</span>,
   <span class="k">"speedKmh"</span>:            <span class="n">48.0</span>,
-  <span class="k">"headingDeg"</span>:          <span class="n">95</span>
+  <span class="k">"headingDeg"</span>:          <span class="n">95</span>,
+  <span class="k">"engineRpm"</span>:           <span class="n">2100</span>,
+  <span class="k">"fuelLevelPct"</span>:        <span class="n">72</span>,
+  <span class="k">"odometerKm"</span>:          <span class="n">54321.8</span>,
+  <span class="k">"journeyDistanceKm"</span>:   <span class="n">12.54</span>,
+  <span class="k">"journeyFuelConsumedL"</span>:<span class="n">1.230</span>,
+  <span class="k">"gpsSatellites"</span>:       <span class="n">10</span>,
+  <span class="k">"gpsFixType"</span>:          <span class="n">3</span>
 }</code></pre>
   </section>
 
@@ -815,7 +838,7 @@ delay(n) = min(base_delay_s * 2^n, max_delay_s) * (1 ± jitter_pct%)</code></pre
 </div>
 
 <footer>
-  NetMap Integration Guide · Generated 4 mars 2026 · Server: <strong>https://92-137-172-240.nip.io</strong>
+  NetMap Integration Guide · v1.1 · Generated 13 mars 2026 · Server: <strong>https://92-137-172-240.nip.io</strong>
 </footer>
 
 </body>
