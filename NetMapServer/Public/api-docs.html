@@ -102,6 +102,7 @@
     .auth-admin   { background: rgba(248,113,113,.15);color: var(--red);   }
     .auth-public  { background: rgba(110,110,115,.12); color: var(--fg3);  }
     .auth-optbearer { background: rgba(34,211,238,.12); color: var(--teal);}
+    .auth-keyorbearer { background: rgba(59,130,246,.12); color: var(--blue); }
 
     .ep-body { padding: 16px 18px; display: none; }
     .ep-body.open { display: block; }
@@ -256,6 +257,7 @@
     <h3>Authentication schemes</h3>
     <div class="legend-row"><span class="auth-badge auth-public">Public</span> No authentication required.</div>
     <div class="legend-row"><span class="auth-badge auth-optbearer">Optional Bearer</span> Response filtered to user's vehicles when token provided; full data otherwise.</div>
+    <div class="legend-row"><span class="auth-badge auth-keyorbearer">X-API-Key / Bearer</span> Requires either a valid <code>X-API-Key</code> header or a <code>Bearer</code> token. Non-admin users see only their vehicles.</div>
     <div class="legend-row"><span class="auth-badge auth-apikey">X-API-Key</span> Header <code>X-API-Key: &lt;key&gt;</code> — used by iOS app and tracker devices.</div>
     <div class="legend-row"><span class="auth-badge auth-bearer">Bearer</span> Header <code>Authorization: Bearer &lt;token&gt;</code> — obtained from <code>/api/auth/login</code>.</div>
     <div class="legend-row"><span class="auth-badge auth-admin">Admin</span> Bearer token with <code>role: "admin"</code>.</div>
@@ -675,7 +677,7 @@
         <tr><td class="field-name">journeyFuelConsumedL</td><td class="field-type">double</td><td class="optional">opt</td><td>Cumulative journey fuel (L)</td></tr>
         <tr><td class="field-name">engineRpm</td><td class="field-type">int</td><td class="optional">opt</td><td>Engine RPM</td></tr>
         <tr><td class="field-name">gpsSatellites</td><td class="field-type">int</td><td class="optional">opt</td><td>Number of GPS satellites in view</td></tr>
-        <tr><td class="field-name">gpsFixType</td><td class="field-type">int</td><td class="optional">opt</td><td>GPS fix type (0 = none, 2 = 2D, 3 = 3D)</td></tr>
+        <tr><td class="field-name">gpsFixType</td><td class="field-type">int</td><td class="optional">opt</td><td>GPS fix type (0 = none, 2 = 2D, 3 = 3D, 4 = GNSS+DR)</td></tr>
         <tr><td class="field-name">batteryVoltageV</td><td class="field-type">double</td><td class="optional">opt</td><td>Device battery voltage</td></tr>
         <tr><td class="field-name">configVersion</td><td class="field-type">int</td><td class="optional">opt</td><td>Tracker's applied config version (triggers config push if stale)</td></tr>
         <tr><td class="field-name">resetReason</td><td class="field-type">string</td><td class="optional">opt</td><td>ESP reset reason (lifecycle events)</td></tr>
@@ -684,7 +686,7 @@
 
       <div class="sub-title">Driver behavior fields (eventType = <code>driver_behavior</code>)</div>
       <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
-        <tr><td class="field-name">driverBehaviorType</td><td class="field-type">int</td><td class="required">✓</td><td>Alert type: 1 = harsh braking, 2 = harsh acceleration, 3 = harsh cornering, 4 = overspeed</td></tr>
+        <tr><td class="field-name">driverBehaviorType</td><td class="field-type">int</td><td class="required">✓</td><td>Alert type: 1 = revving, 2 = braking, 3 = acceleration, 4 = cornering, 5 = idling, 6 = overspeed</td></tr>
         <tr><td class="field-name">alertValueMax</td><td class="field-type">double</td><td class="required">✓</td><td>Peak value of the alert (m/s² or km/h)</td></tr>
         <tr><td class="field-name">alertDurationMs</td><td class="field-type">int</td><td class="required">✓</td><td>Duration of the alert in milliseconds</td></tr>
       </table>
@@ -739,7 +741,7 @@
     <div class="ep-header" onclick="toggle(this)">
       <span class="method-badge GET">GET</span>
       <span class="ep-path">/api/vehicle-events</span>
-      <span class="auth-badge auth-public">Public</span>
+      <span class="auth-badge auth-keyorbearer">X-API-Key / Bearer</span>
       <span class="ep-summary">List raw tracker events</span>
     </div>
     <div class="ep-body">
@@ -749,6 +751,8 @@
         <tr><td class="field-name">vehicle</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by vehicle ID</td></tr>
         <tr><td class="field-name">imei</td><td class="field-type">string</td><td>–</td><td>Filter by IMEI</td></tr>
         <tr><td class="field-name">event_type</td><td class="field-type">string</td><td>–</td><td>Filter by event type</td></tr>
+        <tr><td class="field-name">from</td><td class="field-type">ISO 8601</td><td>–</td><td>Only events at or after this timestamp</td></tr>
+        <tr><td class="field-name">to</td><td class="field-type">ISO 8601</td><td>–</td><td>Only events at or before this timestamp</td></tr>
         <tr><td class="field-name">limit</td><td class="field-type">int</td><td>1000</td><td>Max events. Up to 2000 recommended for track display.</td></tr>
       </table>
       <p>Returns array sorted ascending by timestamp.</p>
@@ -759,14 +763,16 @@
     <div class="ep-header" onclick="toggle(this)">
       <span class="method-badge GET">GET</span>
       <span class="ep-path">/api/vehicle-events/journeys</span>
-      <span class="auth-badge auth-public">Public</span>
+      <span class="auth-badge auth-keyorbearer">X-API-Key / Bearer</span>
       <span class="ep-summary">Journey summaries (one row per journey)</span>
     </div>
     <div class="ep-body">
       <div class="sub-title">Query parameters</div>
       <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
         <tr><td class="field-name">vehicle</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by vehicle ID</td></tr>
-        <tr><td class="field-name">limit</td><td class="field-type">int</td><td>50</td><td>Max journeys returned</td></tr>
+        <tr><td class="field-name">from</td><td class="field-type">ISO 8601</td><td>–</td><td>Only journeys that started at or after this timestamp</td></tr>
+        <tr><td class="field-name">to</td><td class="field-type">ISO 8601</td><td>–</td><td>Only journeys that started at or before this timestamp</td></tr>
+        <tr><td class="field-name">limit</td><td class="field-type">int</td><td>50</td><td>Max journeys returned (capped at 500)</td></tr>
       </table>
       <div class="code-label">Response 200 — array of JourneySummary</div>
       <div class="code-block">[{
@@ -822,7 +828,7 @@
         <tr><td class="field-name">journey</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by journey ID</td></tr>
         <tr><td class="field-name">vehicle</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by vehicle ID</td></tr>
         <tr><td class="field-name">imei</td><td class="field-type">string</td><td>–</td><td>Filter by IMEI</td></tr>
-        <tr><td class="field-name">alert_type</td><td class="field-type">string</td><td>–</td><td><code>harsh_braking</code> · <code>harsh_acceleration</code> · <code>harsh_cornering</code> · <code>overspeed</code></td></tr>
+        <tr><td class="field-name">alert_type</td><td class="field-type">string</td><td>–</td><td><code>revving</code> · <code>braking</code> · <code>acceleration</code> · <code>cornering</code> · <code>idling</code> · <code>overspeed</code></td></tr>
         <tr><td class="field-name">limit</td><td class="field-type">int</td><td>500</td><td>Max rows returned</td></tr>
       </table>
     </div>
