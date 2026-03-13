@@ -124,10 +124,17 @@ private func appendSecurityEventLog(path: String, line: String, logger: Logger) 
             try data.write(to: url, options: [.atomic])
             return
         }
-        let fh = try FileHandle(forWritingTo: url)
-        defer { try? fh.close() }
-        try fh.seekToEnd()
-        try fh.write(contentsOf: data)
+        if #available(macOS 10.15.4, *) {
+            let fh = try FileHandle(forWritingTo: url)
+            defer { try? fh.close() }
+            try fh.seekToEnd()
+            try fh.write(contentsOf: data)
+        } else {
+            let fh = FileHandle(forWritingAtPath: path)!
+            defer { fh.closeFile() }
+            fh.seekToEndOfFile()
+            fh.write(data)
+        }
     } catch {
         logger.warning("Failed to append security event file log at \(path): \(error.localizedDescription)")
     }

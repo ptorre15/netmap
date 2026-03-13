@@ -3,6 +3,9 @@ import PackageDescription
 
 let package = Package(
     name: "NetMapServer",
+    platforms: [
+        .macOS(.v10_15)
+    ],
     dependencies: [
         .package(url: "https://github.com/vapor/vapor.git",                from: "4.92.0"),
         .package(url: "https://github.com/vapor/fluent.git",               from: "4.9.0"),
