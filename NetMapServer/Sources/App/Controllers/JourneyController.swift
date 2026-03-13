@@ -166,7 +166,8 @@ struct VehicleEventController: RouteCollection {
             // ── 3. Journey stats: store in separate table, skip journey logic ──────────
             if eventType == "journey_stats" {
                 guard let j = p.journey, let b = p.boot, let lt = p.lifetime else {
-                    throw Abort(.badRequest, reason: "journey_stats requires journey, boot and lifetime objects")
+                    req.logger.warning("⚠️ [journey_stats] imei=\(imei) missing journey/boot/lifetime objects — skipping")
+                    continue
                 }
                 let lastVE = try await VehicleEvent.query(on: req.db)
                     .filter(\.$imei == imei)
