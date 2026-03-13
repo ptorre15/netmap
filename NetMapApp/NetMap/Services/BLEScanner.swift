@@ -388,40 +388,62 @@ class BLEScanner: NSObject, ObservableObject {
     // MARK: - ELA Innovation Decoder (Company ID 0x0757)
 
     /// Decodes an ELA Innovation beacon from raw manufacturer data.
-    /// Layout: [0-1]=CompanyID 0x0757  [2]=DataType  [3...]=payload
-    /// Product variant inferred from the device name prefix ("C ID" or "P ID").
+    /// Mfr Spec Data layout (firmware ≥2.0.0):
+    ///   [0-1] = CompanyID 0x0757 (LE: 0x57 0x07)
+    ///   [2]   = Data format ID (0x06=ID, 0x12=T, 0x21=RHT, 0x32=MAG, …)
+    ///   [3…]  = Payload
+    /// Service Data mode (firmware <2.0.0): no mfr data — detected by name only.
     private func parseELAData(rawManufacturerData: Data?, deviceName: String?) -> ELAData? {
-        guard let raw = rawManufacturerData, raw.count >= 3 else { return nil }
-        let bytes = [UInt8](raw)
+        let variant = elaVariant(from: deviceName)
 
-        // Company ID check: 0x0757 (LE: 0x57 0x07)
-        let companyID = UInt16(bytes[0]) | (UInt16(bytes[1]) << 8)
-        guard companyID == 0x0757 else { return nil }
+        // Try manufacturer-specific data first (firmware ≥2.0.0)
+        if let raw = rawManufacturerData, raw.count >= 3 {
+            let bytes = [UInt8](raw)
+            let companyID = UInt16(bytes[0]) | (UInt16(bytes[1]) << 8)
+            if companyID == 0x0757 {
+                let dataType = bytes[2]
+                let payload  = bytes.count > 3 ? Array(bytes[3...]) : []
 
-        let dataType = bytes[2]
-        let payload  = bytes.count > 3 ? Array(bytes[3...]) : []
+                var mfrNum: String?
+                // ID / ID+ format: dataType 0x06, payload = MFR_Num[0..5]
+                if dataType == 0x06, payload.count >= 6 {
+                    mfrNum = payload[0..<6].map { String(format: "%02X", $0) }.joined()
+                }
 
-        // Determine product variant from device name prefix
-        let variant: ELAData.ProductVariant
-        if let n = deviceName {
-            let up = n.uppercased()
-            if up.hasPrefix("C ID") || up.contains("COIN") {
-                variant = .coin
-            } else if up.hasPrefix("P ID") || up.contains("PUCK") {
-                variant = .puck
-            } else {
-                variant = .unknown
+                return ELAData(
+                    dataType:       dataType,
+                    payload:        payload,
+                    productVariant: variant,
+                    mfrNumber:      mfrNum,
+                    fullRawData:    bytes
+                )
             }
-        } else {
-            variant = .unknown
         }
 
+        // Fallback: detect by device name (Service Data mode / firmware <2.0.0)
+        guard variant != .unknown else { return nil }
         return ELAData(
-            dataType:       dataType,
-            payload:        payload,
-            productVariant: variant,
-            fullRawData:    bytes
+            dataType:           0,
+            payload:            [],
+            productVariant:     variant,
+            fullRawData:        [],
+            detectedByNameOnly: true
         )
+    }
+
+    /// Determines ELA product variant from the advertised device name.
+    private func elaVariant(from name: String?) -> ELAData.ProductVariant {
+        guard let n = name else { return .unknown }
+        let up = n.uppercased()
+        if up.hasPrefix("C ID") || up.hasPrefix("C T ") || up.hasPrefix("C RHT") ||
+           up.hasPrefix("C MAG") || up.hasPrefix("C MOV") || up.contains("COIN") {
+            return .coin
+        }
+        if up.hasPrefix("P ID") || up.hasPrefix("P T ") || up.hasPrefix("P RHT") ||
+           up.hasPrefix("P MAG") || up.hasPrefix("P MOV") || up.hasPrefix("P PIR") || up.contains("PUCK") {
+            return .puck
+        }
+        return .unknown
     }
 
     // MARK: - Apple AirTag / FindMy Decoder (Company ID 0x004C, type 0x12 / 0x1E)
@@ -586,10 +608,9 @@ extension BLEScanner: @preconcurrency CBCentralManagerDelegate {
             let (stihlConn, stihlBatt) = parseStihlData(rawManufacturerData: mfRaw)
             if let sc = stihlConn { devices[idx].stihlConnectorData = sc; lastKnownStihlConnector[peripheral.identifier] = sc }
             if let sb = stihlBatt { devices[idx].stihlBatteryData   = sb; lastKnownStihlBattery[peripheral.identifier]   = sb }
-            // Re-decode ELA
+            // Re-decode ELA — only overwrite when new parse yields data
             let ela = parseELAData(rawManufacturerData: mfRaw, deviceName: devices[idx].name)
-            devices[idx].elaData = ela
-            if let e = ela { lastKnownELAData[peripheral.identifier] = e }
+            if let e = ela { devices[idx].elaData = e; lastKnownELAData[peripheral.identifier] = e }
             // Re-decode AirTag / FindMy
             if let at = parseAirTagData(rawManufacturerData: mfRaw) {
                 devices[idx].airtagData = at

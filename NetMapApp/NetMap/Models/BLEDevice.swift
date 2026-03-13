@@ -362,18 +362,28 @@ struct StihlBatteryData: Equatable {
 // MARK: - ELA Innovation Data (Company ID 0x0757)
 
 /// Decoded payload for an ELA Innovation beacon.
-/// Manufacturer data layout:
+/// Manufacturer data layout (Mfr Spec mode, firmware ≥2.0.0):
 ///   [0-1]  Company ID 0x0757 (LE: 0x57 0x07)
-///   [2]    Protocol/Data type (0x06 = standard)
-///   [3-9]  Payload bytes (type-dependent)
+///   [2]    Data type / format ID:
+///            0x06 = ID format
+///            0x12 = Temperature (T) format
+///            0x21 = RHT (humidity+temp) format
+///            0x32 = MAG format
+///            0xF1 = Battery capacity (in scan response)
+///            0xF2 = Battery voltage (in scan response)
+///   [3...]  Payload bytes (type-dependent)
+/// Service Data mode (firmware <2.0.0): no manufacturer data, detection by name only.
 /// Product type identified by device name prefix:
-///   "C ID …" = ELA Blue Coin T (small)
-///   "P ID …" = ELA Blue Puck T (large)
+///   "C ID …" = ELA Blue Coin ID
+///   "P ID …" = ELA Blue Puck ID
 struct ELAData: Equatable {
-    var dataType: UInt8           // 0x06 = standard advertising
-    var payload: [UInt8]          // bytes [3...] after dataType
+    var dataType: UInt8           // 0x06 = ID, 0x12 = Temp, 0x21 = RHT, etc.
+    var payload: [UInt8]          // bytes after dataType
     var productVariant: ProductVariant
+    var mfrNumber: String?        // 6-byte MFR_Num hex (ID format, e.g. "AABBCCDDEEFF")
     var fullRawData: [UInt8]
+    /// True when detected only by device name (Service Data mode / no mfr data)
+    var detectedByNameOnly: Bool = false
 
     enum ProductVariant {
         case coin   // "C ID …" — ELA Blue Coin
