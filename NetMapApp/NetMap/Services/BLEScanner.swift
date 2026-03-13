@@ -581,7 +581,28 @@ extension BLEScanner: @preconcurrency CBCentralManagerDelegate {
         let isConnectable = (advertisementData[CBAdvertisementDataIsConnectable] as? Bool) ?? false
 
         let peripheralKey = peripheral.identifier.uuidString
-        if let idx = devices.firstIndex(where: { $0.id == peripheral.identifier }) {
+
+        // ── AirTag de-duplication: match by name when UUID rotates ──────
+        // iOS rotates AirTag CBPeripheral UUIDs. To avoid duplicate list entries
+        // for the same physical AirTag, check if an existing device with a
+        // different UUID but the same name is already an AirTag. If so, update
+        // that entry (keeping its stable list identity) and skip creating a new one.
+        let isAirTagAdvert = parseAirTagData(rawManufacturerData: mfRaw) != nil
+                          || syntheticAirTagIfNeeded(name: rawName, overflowUUIDs: overflowUUIDs, mfRaw: mfRaw) != nil
+
+        // Try exact UUID match first, then name-based AirTag match
+        let idx: Int? = {
+            if let i = devices.firstIndex(where: { $0.id == peripheral.identifier }) { return i }
+            if isAirTagAdvert, let name = rawName, !name.isEmpty,
+               let i = devices.firstIndex(where: { $0.airtagData != nil && $0.name == name }) {
+                // Update the stored UUID so future exact matches hit this entry
+                devices[i].id = peripheral.identifier
+                return i
+            }
+            return nil
+        }()
+
+        if let idx {
             // Update the existing device
             devices[idx].rssi     = rssi
             devices[idx].lastSeen = Date()

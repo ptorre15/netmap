@@ -209,6 +209,11 @@
     <a class="nav-item" href="#ve-push"><span class="method m-POST">POST</span>/api/vehicle-events</a>
     <a class="nav-item" href="#ve-list"><span class="method m-GET">GET</span>/api/vehicle-events</a>
     <a class="nav-item" href="#ve-journeys"><span class="method m-GET">GET</span>/api/vehicle-events/journeys</a>
+    <a class="nav-item" href="#ve-journey-stats"><span class="method m-GET">GET</span>/api/vehicle-events/journey-stats</a>
+    <a class="nav-item" href="#ve-driver-behavior"><span class="method m-GET">GET</span>/api/driver-behavior</a>
+    <a class="nav-item" href="#ve-db-summary"><span class="method m-GET">GET</span>/api/driver-behavior/summary</a>
+    <a class="nav-item" href="#ve-lifecycle"><span class="method m-GET">GET</span>/api/device-lifecycle</a>
+    <a class="nav-item" href="#ve-lifecycle-summary"><span class="method m-GET">GET</span>/api/device-lifecycle/summary</a>
     <a class="nav-item" href="#ve-delete-journey"><span class="method m-DELETE">DEL</span>/api/vehicle-events/journeys/:id</a>
     <a class="nav-item" href="#ve-delete-period"><span class="method m-DELETE">DEL</span>/api/vehicle-events</a>
   </div>
@@ -635,27 +640,98 @@
     </div>
     <div class="ep-body">
       <p>Accepts a single object or a JSON array. The server resolves <code>vehicleID</code> from the IMEI pairing and assigns a <code>journeyID</code> automatically (<code>journey_start</code> events create a new journey).</p>
-      <div class="note"><strong>Note:</strong> <code>journeyDistanceKm</code> is expected in <strong>metres</strong> (as sent by common GPS trackers). The server divides by 1000 for display.</div>
+
+      <div class="sub-title">Event types &amp; server routing</div>
+      <table><tr><th>eventType</th><th>Destination table</th><th>Notes</th></tr>
+        <tr><td class="field-name">journey_start</td><td>vehicle_events</td><td>Creates a new journeyID</td></tr>
+        <tr><td class="field-name">driving</td><td>vehicle_events</td><td>Default if eventType is omitted</td></tr>
+        <tr><td class="field-name">journey_end</td><td>vehicle_events</td><td>Closes current journey</td></tr>
+        <tr><td class="field-name">stopped</td><td>vehicle_events</td><td>Vehicle stopped after journey_end</td></tr>
+        <tr><td class="field-name">idle_start</td><td>vehicle_events</td><td>Engine idle detected</td></tr>
+        <tr><td class="field-name">idle_end</td><td>vehicle_events</td><td>Engine idle ended</td></tr>
+        <tr><td class="field-name">driver_behavior</td><td>driver_behavior_events</td><td>Requires driverBehaviorType, alertValueMax, alertDurationMs</td></tr>
+        <tr><td class="field-name">journey_stats</td><td>device_journey_stats</td><td>Requires journey, boot &amp; lifetime objects</td></tr>
+        <tr><td class="field-name">boot</td><td>device_lifecycle_events</td><td>Device cold start; auto-closes any open journey</td></tr>
+        <tr><td class="field-name">sleep</td><td>device_lifecycle_events</td><td>Device entering deep sleep</td></tr>
+        <tr><td class="field-name">wake_up</td><td>device_lifecycle_events</td><td>Device waking from sleep</td></tr>
+        <tr><td class="field-name">ping</td><td>device_lifecycle_events</td><td>Periodic heartbeat</td></tr>
+        <tr><td class="field-name">gps_acquired</td><td>device_lifecycle_events</td><td>GPS fix obtained</td></tr>
+        <tr><td class="field-name">gps_lost</td><td>device_lifecycle_events</td><td>GPS fix lost</td></tr>
+      </table>
+
       <div class="sub-title">Request body — VehicleEventPayload</div>
       <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
         <tr><td class="field-name">imei</td><td class="field-type">string</td><td class="required">✓</td><td>Tracker IMEI</td></tr>
-        <tr><td class="field-name">eventType</td><td class="field-type">string</td><td class="optional">opt</td><td><code>journey_start</code> · <code>driving</code> · <code>journey_end</code> (default: <code>driving</code>)</td></tr>
+        <tr><td class="field-name">eventType</td><td class="field-type">string</td><td class="optional">opt</td><td>See table above (default: <code>driving</code>)</td></tr>
         <tr><td class="field-name">timestamp</td><td class="field-type">ISO 8601 / epoch</td><td class="optional">opt</td><td>Default: server time</td></tr>
-        <tr><td class="field-name">latitude / longitude</td><td class="field-type">number</td><td class="optional">opt</td><td>GPS position</td></tr>
-        <tr><td class="field-name">headingDeg</td><td class="field-type">number</td><td class="optional">opt</td><td>Bearing in degrees</td></tr>
-        <tr><td class="field-name">speedKmh</td><td class="field-type">number</td><td class="optional">opt</td><td>Speed in km/h</td></tr>
-        <tr><td class="field-name">odometerKm</td><td class="field-type">number</td><td class="optional">opt</td><td>Total odometer reading in km</td></tr>
-        <tr><td class="field-name">distanceElapsedKm</td><td class="field-type">number</td><td class="optional">opt</td><td>Distance since last event (km)</td></tr>
-        <tr><td class="field-name">journeyDistanceKm</td><td class="field-type">number</td><td class="optional">opt</td><td>Cumulative journey distance (metres from tracker, stored as-is)</td></tr>
+        <tr><td class="field-name">latitude</td><td class="field-type">double</td><td class="optional">opt</td><td>GPS latitude</td></tr>
+        <tr><td class="field-name">longitude</td><td class="field-type">double</td><td class="optional">opt</td><td>GPS longitude</td></tr>
+        <tr><td class="field-name">headingDeg</td><td class="field-type">double</td><td class="optional">opt</td><td>Bearing in degrees</td></tr>
+        <tr><td class="field-name">speedKmh</td><td class="field-type">double</td><td class="optional">opt</td><td>Speed in km/h</td></tr>
+        <tr><td class="field-name">driverIdent</td><td class="field-type">string</td><td class="optional">opt</td><td>Driver identifier (stored as <code>driver_id</code> in DB)</td></tr>
+        <tr><td class="field-name">odometerKm</td><td class="field-type">double</td><td class="optional">opt</td><td>Total odometer reading in km</td></tr>
+        <tr><td class="field-name">journeyDistanceKm</td><td class="field-type">double</td><td class="optional">opt</td><td>Cumulative journey distance (km)</td></tr>
         <tr><td class="field-name">fuelLevelPct</td><td class="field-type">int</td><td class="optional">opt</td><td>Fuel level 0–100 %</td></tr>
-        <tr><td class="field-name">fuelConsumedL</td><td class="field-type">number</td><td class="optional">opt</td><td>Fuel consumed this event (L)</td></tr>
-        <tr><td class="field-name">journeyFuelConsumedL</td><td class="field-type">number</td><td class="optional">opt</td><td>Cumulative journey fuel (L)</td></tr>
+        <tr><td class="field-name">journeyFuelConsumedL</td><td class="field-type">double</td><td class="optional">opt</td><td>Cumulative journey fuel (L)</td></tr>
         <tr><td class="field-name">engineRpm</td><td class="field-type">int</td><td class="optional">opt</td><td>Engine RPM</td></tr>
-        <tr><td class="field-name">engineTempC</td><td class="field-type">number</td><td class="optional">opt</td><td>Engine temperature (°C)</td></tr>
-        <tr><td class="field-name">driverID</td><td class="field-type">string</td><td class="optional">opt</td><td>Driver identifier</td></tr>
-        <tr><td class="field-name">obdCode</td><td class="field-type">string</td><td class="optional">opt</td><td>OBD fault code</td></tr>
+        <tr><td class="field-name">gpsSatellites</td><td class="field-type">int</td><td class="optional">opt</td><td>Number of GPS satellites in view</td></tr>
+        <tr><td class="field-name">gpsFixType</td><td class="field-type">int</td><td class="optional">opt</td><td>GPS fix type (0 = none, 2 = 2D, 3 = 3D)</td></tr>
+        <tr><td class="field-name">batteryVoltageV</td><td class="field-type">double</td><td class="optional">opt</td><td>Device battery voltage</td></tr>
+        <tr><td class="field-name">configVersion</td><td class="field-type">int</td><td class="optional">opt</td><td>Tracker's applied config version (triggers config push if stale)</td></tr>
+        <tr><td class="field-name">resetReason</td><td class="field-type">string</td><td class="optional">opt</td><td>ESP reset reason (lifecycle events)</td></tr>
+        <tr><td class="field-name">wakeupSource</td><td class="field-type">string</td><td class="optional">opt</td><td>Wake-up source (lifecycle events)</td></tr>
       </table>
-      <p>Returns <code>201 Created</code>.</p>
+
+      <div class="sub-title">Driver behavior fields (eventType = <code>driver_behavior</code>)</div>
+      <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
+        <tr><td class="field-name">driverBehaviorType</td><td class="field-type">int</td><td class="required">✓</td><td>Alert type: 1 = harsh braking, 2 = harsh acceleration, 3 = harsh cornering, 4 = overspeed</td></tr>
+        <tr><td class="field-name">alertValueMax</td><td class="field-type">double</td><td class="required">✓</td><td>Peak value of the alert (m/s² or km/h)</td></tr>
+        <tr><td class="field-name">alertDurationMs</td><td class="field-type">int</td><td class="required">✓</td><td>Duration of the alert in milliseconds</td></tr>
+      </table>
+
+      <div class="sub-title">Journey stats (eventType = <code>journey_stats</code>)</div>
+      <p>All three objects are required. Sent once per journey at <code>journey_end</code>.</p>
+      <div class="code-block">{
+  <span class="hl-key">"journey"</span>:  { <span class="hl-key">"dbEventsSent"</span>: <span class="hl-num">42</span>, <span class="hl-key">"ffEventsSent"</span>: <span class="hl-num">0</span>, <span class="hl-key">"postFailures"</span>: <span class="hl-num">1</span> },
+  <span class="hl-key">"boot"</span>:     { <span class="hl-key">"dbEventsSent"</span>: <span class="hl-num">120</span>, <span class="hl-key">"ffEventsSent"</span>: <span class="hl-num">5</span>, <span class="hl-key">"postFailures"</span>: <span class="hl-num">3</span> },
+  <span class="hl-key">"lifetime"</span>: {
+    <span class="hl-key">"dbEventsSent"</span>: <span class="hl-num">9800</span>, <span class="hl-key">"ffEventsSent"</span>: <span class="hl-num">50</span>, <span class="hl-key">"postFailures"</span>: <span class="hl-num">12</span>,
+    <span class="hl-key">"rebootsTotal"</span>: <span class="hl-num">15</span>, <span class="hl-key">"rebootsException"</span>: <span class="hl-num">2</span>, <span class="hl-key">"rebootsBrownout"</span>: <span class="hl-num">1</span>
+  }
+}</div>
+
+      <div class="sub-title">Load estimation (eventType = <code>journey_start</code> / <code>driving</code> / <code>journey_end</code>)</div>
+      <table><tr><th>Field</th><th>Type</th><th>Req?</th><th>Description</th></tr>
+        <tr><td class="field-name">load.confidence</td><td class="field-type">string</td><td class="required">✓</td><td><code>low</code> · <code>medium</code> · <code>high</code></td></tr>
+        <tr><td class="field-name">load.samples</td><td class="field-type">int</td><td class="optional">opt</td><td>Number of IMU samples used</td></tr>
+        <tr><td class="field-name">load.mTotalKg</td><td class="field-type">double</td><td class="optional">opt</td><td>Estimated total vehicle mass (kg)</td></tr>
+        <tr><td class="field-name">load.mLoadKg</td><td class="field-type">double</td><td class="optional">opt</td><td>Estimated payload mass (kg)</td></tr>
+      </table>
+
+      <div class="sub-title">Response 201 — PushEventsResponse</div>
+      <p>The server piggybacks a tracker configuration update if <code>configVersion</code> is missing or older than the server's stored version.</p>
+      <div class="code-block">{
+  <span class="hl-key">"received"</span>: <span class="hl-num">1</span>,
+  <span class="hl-key">"config"</span>: {                          <span class="hl-cmt">// null if tracker config is current</span>
+    <span class="hl-key">"schemaVersion"</span>: <span class="hl-num">3</span>,
+    <span class="hl-key">"imei"</span>: <span class="hl-str">"867280066365446"</span>,
+    <span class="hl-key">"system"</span>: {
+      <span class="hl-key">"pingIntervalMin"</span>: <span class="hl-num">15</span>,
+      <span class="hl-key">"sleepDelayMin"</span>: <span class="hl-num">5</span>,
+      <span class="hl-key">"wakeUpSourcesEnabled"</span>: [<span class="hl-str">"accelerometer"</span>, <span class="hl-str">"timer"</span>]
+    },
+    <span class="hl-key">"driverBehavior"</span>: {
+      <span class="hl-key">"thresholds"</span>: {
+        <span class="hl-key">"harshBraking"</span>: <span class="hl-num">3.5</span>,
+        <span class="hl-key">"harshAcceleration"</span>: <span class="hl-num">3.0</span>,
+        <span class="hl-key">"harshCornering"</span>: <span class="hl-num">3.0</span>,
+        <span class="hl-key">"overspeed"</span>: <span class="hl-num">130.0</span>
+      },
+      <span class="hl-key">"minimumSpeedKmh"</span>: <span class="hl-num">10</span>,
+      <span class="hl-key">"beepEnabled"</span>: <span class="hl-bool">true</span>
+    }
+  }
+}</div>
     </div>
   </div>
 
@@ -700,10 +776,107 @@
   <span class="hl-key">"startedAt"</span>:         <span class="hl-str">"2026-03-03T19:46:29Z"</span>,
   <span class="hl-key">"endedAt"</span>:           <span class="hl-str">"2026-03-03T20:10:01Z"</span>,  <span class="hl-cmt">// null if still in progress</span>
   <span class="hl-key">"driverID"</span>:          <span class="hl-str">"DRV-001"</span>,
-  <span class="hl-key">"totalDistanceKm"</span>:   <span class="hl-num">1.2</span>,     <span class="hl-cmt">// metres converted to km</span>
-  <span class="hl-key">"totalFuelConsumedL"</span>: <span class="hl-num">0.06</span>,
-  <span class="hl-key">"eventCount"</span>:        <span class="hl-num">23</span>
+  <span class="hl-key">"totalDistanceKm"</span>:   <span class="hl-num">34.7</span>,
+  <span class="hl-key">"totalFuelConsumedL"</span>: <span class="hl-num">2.8</span>,
+  <span class="hl-key">"maxSpeedKmh"</span>:       <span class="hl-num">112.5</span>,
+  <span class="hl-key">"eventCount"</span>:        <span class="hl-num">23</span>,
+  <span class="hl-key">"loadConfidence"</span>:    <span class="hl-str">"high"</span>,      <span class="hl-cmt">// nullable — from last driving event</span>
+  <span class="hl-key">"loadSamples"</span>:       <span class="hl-num">180</span>,
+  <span class="hl-key">"loadMTotalKg"</span>:      <span class="hl-num">3450.0</span>,
+  <span class="hl-key">"loadMLoadKg"</span>:       <span class="hl-num">950.0</span>
 }]</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="ve-journey-stats">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/vehicle-events/journey-stats</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">List device delivery &amp; health stats</span>
+    </div>
+    <div class="ep-body">
+      <p>Returns per-journey delivery counters (events sent, post failures) at journey, boot and lifetime scope. One row per <code>journey_stats</code> event received.</p>
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td class="field-name">imei</td><td class="field-type">string</td><td>–</td><td>Filter by IMEI</td></tr>
+        <tr><td class="field-name">from</td><td class="field-type">ISO 8601</td><td>–</td><td>Lower bound (inclusive)</td></tr>
+        <tr><td class="field-name">to</td><td class="field-type">ISO 8601</td><td>–</td><td>Upper bound (inclusive)</td></tr>
+        <tr><td class="field-name">limit</td><td class="field-type">int</td><td>50</td><td>Max rows (capped at 500)</td></tr>
+      </table>
+      <div class="note"><strong>Tip:</strong> <code>GET /api/vehicle-events/journey-stats/latest</code> returns one row per IMEI — useful for a fleet health overview dashboard.</div>
+    </div>
+  </div>
+
+  <div class="endpoint" id="ve-driver-behavior">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/driver-behavior</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">List driver behavior alerts</span>
+    </div>
+    <div class="ep-body">
+      <p>Returns harsh braking, acceleration, cornering and overspeed alerts. Stored in the <code>driver_behavior_events</code> table.</p>
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td class="field-name">journey</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by journey ID</td></tr>
+        <tr><td class="field-name">vehicle</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by vehicle ID</td></tr>
+        <tr><td class="field-name">imei</td><td class="field-type">string</td><td>–</td><td>Filter by IMEI</td></tr>
+        <tr><td class="field-name">alert_type</td><td class="field-type">string</td><td>–</td><td><code>harsh_braking</code> · <code>harsh_acceleration</code> · <code>harsh_cornering</code> · <code>overspeed</code></td></tr>
+        <tr><td class="field-name">limit</td><td class="field-type">int</td><td>500</td><td>Max rows returned</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint" id="ve-db-summary">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/driver-behavior/summary</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">Aggregated alert counts per journey</span>
+    </div>
+    <div class="ep-body">
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td class="field-name">journey</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by journey ID</td></tr>
+        <tr><td class="field-name">vehicle</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by vehicle ID</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint" id="ve-lifecycle">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/device-lifecycle</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">List device lifecycle events</span>
+    </div>
+    <div class="ep-body">
+      <p>Returns boot, sleep, wake_up, ping, gps_acquired, gps_lost events. Stored in the <code>device_lifecycle_events</code> table.</p>
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td class="field-name">imei</td><td class="field-type">string</td><td>–</td><td>Filter by IMEI</td></tr>
+        <tr><td class="field-name">vehicle</td><td class="field-type">string (UUID)</td><td>–</td><td>Filter by vehicle ID</td></tr>
+        <tr><td class="field-name">event_type</td><td class="field-type">string</td><td>–</td><td>Filter by event type</td></tr>
+        <tr><td class="field-name">since</td><td class="field-type">ISO 8601</td><td>–</td><td>Only events after this time</td></tr>
+        <tr><td class="field-name">limit</td><td class="field-type">int</td><td>200</td><td>Max rows returned</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint" id="ve-lifecycle-summary">
+    <div class="ep-header" onclick="toggle(this)">
+      <span class="method-badge GET">GET</span>
+      <span class="ep-path">/api/device-lifecycle/summary</span>
+      <span class="auth-badge auth-apikey">X-API-Key</span>
+      <span class="ep-summary">Per-IMEI boot/sleep/wake/ping statistics</span>
+    </div>
+    <div class="ep-body">
+      <p>Aggregated lifecycle statistics for a single tracker: boot count, sleep count, last wake-up source, last battery voltage, etc.</p>
+      <div class="sub-title">Query parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td class="field-name">imei</td><td class="field-type">string</td><td>–</td><td>Tracker IMEI (required)</td></tr>
+      </table>
     </div>
   </div>
 

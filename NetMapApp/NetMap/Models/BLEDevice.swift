@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 struct BLEDevice: Identifiable, Equatable, Hashable {
-    let id: UUID            // CBPeripheral.identifier
+    var id: UUID            // CBPeripheral.identifier (mutable: AirTag UUIDs rotate)
     var name: String?
     var rssi: Int           // dBm
     var manufacturerName: String?
