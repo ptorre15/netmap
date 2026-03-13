@@ -2663,7 +2663,6 @@ async function renderTable() {
               valStr ? `<span class="ev-alerts-detail-chip"><b>Peak:</b> ${escHTML(valStr)}</span>` : '',
               durS   ? `<span class="ev-alerts-detail-chip"><b>Duration:</b> ${escHTML(durS)}</span>` : '',
               spd    ? `<span class="ev-alerts-detail-chip"><b>Speed:</b> ${escHTML(spd)}</span>` : '',
-              hdg    ? `<span class="ev-alerts-detail-chip"><b>Heading:</b> ${escHTML(hdg)}</span>` : '',
             ].filter(Boolean).join('');
             const colCount = $('table-head').querySelectorAll('th').length;
             const detailTr = document.createElement('tr');
