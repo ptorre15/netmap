@@ -24,4 +24,10 @@ esac
 
 new_version="$major.$minor.$patch"
 printf '%s\n' "$new_version" > "$VERSION_FILE"
-echo "Bumped: $current → $new_version"
+echo "Bumped: $current \u2192 $new_version"
+
+# Sync WEB_VERSION in Public/app.js
+APP_JS="$SCRIPT_DIR/Public/app.js"
+if [[ -f "$APP_JS" ]]; then
+  sed -i.bak "s/const WEB_VERSION = '[^']*'/const WEB_VERSION = '$new_version'/" "$APP_JS" && rm -f "$APP_JS.bak"
+fi
