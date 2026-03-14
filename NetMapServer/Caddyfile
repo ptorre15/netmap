@@ -1,41 +1,43 @@
 # NetMap Server — Caddy reverse proxy with automatic HTTPS
 #
-# Prerequisites:
-#   brew install caddy
-#   sudo caddy run --config Caddyfile --adapter caddyfile
-#
-# Box NAT rules required:
-#   Port 80  TCP  →  <mac-local-ip>:80   (Let's Encrypt HTTP challenge)
-#   Port 443 TCP  →  <mac-local-ip>:443  (HTTPS traffic)
-#
-# Domain: 92-137-172-240.nip.io resolves automatically to 92.137.172.240
-# No DNS configuration needed — nip.io handles it.
+# Domain: track.netmap.fr
 #
 # For local testing only (no public domain), replace the domain with:
 #   localhost:8443
-92-137-172-240.nip.io {
-	# Proxy everything to the Vapor server
-	reverse_proxy localhost:8092 {
-		# Replace any client-supplied XFF chain with the real peer seen by Caddy.
-		header_up X-Forwarded-For {remote_host}
-	}
-
-	# Security headers
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-		X-Content-Type-Options "nosniff"
-		X-Frame-Options "DENY"
-		Referrer-Policy "strict-origin-when-cross-origin"
-		Content-Security-Policy "default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https://unpkg.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org; connect-src 'self' https://router.project-osrm.org https://*.tile.openstreetmap.org; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
-		-Server
-	}
-
+track.netmap.fr {
 	# Compress responses
 	encode gzip zstd
 
 	# No browser cache for local JS/CSS so fixes are picked up immediately
 	@localAssets path *.js *.css
 	header @localAssets Cache-Control "no-store, no-cache, must-revalidate"
+
+	# ── Simulator: relaxed CSP (page uses inline onclick handlers) ────────
+	handle /simulator.html {
+		header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		header X-Content-Type-Options "nosniff"
+		header Referrer-Policy "strict-origin-when-cross-origin"
+		header Content-Security-Policy "default-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; connect-src 'self' https:; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org; object-src 'none'"
+		header -Server
+		reverse_proxy localhost:8092 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+
+	# ── All other routes: strict security headers ─────────────────────────
+	handle {
+		header {
+			Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+			X-Content-Type-Options "nosniff"
+			X-Frame-Options "DENY"
+			Referrer-Policy "strict-origin-when-cross-origin"
+			Content-Security-Policy "default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https://unpkg.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org; connect-src 'self' https://router.project-osrm.org https://*.tile.openstreetmap.org; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+			-Server
+		}
+		reverse_proxy localhost:8092 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
 
 	# Logging
 	log {
