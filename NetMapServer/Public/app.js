@@ -1,6 +1,6 @@
 'use strict';
 
-const WEB_VERSION = '1.0.14';
+const WEB_VERSION = '1.0.15';
 
 // ─── Auth state ────────────────────────────────────────────────────────────────────────────────
 const AUTH = { token: null, username: null, role: null,
@@ -3674,7 +3674,15 @@ function _wsConnect() {
   ws.addEventListener('message', e => {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
-    if (!msg || msg.type !== 'record') return;
+    if (!msg) return;
+
+    if (msg.type === 'new_event') {
+      // Refresh the event table if the pushed tracker is currently displayed
+      if (msg.imei === S.selected && S.mode === 'table') renderTable();
+      return;
+    }
+
+    if (msg.type !== 'record') return;
 
     // Update the matching sensor's latest values in S.sensors
     const s = S.sensors.find(x => x.sensorID === msg.sensorID);

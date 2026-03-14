@@ -165,6 +165,7 @@ struct VehicleEventController: RouteCollection {
                 )
                 try await dbe.save(on: req.db)
                 stats.savedDriverBehavior += 1
+                Task { await WebSocketBroadcaster.shared.broadcast("{\"type\":\"new_event\",\"imei\":\"\(imei)\",\"eventType\":\"driver_behavior\"}") }
                 req.logger.info("🧠 [behavior] imei=\(imei) type=\(dbe.alertType) value=\(alertValue) ms=\(alertMs)")
                 continue   // do NOT feed into journey state machine or vehicle_events
             }
@@ -272,6 +273,7 @@ struct VehicleEventController: RouteCollection {
                 )
                 try await dle.save(on: req.db)
                 stats.savedLifecycle += 1
+                Task { await WebSocketBroadcaster.shared.broadcast("{\"type\":\"new_event\",\"imei\":\"\(imei)\",\"eventType\":\"\(effectiveType)\"}") }
                 if effectiveType == "ping" {
                     req.logger.info("📡 [ping] imei=\(imei) fix=\(p.gpsFixType.map{String($0)} ?? "?") lat=\(p.latitude.map{String($0)} ?? "-") lon=\(p.longitude.map{String($0)} ?? "-") sats=\(p.gpsSatellites.map{String($0)} ?? "-")")
                 } else {
@@ -320,6 +322,7 @@ struct VehicleEventController: RouteCollection {
             )
             try await event.save(on: req.db)
             stats.savedVehicleEvents += 1
+            Task { await WebSocketBroadcaster.shared.broadcast("{\"type\":\"new_event\",\"imei\":\"\(imei)\",\"eventType\":\"\(eventType)\"}") }
 
             // ── 7. Upsert SensorReading pour que le tracker apparaisse dans sensorsLatest ──
             let sp = SensorPayload(
