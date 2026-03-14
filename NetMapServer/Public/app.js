@@ -2538,6 +2538,10 @@ async function renderTable() {
         config_acked:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10"/></svg>', label: 'Config acked',  color: '#34d399' },
       };
       const SYS_EVENT_TYPES_WITH_DETAIL = new Set(['config_pushed', 'config_acked']);
+      const SYS_EVENT_DETAIL_ICONS = {
+        config_pushed: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M4 6l8 0"/><path d="M16 6l4 0"/><path d="M8 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M4 12l2 0"/><path d="M10 12l10 0"/><path d="M17 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M4 18l11 0"/><path d="M19 18l1 0"/></svg>`,
+        config_acked:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.5 5.5l1.5 1.5l2.5 -2.5"/><path d="M3.5 11.5l1.5 1.5l2.5 -2.5"/><path d="M3.5 17.5l1.5 1.5l2.5 -2.5"/><path d="M11 6l9 0"/><path d="M11 12l9 0"/><path d="M11 18l9 0"/></svg>`,
+      };
 
       function fmtDelay(sec) {
         if (sec < 60)   return sec + 's';
@@ -2620,7 +2624,8 @@ async function renderTable() {
           let cells = `<td class="td-ts-compact">${fmtTs(e.timestamp)}</td>`;
           cells += delayCell(e);
           if (hasSysDetail) {
-            cells += `<td><span style="display:inline-flex;align-items:center;gap:4px"><span class="ev-badge" style="--ev-color:${evColor}">${ev2.icon} ${escHTML(ev2.label)}</span><button class="row-sysev-detail-btn" data-ev-id="${escAttr(e.id)}" title="Config details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z"/></svg></button></span></td>`;
+            const detailIcon = SYS_EVENT_DETAIL_ICONS[e.eventType] ?? '';
+            cells += `<td><span style="display:inline-flex;align-items:center;gap:4px"><span class="ev-badge" style="--ev-color:${evColor}">${ev2.icon} ${escHTML(ev2.label)}</span><button class="row-sysev-detail-btn" data-ev-id="${escAttr(e.id)}" title="View details">${detailIcon}</button></span></td>`;
           } else {
             cells += `<td><span class="ev-badge" style="--ev-color:${evColor}">${ev2.icon} ${escHTML(ev2.label)}</span></td>`;
           }
