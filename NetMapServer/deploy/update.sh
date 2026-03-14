@@ -52,8 +52,8 @@ success "Build terminé."
 info "Redémarrage du service..."
 ssh "$TARGET" bash <<ENDSSH
 set -euo pipefail
-# Fichiers statiques (no-group to avoid chgrp permission errors)
-rsync -a --no-group --delete /opt/netmap/src/Public/ /opt/netmap/Public/
+# Fichiers statiques — copy as root then fix ownership
+sudo cp -a /opt/netmap/src/Public/. /opt/netmap/Public/
 # Version file at working directory root (read by configure.swift on startup)
 sudo cp /opt/netmap/src/VERSION /opt/netmap/VERSION
 sudo chown -R netmap:netmap /opt/netmap/Public /opt/netmap/VERSION

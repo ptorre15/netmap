@@ -41,6 +41,10 @@ struct VehicleEventPayload: Content {
     // ── Firmware self-report (optional, sent after OTA reboot) ────────────
     var firmwareVersion:    String?         // running firmware version string (e.g. "1.4.2"); nil = unknown / not sent
 
+    // ── OBFCM lifetime totals ─────────────────────────────────────────────
+    var obfcmDistanceKm:    Double?         // OBFCM lifetime total distance (km)
+    var obfcmFuelL:         Double?         // OBFCM lifetime total fuel consumed (L)
+
     // ── Journey stats counters (only for eventType = "journey_stats") ──────
     var journey:            JourneyStatsCounters?
     var boot:               JourneyStatsCounters?
@@ -104,6 +108,8 @@ final class VehicleEvent: Model, Content, @unchecked Sendable {
     @OptionalField(key: "load_samples")            var loadSamples:        Int?
     @OptionalField(key: "load_m_total_kg")         var loadMTotalKg:       Double?
     @OptionalField(key: "load_m_load_kg")          var loadMLoadKg:        Double?
+    @OptionalField(key: "obfcm_distance_km")       var obfcmDistanceKm:    Double?
+    @OptionalField(key: "obfcm_fuel_l")            var obfcmFuelL:         Double?
     @Field(key: "received_at")                     var receivedAt:         Date
 
     init() {}
@@ -134,6 +140,8 @@ final class VehicleEvent: Model, Content, @unchecked Sendable {
         loadSamples           = p.load?.samples
         loadMTotalKg          = p.load?.mTotalKg
         loadMLoadKg           = p.load?.mLoadKg
+        obfcmDistanceKm       = p.obfcmDistanceKm
+        obfcmFuelL            = p.obfcmFuelL
         receivedAt            = Date()
     }
 }
@@ -260,6 +268,17 @@ struct AddLoadEstimationToVehicleEvents: AsyncMigration {
         try? await sql.raw("ALTER TABLE vehicle_events ADD COLUMN load_samples INTEGER").run()
         try? await sql.raw("ALTER TABLE vehicle_events ADD COLUMN load_m_total_kg REAL").run()
         try? await sql.raw("ALTER TABLE vehicle_events ADD COLUMN load_m_load_kg REAL").run()
+    }
+    func revert(on db: Database) async throws { /* SQLite does not support DROP COLUMN */ }
+}
+
+// MARK: - Migration: ajoute les champs OBFCM lifetime sur vehicle_events
+
+struct AddObfcmToVehicleEvents: AsyncMigration {
+    func prepare(on db: Database) async throws {
+        guard let sql = db as? SQLDatabase else { return }
+        try? await sql.raw("ALTER TABLE vehicle_events ADD COLUMN obfcm_distance_km REAL").run()
+        try? await sql.raw("ALTER TABLE vehicle_events ADD COLUMN obfcm_fuel_l REAL").run()
     }
     func revert(on db: Database) async throws { /* SQLite does not support DROP COLUMN */ }
 }

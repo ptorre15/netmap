@@ -87,6 +87,7 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(AddTelemetryCompositeIndexes())            // composite telemetry indexes for hot filters
     app.migrations.add(CreateDeviceJourneyStats())                // journey_stats device counters (spec v6)
     app.migrations.add(CreateFirmwareUpgradeRequests())           // firmware_upgrade_requests: OTA upgrade tracking
+    app.migrations.add(AddObfcmToVehicleEvents())                 // obfcm_distance_km + obfcm_fuel_l on vehicle_events
     try await app.autoMigrate()   // non-blocking in async context
 
     // ── Seed built-in asset types if absent ─────────────────────

@@ -2554,22 +2554,26 @@ async function renderTable() {
       }
 
       function renderEventRows(evList) {
-        const hasSatsL  = evList.some(e => e.gpsSatellites != null);
-        const hasSpeedL = evList.some(e => e.speedKmh != null);
-        const hasOdoL   = evList.some(e => e.odometerKm != null);
-        const hasDistL  = evList.some(e => e.journeyDistanceKm != null);
-        const hasRpmL   = evList.some(e => e.engineRpm != null);
-        const hasJFuelL = evList.some(e => e.journeyFuelConsumedL != null);
-        const hasFuelL  = evList.some(e => e.fuelLevelPct != null);
+        const hasSatsL    = evList.some(e => e.gpsSatellites != null);
+        const hasSpeedL   = evList.some(e => e.speedKmh != null);
+        const hasOdoL     = evList.some(e => e.odometerKm != null);
+        const hasDistL    = evList.some(e => e.journeyDistanceKm != null);
+        const hasRpmL     = evList.some(e => e.engineRpm != null);
+        const hasJFuelL   = evList.some(e => e.journeyFuelConsumedL != null);
+        const hasFuelL    = evList.some(e => e.fuelLevelPct != null);
+        const hasObfcmD   = evList.some(e => e.obfcmDistanceKm != null);
+        const hasObfcmF   = evList.some(e => e.obfcmFuelL != null);
 
         const hdrs2 = ['Time', 'Delay', 'Event', 'GPS / Fix'];
-        if (hasSatsL)  hdrs2.push('Sats');
-        if (hasSpeedL) hdrs2.push('Speed');
-        if (hasOdoL)   hdrs2.push('Odometer');
-        if (hasDistL)  hdrs2.push('Journey dist.');
-        if (hasRpmL)   hdrs2.push('Engine RPM');
-        if (hasJFuelL) hdrs2.push('Journey fuel');
-        if (hasFuelL)  hdrs2.push('Fuel level');
+        if (hasSatsL)    hdrs2.push('Sats');
+        if (hasSpeedL)   hdrs2.push('Speed');
+        if (hasOdoL)     hdrs2.push('Odometer');
+        if (hasDistL)    hdrs2.push('Journey dist.');
+        if (hasRpmL)     hdrs2.push('Engine RPM');
+        if (hasJFuelL)   hdrs2.push('Journey fuel');
+        if (hasFuelL)    hdrs2.push('Fuel level');
+        if (hasObfcmD)   hdrs2.push('OBFCM dist.');
+        if (hasObfcmF)   hdrs2.push('OBFCM fuel');
         hdrs2.push('');
         const colCount2 = hdrs2.length;
         $('table-head').innerHTML = `<tr>${hdrs2.map(h => `<th>${h}</th>`).join('')}</tr>`;
@@ -2593,11 +2597,13 @@ async function renderTable() {
             cells += `<td>${gpsCell(e)}</td>`;
             if (hasSatsL)  cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
             if (hasSpeedL) cells += `<td>${e.speedKmh != null ? e.speedKmh.toFixed(0) + '\u00a0km/h' : '–'}</td>`;
-            if (hasOdoL)   cells += `<td>${e.odometerKm != null ? (e.odometerKm / 1000).toFixed(1) + '\u00a0km' : '–'}</td>`;
+            if (hasOdoL)   cells += `<td>${e.odometerKm != null ? e.odometerKm.toFixed(1) + '\u00a0km' : '–'}</td>`;
             if (hasDistL)  cells += `<td>${e.journeyDistanceKm != null ? e.journeyDistanceKm.toFixed(2) + '\u00a0km' : '–'}</td>`;
             if (hasRpmL)   cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + '\u00a0rpm' : '–'}</td>`;
             if (hasJFuelL) cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + '\u00a0L' : '–'}</td>`;
             if (hasFuelL)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
+            if (hasObfcmD) cells += `<td>${e.obfcmDistanceKm != null ? e.obfcmDistanceKm.toFixed(1) + '\u00a0km' : '–'}</td>`;
+            if (hasObfcmF) cells += `<td>${e.obfcmFuelL != null ? e.obfcmFuelL.toFixed(2) + '\u00a0L' : '–'}</td>`;
             cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" data-src="alert" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>`;
             return sep + `<tr class="ev-alert-row" data-alert-id="${escAttr(e.id)}">${cells}</tr>`;
           }
@@ -2609,13 +2615,15 @@ async function renderTable() {
           cells += delayCell(e);
           cells += `<td><span class="ev-badge" style="--ev-color:${evColor}">${ev2.icon} ${escHTML(ev2.label)}</span></td>`;
           cells += `<td>${gpsCell(e)}</td>`;
-          if (hasSatsL)  cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
-          if (hasSpeedL) cells += `<td>${e.speedKmh != null ? e.speedKmh.toFixed(0) + ' km/h' : '–'}</td>`;
-          if (hasOdoL)   cells += `<td>${e.odometerKm != null ? (e.odometerKm / 1000).toFixed(1) + ' km' : '–'}</td>`;
-          if (hasDistL)  cells += `<td>${e.journeyDistanceKm != null ? e.journeyDistanceKm.toFixed(2) + ' km' : '–'}</td>`;
-          if (hasRpmL)   cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + ' rpm' : '–'}</td>`;
-          if (hasJFuelL) cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + ' L' : '–'}</td>`;
-          if (hasFuelL)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
+          if (hasSatsL)    cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
+          if (hasSpeedL)   cells += `<td>${e.speedKmh != null ? e.speedKmh.toFixed(0) + ' km/h' : '–'}</td>`;
+          if (hasOdoL)     cells += `<td>${e.odometerKm != null ? e.odometerKm.toFixed(1) + ' km' : '–'}</td>`;
+          if (hasDistL)    cells += `<td>${e.journeyDistanceKm != null ? e.journeyDistanceKm.toFixed(2) + ' km' : '–'}</td>`;
+          if (hasRpmL)     cells += `<td>${e.engineRpm != null ? e.engineRpm.toLocaleString() + ' rpm' : '–'}</td>`;
+          if (hasJFuelL)   cells += `<td>${e.journeyFuelConsumedL != null ? e.journeyFuelConsumedL.toFixed(3) + ' L' : '–'}</td>`;
+          if (hasFuelL)    cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${e.fuelLevelPct != null ? e.fuelLevelPct + '%' : '–'}</td>`;
+          if (hasObfcmD)   cells += `<td>${e.obfcmDistanceKm != null ? e.obfcmDistanceKm.toFixed(1) + ' km' : '–'}</td>`;
+          if (hasObfcmF)   cells += `<td>${e.obfcmFuelL != null ? e.obfcmFuelL.toFixed(2) + ' L' : '–'}</td>`;
           cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" data-src="${e._src === 'lifecycle' ? 'lifecycle' : 'vehicle'}" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>`;
           return sep + `<tr>${cells}</tr>`;
         }).join('');
@@ -3327,7 +3335,7 @@ async function renderAlerts() {
         cells += `<td>${spd}</td>`;
         if (alHasRpm)   cells += `<td>${b.engineRpm != null ? b.engineRpm.toLocaleString() + '\u00a0rpm' : '\u2013'}</td>`;
         if (alHasFuel)  cells += `<td${fuelCol ? ` style="color:${fuelCol}"` : ''}>${b.fuelLevelPct != null ? b.fuelLevelPct + '%' : '\u2013'}</td>`;
-        if (alHasOdo)   cells += `<td>${b.odometerKm != null ? (b.odometerKm / 1000).toFixed(1) + '\u00a0km' : '\u2013'}</td>`;
+        if (alHasOdo)   cells += `<td>${b.odometerKm != null ? b.odometerKm.toFixed(1) + '\u00a0km' : '\u2013'}</td>`;
         if (alHasDist)  cells += `<td>${b.journeyDistanceKm != null ? b.journeyDistanceKm.toFixed(2) + '\u00a0km' : '\u2013'}</td>`;
         if (alHasJFuel) cells += `<td>${b.journeyFuelConsumedL != null ? b.journeyFuelConsumedL.toFixed(3) + '\u00a0L' : '\u2013'}</td>`;
         if (alHasSats)  cells += `<td>${b.gpsSatellites != null ? b.gpsSatellites : '\u2013'}</td>`;
