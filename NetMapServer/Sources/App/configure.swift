@@ -86,6 +86,7 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(AddFirmwareVersionToTrackerConfig())       // firmware_version on tracker_configs
     app.migrations.add(AddTelemetryCompositeIndexes())            // composite telemetry indexes for hot filters
     app.migrations.add(CreateDeviceJourneyStats())                // journey_stats device counters (spec v6)
+    app.migrations.add(CreateFirmwareUpgradeRequests())           // firmware_upgrade_requests: OTA upgrade tracking
     try await app.autoMigrate()   // non-blocking in async context
 
     // ── Seed built-in asset types if absent ─────────────────────

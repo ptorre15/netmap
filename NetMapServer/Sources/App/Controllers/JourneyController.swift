@@ -38,9 +38,15 @@ struct PiggybackConfigPayload: Content {
     var system: PiggybackSystemPayload
     var driverBehavior: PiggybackDriverBehaviorPayload
 }
+struct OTAPiggybackPayload: Content {
+    var requestId: String
+    var targetVersion: String
+    var firmwareUrl: String
+}
 struct PushEventsResponse: Content {
     var received: Int
     var config: PiggybackConfigPayload?
+    var ota: OTAPiggybackPayload?
 }
 
 struct VehicleEventController: RouteCollection {
@@ -344,46 +350,95 @@ struct VehicleEventController: RouteCollection {
 
         req.logger.notice("[ingest.vehicle-events] received=\(stats.received) saved_vehicle=\(stats.savedVehicleEvents) saved_behavior=\(stats.savedDriverBehavior) saved_journey_stats=\(stats.savedJourneyStats) saved_lifecycle=\(stats.savedLifecycle) saved_sensor_rows=\(stats.savedSensorRows) deduped=\(stats.deduped) non_standard_vehicle_type=\(stats.nonStandardVehicleEventType)")
 
-        // ── Piggyback: inject pending config into response ───────────────
+        // ── Piggyback: inject pending config and/or OTA directive into response ─
         // Only include config when the stored schemaVersion is newer than what
         // the tracker already has applied (tracker sends configVersion in payload).
         // nil configVersion means first boot — always send config.
+        // OTA directive is included whenever there is a pending/undelivered upgrade.
         let imeis = Array(Set(payloads.map { $0.imei }))
         var piggybackConfig: PiggybackConfigPayload? = nil
+        var piggybackOTA: OTAPiggybackPayload? = nil
         for batchImei in imeis {
             // Find the reported configVersion for this IMEI from the batch
             let reportedVersion = payloads.first(where: { $0.imei == batchImei })?.configVersion
-            guard let cfg = try? await TrackerConfig.query(on: req.db)
-                .filter(\.$imei == batchImei)
-                .first() else { continue }
 
-            // Always persist the tracker's reported version (so the UI can show sync status)
-            if let v = reportedVersion, cfg.lastAppliedConfigVersion != v {
-                cfg.lastAppliedConfigVersion = v
-                try? await cfg.save(on: req.db)
+            // ── Firmware version self-report ─────────────────────────────────
+            if let reportedFirmware = payloads.first(where: { $0.imei == batchImei })?.firmwareVersion,
+               !reportedFirmware.isEmpty {
+                // Persist to TrackerConfig.firmwareVersion
+                if let cfg = try? await TrackerConfig.query(on: req.db)
+                    .filter(\.$imei == batchImei).first() {
+                    if cfg.firmwareVersion != reportedFirmware {
+                        cfg.firmwareVersion = reportedFirmware
+                        try? await cfg.save(on: req.db)
+                    }
+                }
+                // Auto-complete any delivered upgrade requests that match
+                let delivered = try? await FirmwareUpgradeRequest.query(on: req.db)
+                    .filter(\.$imei == batchImei)
+                    .filter(\.$status ~~ ["pending", "delivered"])
+                    .filter(\.$targetVersion == reportedFirmware)
+                    .all()
+                for req_ in delivered ?? [] {
+                    req_.status = "completed"
+                    req_.completedAt = Date()
+                    try? await req_.save(on: req.db)
+                }
             }
 
-            // Gate: only piggyback if tracker hasn't seen this version yet
-            guard cfg.schemaVersion > (reportedVersion ?? -1) else { break }
-            let wake = (try? JSONDecoder().decode([String].self,
-                from: Data(cfg.wakeUpSourcesJSON.utf8))) ?? []
-            piggybackConfig = PiggybackConfigPayload(
-                schemaVersion: cfg.schemaVersion,
-                imei: cfg.imei,
-                system: .init(pingIntervalMin: cfg.pingIntervalMin,
-                              sleepDelayMin: cfg.sleepDelayMin,
-                              wakeUpSourcesEnabled: wake),
-                driverBehavior: .init(
-                    thresholds: .init(harshBraking: cfg.thresholdHarshBraking,
-                                      harshAcceleration: cfg.thresholdHarshAcceleration,
-                                      harshCornering: cfg.thresholdHarshCornering,
-                                      overspeed: cfg.thresholdOverspeedKmh),
-                    minimumSpeedKmh: cfg.minimumSpeedKmh,
-                    beepEnabled: cfg.beepEnabled)
-            )
-            break
+            // ── Config piggyback ─────────────────────────────────────────────
+            if let cfg = try? await TrackerConfig.query(on: req.db)
+                .filter(\.$imei == batchImei)
+                .first() {
+                // Always persist the tracker's reported config version
+                if let v = reportedVersion, cfg.lastAppliedConfigVersion != v {
+                    cfg.lastAppliedConfigVersion = v
+                    try? await cfg.save(on: req.db)
+                }
+                if cfg.schemaVersion > (reportedVersion ?? -1) {
+                    let wake = (try? JSONDecoder().decode([String].self,
+                        from: Data(cfg.wakeUpSourcesJSON.utf8))) ?? []
+                    piggybackConfig = PiggybackConfigPayload(
+                        schemaVersion: cfg.schemaVersion,
+                        imei: cfg.imei,
+                        system: .init(pingIntervalMin: cfg.pingIntervalMin,
+                                      sleepDelayMin: cfg.sleepDelayMin,
+                                      wakeUpSourcesEnabled: wake),
+                        driverBehavior: .init(
+                            thresholds: .init(harshBraking: cfg.thresholdHarshBraking,
+                                              harshAcceleration: cfg.thresholdHarshAcceleration,
+                                              harshCornering: cfg.thresholdHarshCornering,
+                                              overspeed: cfg.thresholdOverspeedKmh),
+                            minimumSpeedKmh: cfg.minimumSpeedKmh,
+                            beepEnabled: cfg.beepEnabled)
+                    )
+                }
+            }
+
+            // ── OTA upgrade piggyback ────────────────────────────────────────
+            if piggybackOTA == nil,
+               let pendingUpgrade = try? await FirmwareUpgradeRequest.query(on: req.db)
+                   .filter(\.$imei == batchImei)
+                   .filter(\.$status == "pending")
+                   .sort(\.$createdAt, .ascending)
+                   .first() {
+                let otaBaseUrl = (try? await AppSetting.query(on: req.db)
+                    .filter(\.$key == "ota_server_url").first()?.value)
+                    ?? Environment.get("OTA_SERVER_URL")
+                    ?? "http://127.0.0.1:8080"
+                let firmwareUrl = "\(otaBaseUrl)/firmware/\(pendingUpgrade.targetVersion).bin"
+                piggybackOTA = OTAPiggybackPayload(
+                    requestId:     pendingUpgrade.id?.uuidString ?? "",
+                    targetVersion: pendingUpgrade.targetVersion,
+                    firmwareUrl:   firmwareUrl
+                )
+                // Mark as delivered so we don't resend indefinitely
+                pendingUpgrade.status = "delivered"
+                try? await pendingUpgrade.save(on: req.db)
+                req.logger.info("📲 [ota] delivered upgrade request to tracker imei=\(batchImei) target=\(pendingUpgrade.targetVersion)")
+            }
         }
-        let pushResponse = PushEventsResponse(received: payloads.count, config: piggybackConfig)
+        let pushResponse = PushEventsResponse(received: payloads.count, config: piggybackConfig, ota: piggybackOTA)
         return try await pushResponse.encodeResponse(status: .created, for: req)
     }
 

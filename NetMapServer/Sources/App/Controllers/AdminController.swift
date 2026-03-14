@@ -54,11 +54,14 @@ struct AdminController: RouteCollection {
         admin.get("security-events", use: listSecurityEvents) // GET /api/admin/security-events
 
         // OTA firmware management
-        admin.get ("ota", "versions",                     use: otaGetVersions)       // GET   /api/admin/ota/versions
-        admin.get ("ota", "trackers",                     use: otaGetTrackers)       // GET   /api/admin/ota/trackers
-        admin.patch("ota", "trackers", ":imei",           use: otaSetFirmwareVersion) // PATCH /api/admin/ota/trackers/:imei
-        admin.get ("ota", "settings",                     use: otaGetSettings)       // GET   /api/admin/ota/settings
-        admin.put ("ota", "settings",                     use: otaSaveSettings)      // PUT   /api/admin/ota/settings
+        admin.get  ("ota", "versions",                          use: otaGetVersions)       // GET    /api/admin/ota/versions
+        admin.get  ("ota", "trackers",                          use: otaGetTrackers)       // GET    /api/admin/ota/trackers
+        admin.patch("ota", "trackers", ":imei",                 use: otaSetFirmwareVersion) // PATCH  /api/admin/ota/trackers/:imei
+        admin.post ("ota", "trackers", ":imei", "upgrade",      use: otaRequestUpgrade)    // POST   /api/admin/ota/trackers/:imei/upgrade
+        admin.get  ("ota", "upgrades",                          use: otaListUpgrades)      // GET    /api/admin/ota/upgrades
+        admin.patch("ota", "upgrades", ":requestID",            use: otaUpdateUpgrade)     // PATCH  /api/admin/ota/upgrades/:requestID
+        admin.get  ("ota", "settings",                          use: otaGetSettings)       // GET    /api/admin/ota/settings
+        admin.put  ("ota", "settings",                          use: otaSaveSettings)      // PUT    /api/admin/ota/settings
     }
 
     // ─── Server Logs ──────────────────────────────────────────────────────────
@@ -1113,10 +1116,40 @@ extension AdminController {
         var vehicleName: String
         var sensorName: String?
         var firmwareVersion: String?
+        var pendingUpgradeVersion: String?
     }
 
     struct OTAFirmwarePatchBody: Content {
         var firmwareVersion: String?
+    }
+
+    struct OTAUpgradeRequestBody: Content {
+        var targetVersion: String
+        var notes: String?
+    }
+
+    struct OTAUpgradeStatusPatchBody: Content {
+        var status: String   // cancelled | failed | pending
+        var notes: String?
+    }
+
+    struct OTAUpgradeRequestDTO: Content {
+        var id: String
+        var imei: String
+        var targetVersion: String
+        var requestedBy: String
+        var status: String
+        var notes: String?
+        var createdAt: Date?
+        var updatedAt: Date?
+        var completedAt: Date?
+    }
+
+    struct OTAUpgradeListResponse: Content {
+        var total: Int
+        var limit: Int
+        var offset: Int
+        var items: [OTAUpgradeRequestDTO]
     }
 
     struct OTASettingsBody: Content {
@@ -1141,7 +1174,7 @@ extension AdminController {
         }
     }
 
-    /// GET /api/admin/ota/trackers — all trackers with their known firmware version
+    /// GET /api/admin/ota/trackers — all trackers with their known firmware version and any pending upgrade
     func otaGetTrackers(req: Request) async throws -> [OTATrackerStatus] {
         guard let sql = req.db as? SQLDatabase else {
             throw Abort(.internalServerError, reason: "SQL not available")
@@ -1161,10 +1194,91 @@ extension AdminController {
             GROUP BY sr.sensor_id
             ORDER BY sr.vehicle_name, sr.sensor_id
             """).all(decoding: Row.self)
+        // Fetch pending / delivered upgrades to surface them per-tracker
+        let pendingUpgrades = try await FirmwareUpgradeRequest.query(on: req.db)
+            .filter(\.$status ~~ ["pending", "delivered"])
+            .all()
+        let pendingByImei = Dictionary(grouping: pendingUpgrades, by: { $0.imei.uppercased() })
         return rows.map {
-            OTATrackerStatus(imei: $0.sensor_id, vehicleName: $0.vehicle_name,
-                             sensorName: $0.sensor_name, firmwareVersion: $0.firmware_version)
+            let pending = pendingByImei[$0.sensor_id.uppercased()]?.last
+            return OTATrackerStatus(imei: $0.sensor_id, vehicleName: $0.vehicle_name,
+                             sensorName: $0.sensor_name, firmwareVersion: $0.firmware_version,
+                             pendingUpgradeVersion: pending?.targetVersion)
         }
+    }
+
+    /// POST /api/admin/ota/trackers/:imei/upgrade — create a firmware upgrade request
+    func otaRequestUpgrade(req: Request) async throws -> HTTPStatus {
+        guard let imei = req.parameters.get("imei") else { throw Abort(.badRequest) }
+        let body = try req.content.decode(OTAUpgradeRequestBody.self)
+        guard !body.targetVersion.trimmingCharacters(in: .whitespaces).isEmpty else {
+            throw Abort(.badRequest, reason: "targetVersion is required")
+        }
+        let requestedBy = req.authUser?.email ?? "admin"
+        let upgradeReq = FirmwareUpgradeRequest(
+            imei: imei,
+            targetVersion: body.targetVersion.trimmingCharacters(in: .whitespaces),
+            requestedBy: requestedBy,
+            status: "pending",
+            notes: body.notes
+        )
+        try await upgradeReq.save(on: req.db)
+        req.logger.info("OTA upgrade requested: imei=\(imei) target=\(body.targetVersion) by=\(requestedBy)")
+        await req.auditSecurityEvent(
+            action: "ota.upgrade.requested",
+            targetType: "tracker", targetID: imei,
+            metadata: ["target_version": body.targetVersion]
+        )
+        return .created
+    }
+
+    /// GET /api/admin/ota/upgrades — paginated list of all firmware upgrade requests
+    func otaListUpgrades(req: Request) async throws -> OTAUpgradeListResponse {
+        let rawLimit  = (try? req.query.get(Int.self, at: "limit"))  ?? 100
+        let rawOffset = (try? req.query.get(Int.self, at: "offset")) ?? 0
+        let limit  = min(max(rawLimit, 1), 500)
+        let offset = max(rawOffset, 0)
+        var q = FirmwareUpgradeRequest.query(on: req.db).sort(\.$createdAt, .descending)
+        if let imei   = try? req.query.get(String.self, at: "imei"),   !imei.isEmpty  { q = q.filter(\.$imei == imei) }
+        if let status = try? req.query.get(String.self, at: "status"), !status.isEmpty { q = q.filter(\.$status == status) }
+        let total = try await q.count()
+        let items = try await q.offset(offset).limit(limit).all()
+        let dtos  = items.map { r in
+            OTAUpgradeRequestDTO(
+                id:            r.id?.uuidString ?? "",
+                imei:          r.imei,
+                targetVersion: r.targetVersion,
+                requestedBy:   r.requestedBy,
+                status:        r.status,
+                notes:         r.notes,
+                createdAt:     r.createdAt,
+                updatedAt:     r.updatedAt,
+                completedAt:   r.completedAt
+            )
+        }
+        return OTAUpgradeListResponse(total: total, limit: limit, offset: offset, items: dtos)
+    }
+
+    /// PATCH /api/admin/ota/upgrades/:requestID — update status (cancel / mark failed)
+    func otaUpdateUpgrade(req: Request) async throws -> HTTPStatus {
+        guard let idStr = req.parameters.get("requestID"), let uuid = UUID(uuidString: idStr) else {
+            throw Abort(.badRequest, reason: "Invalid request ID")
+        }
+        let body = try req.content.decode(OTAUpgradeStatusPatchBody.self)
+        let allowed = ["pending", "cancelled", "failed"]
+        guard allowed.contains(body.status) else {
+            throw Abort(.badRequest, reason: "status must be one of: \(allowed.joined(separator: ", "))")
+        }
+        guard let upgradeReq = try await FirmwareUpgradeRequest.find(uuid, on: req.db) else {
+            throw Abort(.notFound)
+        }
+        upgradeReq.status = body.status
+        if let notes = body.notes { upgradeReq.notes = notes }
+        if body.status == "completed" || body.status == "failed" || body.status == "cancelled" {
+            upgradeReq.completedAt = Date()
+        }
+        try await upgradeReq.save(on: req.db)
+        return .ok
     }
 
     /// PATCH /api/admin/ota/trackers/:imei — manually record firmware version for a tracker

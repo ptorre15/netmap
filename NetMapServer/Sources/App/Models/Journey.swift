@@ -38,6 +38,9 @@ struct VehicleEventPayload: Content {
     // ── Config acknowledgment ──────────────────────────────────────────────
     var configVersion:      Int?            // schemaVersion the tracker currently has applied; nil = never received config
 
+    // ── Firmware self-report (optional, sent after OTA reboot) ────────────
+    var firmwareVersion:    String?         // running firmware version string (e.g. "1.4.2"); nil = unknown / not sent
+
     // ── Journey stats counters (only for eventType = "journey_stats") ──────
     var journey:            JourneyStatsCounters?
     var boot:               JourneyStatsCounters?
