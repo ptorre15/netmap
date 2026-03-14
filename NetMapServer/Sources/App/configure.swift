@@ -82,12 +82,15 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(AddTelemetryToDriverBehaviorEvents())      // odometer/fuel/rpm/gps telemetry snapshot on driver_behavior_events
     app.migrations.add(AddLoadEstimationToVehicleEvents())        // load_confidence/samples/m_total_kg/m_load_kg on vehicle_events
     app.migrations.add(AddGpsToDeviceLifecycleEvents())           // GPS fields + gps_fix_type on device_lifecycle_events (spec v6)
+    app.migrations.add(AddMetadataToDeviceLifecycleEvents())      // metadata_json for config_pushed / config_acked system events
     app.migrations.add(AddLastAppliedConfigVersion())             // last_applied_config_version on tracker_configs
     app.migrations.add(AddFirmwareVersionToTrackerConfig())       // firmware_version on tracker_configs
     app.migrations.add(AddTelemetryCompositeIndexes())            // composite telemetry indexes for hot filters
     app.migrations.add(CreateDeviceJourneyStats())                // journey_stats device counters (spec v6)
     app.migrations.add(CreateFirmwareUpgradeRequests())           // firmware_upgrade_requests: OTA upgrade tracking
     app.migrations.add(AddObfcmToVehicleEvents())                 // obfcm_distance_km + obfcm_fuel_l on vehicle_events
+    app.migrations.add(CreateTrackerConfigProfile())             // reusable config profile templates
+    app.migrations.add(AddProfileIDToTrackerConfig())            // profile_id FK on tracker_configs
     try await app.autoMigrate()   // non-blocking in async context
 
     // ── Seed built-in asset types if absent ─────────────────────

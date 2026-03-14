@@ -409,7 +409,7 @@
       </div>
       <div class="field">
         <label>API Key</label>
-        <input id="cfgApiKey" type="password" value="netmap-dev" oninput="saveConfig()">
+        <input id="cfgApiKey" type="password" placeholder="Enter API key" oninput="saveConfig()">
       </div>
       <div class="field">
         <label>Server URL</label>
@@ -516,6 +516,9 @@ const sim = {
   jFuelL:      0,
   gpsSat:      10,
   gpsFixType:  3,
+  // OBFCM lifetime accumulators (persist across journeys)
+  obfcmDistKm: 12480,
+  obfcmFuelL:  0,
 
   // Delivery counters (mirror firmware)
   jDb:0, jFf:0, jFail:0,
@@ -539,10 +542,11 @@ const sim = {
 // ═══════════════════════════════════════════════════════════════════════════
 function loadConfig() {
   document.getElementById('cfgUrl').value = window.location.origin;
+  let s = {};
   try {
-    const s = JSON.parse(localStorage.getItem('nm_sim') || '{}');
+    s = JSON.parse(localStorage.getItem('nm_sim') || '{}');
     if (s.imei)     document.getElementById('cfgImei').value     = s.imei;
-    if (s.apiKey && s.apiKey !== 'netmap-key')   document.getElementById('cfgApiKey').value   = s.apiKey;
+    if (s.apiKey && s.apiKey !== 'netmap-key' && s.apiKey !== 'netmap-dev')   document.getElementById('cfgApiKey').value   = s.apiKey;
     if (s.url)      document.getElementById('cfgUrl').value      = s.url;
     if (s.odo)      document.getElementById('cfgOdo').value      = s.odo;
     if (s.fuel)     document.getElementById('cfgFuel').value     = s.fuel;
@@ -556,6 +560,8 @@ function loadConfig() {
   sim.speedTarget    = +document.getElementById('spdSlider').value;
   sim.fuelPct        = +document.getElementById('cfgFuel').value;
   sim.odometer       = +document.getElementById('cfgOdo').value;
+  sim.obfcmDistKm    = s.obfcmDistKm !== undefined ? s.obfcmDistKm : sim.odometer;
+  sim.obfcmFuelL     = s.obfcmFuelL  !== undefined ? s.obfcmFuelL  : 0;
   sim.loadEnabled    = document.getElementById('chkLoad').checked;
   sim.loadEmptyKg    = +document.getElementById('cfgEmptyMass').value || 1400;
   sim.loadPayloadKg  = +document.getElementById('cfgPayload').value || 0;
@@ -578,9 +584,11 @@ function saveConfig() {
     speed:       g('spdSlider').value,
     intv:        g('intSlider').value,
     route:       g('routeSel').value,
-    loadEnabled: g('chkLoad').checked,
-    emptyMass:   g('cfgEmptyMass').value,
-    payload:     g('cfgPayload').value,
+    loadEnabled:  g('chkLoad').checked,
+    emptyMass:    g('cfgEmptyMass').value,
+    payload:      g('cfgPayload').value,
+    obfcmDistKm:  sim.obfcmDistKm,
+    obfcmFuelL:   sim.obfcmFuelL,
   }));
   updateHeaderImei();
 }
@@ -764,11 +772,13 @@ async function startJourney() {
     latitude:      sim.lat,
     longitude:     sim.lon,
     headingDeg:    Math.round(sim.heading),
-    speedKmh:      0,
-    odometerKm:    sim.odometer,
-    fuelLevelPct:  Math.round(sim.fuelPct),
-    gpsSatellites: sim.gpsSat,
-    gpsFixType:    sim.gpsFixType,
+    speedKmh:         0,
+    odometerKm:       sim.odometer,
+    fuelLevelPct:     Math.round(sim.fuelPct),
+    obfcmDistanceKm:  Math.round(sim.obfcmDistKm * 10) / 10,
+    obfcmFuelL:       Math.round(sim.obfcmFuelL * 100) / 100,
+    gpsSatellites:    sim.gpsSat,
+    gpsFixType:       sim.gpsFixType,
   };
   if (startLoad) startPayload.load = startLoad;
   const ok = await post(startPayload);
@@ -799,6 +809,8 @@ async function endJourney() {
     journeyDistanceKm:    Math.round(sim.jDistKm * 100) / 100,
     journeyFuelConsumedL: Math.round(sim.jFuelL  * 100) / 100,
     fuelLevelPct:         Math.round(sim.fuelPct),
+    obfcmDistanceKm:      Math.round(sim.obfcmDistKm * 10) / 10,
+    obfcmFuelL:           Math.round(sim.obfcmFuelL * 100) / 100,
     gpsSatellites:        sim.gpsSat,
     gpsFixType:           sim.gpsFixType,
   };
@@ -855,6 +867,8 @@ async function buildDriving() {
     odometerKm:           Math.round(sim.odometer * 10) / 10,
     journeyDistanceKm:    Math.round(sim.jDistKm * 100) / 100,
     journeyFuelConsumedL: Math.round(sim.jFuelL  * 100) / 100,
+    obfcmDistanceKm:      Math.round(sim.obfcmDistKm * 10) / 10,
+    obfcmFuelL:           Math.round(sim.obfcmFuelL * 100) / 100,
     gpsSatellites:        sim.gpsSat,
     gpsFixType:           sim.gpsFixType,
   };
@@ -903,10 +917,12 @@ async function autoTick() {
   // Fuel: 8 L/100km city, 6.5 L/100km highway
   const lp100   = sim.speedTarget > 90 ? 6.5 : 8.0;
   const fuelUsed = dist * lp100 / 100;
-  sim.jFuelL   += fuelUsed;
-  sim.odometer += dist;
-  sim.jDistKm  += dist;
-  sim.fuelPct   = Math.max(0, sim.fuelPct - fuelUsed / 0.65); // ~65L tank
+  sim.jFuelL      += fuelUsed;
+  sim.odometer    += dist;
+  sim.jDistKm     += dist;
+  sim.obfcmDistKm += dist;
+  sim.obfcmFuelL  += fuelUsed;
+  sim.fuelPct      = Math.max(0, sim.fuelPct - fuelUsed / 0.65); // ~65L tank
 
   // GPS quality variation
   sim.gpsSat = Math.random() < .05 ? 4 + Math.floor(rnd(3)) : 8 + Math.floor(rnd(6));
@@ -998,6 +1014,8 @@ async function sendBehavior(type, value, ms) {
     odometerKm:          Math.round(sim.odometer * 10) / 10,
     journeyDistanceKm:   Math.round(sim.jDistKm * 100) / 100,
     journeyFuelConsumedL:Math.round(sim.jFuelL  * 100) / 100,
+    obfcmDistanceKm:     Math.round(sim.obfcmDistKm * 10) / 10,
+    obfcmFuelL:          Math.round(sim.obfcmFuelL * 100) / 100,
     gpsSatellites:       sim.gpsSat,
     gpsFixType:          sim.gpsFixType,
   });

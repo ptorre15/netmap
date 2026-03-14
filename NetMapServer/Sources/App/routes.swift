@@ -21,6 +21,7 @@ func routes(_ app: Application) throws {
     try app.register(collection: AuthController())
     try app.register(collection: VehicleController())
     try app.register(collection: AdminController())
+    try app.register(collection: TrackerConfigProfileController())
     try app.register(collection: AssetTypeController())
     try app.register(collection: VehicleEventController())
     try app.register(collection: DriverBehaviorController())

@@ -393,11 +393,51 @@ struct VehicleEventController: RouteCollection {
             if let cfg = try? await TrackerConfig.query(on: req.db)
                 .filter(\.$imei == batchImei)
                 .first() {
-                // Always persist the tracker's reported config version
-                if let v = reportedVersion, cfg.lastAppliedConfigVersion != v {
-                    cfg.lastAppliedConfigVersion = v
-                    try? await cfg.save(on: req.db)
+
+                // Resolve vehicle identity for lifecycle events
+                let vehicleID: String
+                let vehicleName: String
+                if let sr = try? await SensorReading.query(on: req.db)
+                    .filter(\.$sensorID == batchImei)
+                    .filter(\.$brand    == "tracker")
+                    .sort(\.$timestamp, .descending)
+                    .first() {
+                    vehicleID   = sr.vehicleID
+                    vehicleName = sr.vehicleName
+                } else {
+                    vehicleID   = batchImei
+                    vehicleName = "Tracker \(batchImei)"
                 }
+
+                // Record config_acked when the tracker reports the version it now runs
+                if let v = reportedVersion {
+                    let previousApplied = cfg.lastAppliedConfigVersion
+                    if cfg.lastAppliedConfigVersion != v {
+                        cfg.lastAppliedConfigVersion = v
+                        try? await cfg.save(on: req.db)
+                    }
+                    // Log ack only when the tracker transitions to a new version
+                    if previousApplied != v {
+                        let ackMeta: [String: Any] = [
+                            "config_version": v,
+                            "server_version": cfg.schemaVersion,
+                            "status": (v == cfg.schemaVersion) ? "ok" : "partial"
+                        ]
+                        let ackJSON = (try? JSONSerialization.data(withJSONObject: ackMeta, options: [.sortedKeys]))
+                            .flatMap { String(data: $0, encoding: .utf8) }
+                        let ackEvent = DeviceLifecycleEvent(
+                            imei: batchImei,
+                            vehicleID: vehicleID,
+                            vehicleName: vehicleName,
+                            eventType: "config_acked",
+                            timestamp: Date(),
+                            metadataJSON: ackJSON
+                        )
+                        try? await ackEvent.save(on: req.db)
+                    }
+                }
+
+                // Push new config when server version is ahead of tracker
                 if cfg.schemaVersion > (reportedVersion ?? -1) {
                     let wake = (try? JSONDecoder().decode([String].self,
                         from: Data(cfg.wakeUpSourcesJSON.utf8))) ?? []
@@ -415,6 +455,44 @@ struct VehicleEventController: RouteCollection {
                             minimumSpeedKmh: cfg.minimumSpeedKmh,
                             beepEnabled: cfg.beepEnabled)
                     )
+                    // Log config_pushed lifecycle event (once per unique version push)
+                    let alreadyLogged = (try? await DeviceLifecycleEvent.query(on: req.db)
+                        .filter(\.$imei      == batchImei)
+                        .filter(\.$eventType == "config_pushed")
+                        .all()
+                        .contains(where: { ev in
+                            guard let m = ev.metadataJSON,
+                                  let d = m.data(using: .utf8),
+                                  let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                                  let v = j["config_version"] as? Int
+                            else { return false }
+                            return v == cfg.schemaVersion
+                        })) ?? false
+                    if !alreadyLogged {
+                        let pushMeta: [String: Any] = [
+                            "config_version":    cfg.schemaVersion,
+                            "ping_interval_min": cfg.pingIntervalMin,
+                            "sleep_delay_min":   cfg.sleepDelayMin,
+                            "wake_sources":      wake,
+                            "th_harsh_braking":  cfg.thresholdHarshBraking,
+                            "th_harsh_accel":    cfg.thresholdHarshAcceleration,
+                            "th_harsh_cornering":cfg.thresholdHarshCornering,
+                            "th_overspeed_kmh":  cfg.thresholdOverspeedKmh,
+                            "min_speed_kmh":     cfg.minimumSpeedKmh,
+                            "beep_enabled":      cfg.beepEnabled
+                        ]
+                        let pushJSON = (try? JSONSerialization.data(withJSONObject: pushMeta, options: [.sortedKeys]))
+                            .flatMap { String(data: $0, encoding: .utf8) }
+                        let pushEvent = DeviceLifecycleEvent(
+                            imei: batchImei,
+                            vehicleID: vehicleID,
+                            vehicleName: vehicleName,
+                            eventType: "config_pushed",
+                            timestamp: Date(),
+                            metadataJSON: pushJSON
+                        )
+                        try? await pushEvent.save(on: req.db)
+                    }
                 }
             }
 

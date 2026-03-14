@@ -1,6 +1,6 @@
 'use strict';
 
-const WEB_VERSION = '1.0.15';
+const WEB_VERSION = '1.0.22';
 
 // ─── Auth state ────────────────────────────────────────────────────────────────────────────────
 const AUTH = { token: null, username: null, role: null,
@@ -340,6 +340,7 @@ const S = {
   allJourneysMode: false,
   secAudit: { limit: 50, offset: 0, total: 0, action: '', actor: '' },
   otaUpgrades: { limit: 50, offset: 0, total: 0, imeiFilter: '', statusFilter: '' },
+  profiles: [],   // cached TrackerConfigProfile list
 };
 
 // ─── DOM helpers ──────────────────────────────────────────────────────────────
@@ -2479,6 +2480,7 @@ function renderMap() {
 // ─── Table ────────────────────────────────────────────────────────────────────
 async function renderTable() {
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
+  document.getElementById('data-table')?.classList.toggle('ev-compact', !!isTracker(sensor));
   const target = sensor?.targetPressureBar ?? null;
   const df     = new Intl.DateTimeFormat([], { dateStyle: 'short', timeStyle: 'medium' });
   const rows   = [...S.records].reverse().slice(0, 2000);
@@ -2520,19 +2522,22 @@ async function renderTable() {
 
     {
       const EVENT_LABELS = {
-        journey_start: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 14h14v-9h-14v16"/></svg>',   label: 'Journey start', color: '#34d399' },
-        driving:       { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M12 14l0 7"/><path d="M10 12l-6.75 -2"/><path d="M14 12l6.75 -2"/></svg>', label: 'Driving',       color: '#60a5fa' },
-        journey_end:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 14h14v-9h-14v16"/></svg>',    label: 'Journey end',   color: '#f87171' },
-        idle_start:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idle start',    color: '#a78bfa' },
-        idle_end:      { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idle end',      color: '#a78bfa' },
-        stopped:       { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><rect x="4" y="4" width="16" height="16" rx="2"/></svg>',                                   label: 'Stopped',       color: '#fb923c' },
-        gps_acquired:  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 20l4 -4"/><path d="M14 20l5 -5"/></svg>',  label: 'GPS acquired',  color: '#34d399' },
-        gps_lost:      { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 20l4 -4"/><path d="M14 20l5 -5"/><path d="M3 3l18 18"/></svg>',      label: 'GPS lost',      color: '#f87171' },
-        ping:          { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18.364 5.636a9 9 0 0 1 0 12.728"/><path d="M15.536 8.464a5 5 0 0 1 0 7.072"/><path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M5.636 5.636a9 9 0 0 0 0 12.728"/><path d="M8.464 8.464a5 5 0 0 0 0 7.072"/></svg>', label: 'Ping',          color: '#22d3ee' },
-        boot:          { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4l0 8"/></svg>',   label: 'Boot',          color: '#a78bfa' },
-        sleep:         { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 12h6l-6 8h6"/><path d="M14 4h6l-6 8h6"/></svg>',     label: 'Sleep',         color: '#94a3b8' },
-        wake_up:       { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up',       color: '#fbbf24' },
+        journey_start:  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 14h14v-9h-14v16"/></svg>',   label: 'Journey start', color: '#34d399' },
+        driving:        { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M12 14l0 7"/><path d="M10 12l-6.75 -2"/><path d="M14 12l6.75 -2"/></svg>', label: 'Driving',       color: '#60a5fa' },
+        journey_end:    { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 14h14v-9h-14v16"/></svg>',    label: 'Journey end',   color: '#f87171' },
+        idle_start:     { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idle start',    color: '#a78bfa' },
+        idle_end:       { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6.5 17h11"/><path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1"/><path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1"/></svg>',      label: 'Idle end',      color: '#a78bfa' },
+        stopped:        { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><rect x="4" y="4" width="16" height="16" rx="2"/></svg>',                                   label: 'Stopped',       color: '#fb923c' },
+        gps_acquired:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 20l4 -4"/><path d="M14 20l5 -5"/></svg>',  label: 'GPS acquired',  color: '#34d399' },
+        gps_lost:       { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.707 6.293l2.586 -2.586a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-2.586 2.586a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 0 -1.414z"/><path d="M6 10l-3 3l3 3l3 -3"/><path d="M10 6l3 -3l3 3l-3 3"/><path d="M12 20l4 -4"/><path d="M14 20l5 -5"/><path d="M3 3l18 18"/></svg>',      label: 'GPS lost',      color: '#f87171' },
+        ping:           { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18.364 5.636a9 9 0 0 1 0 12.728"/><path d="M15.536 8.464a5 5 0 0 1 0 7.072"/><path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M5.636 5.636a9 9 0 0 0 0 12.728"/><path d="M8.464 8.464a5 5 0 0 0 0 7.072"/></svg>', label: 'Ping',          color: '#22d3ee' },
+        boot:           { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4l0 8"/></svg>',   label: 'Boot',          color: '#a78bfa' },
+        sleep:          { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 12h6l-6 8h6"/><path d="M14 4h6l-6 8h6"/></svg>',     label: 'Sleep',         color: '#94a3b8' },
+        wake_up:        { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 17h1m16 0h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7m-9.7 5.7a4 4 0 0 1 8 0"/><path d="M3 21l18 0"/><path d="M12 9v-6l3 3m-6 0l3 -3"/></svg>', label: 'Wake up',       color: '#fbbf24' },
+        config_pushed:  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4l0 12"/></svg>', label: 'Config sent',   color: '#818cf8' },
+        config_acked:   { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10"/></svg>', label: 'Config acked',  color: '#34d399' },
       };
+      const SYS_EVENT_TYPES_WITH_DETAIL = new Set(['config_pushed', 'config_acked']);
 
       function fmtDelay(sec) {
         if (sec < 60)   return sec + 's';
@@ -2561,17 +2566,17 @@ async function renderTable() {
         const hasRpmL     = evList.some(e => e.engineRpm != null);
         const hasJFuelL   = evList.some(e => e.journeyFuelConsumedL != null);
         const hasFuelL    = evList.some(e => e.fuelLevelPct != null);
-        const hasObfcmD   = evList.some(e => e.obfcmDistanceKm != null);
-        const hasObfcmF   = evList.some(e => e.obfcmFuelL != null);
+        const hasObfcmD   = true;  // always show OBFCM lifetime columns
+        const hasObfcmF   = true;
 
-        const hdrs2 = ['Time', 'Delay', 'Event', 'GPS / Fix'];
+        const hdrs2 = ['Time', 'Delay', 'Event', 'GPS'];
         if (hasSatsL)    hdrs2.push('Sats');
         if (hasSpeedL)   hdrs2.push('Speed');
         if (hasOdoL)     hdrs2.push('Odometer');
-        if (hasDistL)    hdrs2.push('Journey dist.');
-        if (hasRpmL)     hdrs2.push('Engine RPM');
-        if (hasJFuelL)   hdrs2.push('Journey fuel');
-        if (hasFuelL)    hdrs2.push('Fuel level');
+        if (hasDistL)    hdrs2.push('Trip dist.');
+        if (hasRpmL)     hdrs2.push('RPM');
+        if (hasJFuelL)   hdrs2.push('Trip fuel');
+        if (hasFuelL)    hdrs2.push('Fuel %');
         if (hasObfcmD)   hdrs2.push('OBFCM dist.');
         if (hasObfcmF)   hdrs2.push('OBFCM fuel');
         hdrs2.push('');
@@ -2611,9 +2616,14 @@ async function renderTable() {
           const fuelCol = e.fuelLevelPct != null
             ? (e.fuelLevelPct > 50 ? '#34d399' : e.fuelLevelPct > 20 ? '#fbbf24' : '#f87171') : '';
           const evColor = safeCssColor(ev2.color) || 'var(--fg2)';
+          const hasSysDetail = SYS_EVENT_TYPES_WITH_DETAIL.has(e.eventType) && e.metadataJSON;
           let cells = `<td class="td-ts-compact">${fmtTs(e.timestamp)}</td>`;
           cells += delayCell(e);
-          cells += `<td><span class="ev-badge" style="--ev-color:${evColor}">${ev2.icon} ${escHTML(ev2.label)}</span></td>`;
+          if (hasSysDetail) {
+            cells += `<td><span style="display:inline-flex;align-items:center;gap:4px"><span class="ev-badge" style="--ev-color:${evColor}">${ev2.icon} ${escHTML(ev2.label)}</span><button class="row-sysev-detail-btn" data-ev-id="${escAttr(e.id)}" title="Config details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z"/></svg></button></span></td>`;
+          } else {
+            cells += `<td><span class="ev-badge" style="--ev-color:${evColor}">${ev2.icon} ${escHTML(ev2.label)}</span></td>`;
+          }
           cells += `<td>${gpsCell(e)}</td>`;
           if (hasSatsL)    cells += `<td>${e.gpsSatellites != null ? e.gpsSatellites : '–'}</td>`;
           if (hasSpeedL)   cells += `<td>${e.speedKmh != null ? e.speedKmh.toFixed(0) + ' km/h' : '–'}</td>`;
@@ -2625,7 +2635,7 @@ async function renderTable() {
           if (hasObfcmD)   cells += `<td>${e.obfcmDistanceKm != null ? e.obfcmDistanceKm.toFixed(1) + ' km' : '–'}</td>`;
           if (hasObfcmF)   cells += `<td>${e.obfcmFuelL != null ? e.obfcmFuelL.toFixed(2) + ' L' : '–'}</td>`;
           cells += `<td><button class="row-delete-btn" data-id="${escAttr(e.id)}" data-src="${e._src === 'lifecycle' ? 'lifecycle' : 'vehicle'}" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button></td>`;
-          return sep + `<tr>${cells}</tr>`;
+          return sep + `<tr data-ev-id="${escAttr(e.id)}">${cells}</tr>`;
         }).join('');
 
         D.tableBody.querySelectorAll('.row-delete-btn').forEach(btn => {
@@ -2644,6 +2654,44 @@ async function renderTable() {
               row.remove(); showToast('Event deleted');
             }
             else showToast('Delete failed', 'error');
+          });
+        });
+
+        // System event detail expand (config_pushed / config_acked)
+        D.tableBody.querySelectorAll('.row-sysev-detail-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const tr = btn.closest('tr');
+            const existing = tr.nextElementSibling;
+            if (existing?.classList.contains('ev-alert-detail-expanded')) {
+              existing.remove(); btn.classList.remove('active'); return;
+            }
+            btn.classList.add('active');
+            const evId = btn.dataset.evId;
+            const ev = [...lifecycleEvents].find(e => String(e.id) === String(evId));
+            if (!ev?.metadataJSON) return;
+            let meta;
+            try { meta = JSON.parse(ev.metadataJSON); } catch { meta = {}; }
+            const chips = [];
+            if (meta.config_version   != null) chips.push(`<span class="ev-alerts-detail-chip"><b>Version:</b> ${escHTML(String(meta.config_version))}</span>`);
+            if (meta.server_version   != null) chips.push(`<span class="ev-alerts-detail-chip"><b>Server v:</b> ${escHTML(String(meta.server_version))}</span>`);
+            if (meta.status           != null) {
+              const ok = meta.status === 'ok';
+              chips.push(`<span class="ev-alerts-detail-chip" style="color:${ok ? 'var(--ok)' : '#fbbf24'}"><b>Status:</b> ${escHTML(meta.status)}</span>`);
+            }
+            if (meta.ping_interval_min  != null) chips.push(`<span class="ev-alerts-detail-chip"><b>Ping:</b> ${escHTML(String(meta.ping_interval_min))} min</span>`);
+            if (meta.sleep_delay_min    != null) chips.push(`<span class="ev-alerts-detail-chip"><b>Sleep:</b> ${escHTML(String(meta.sleep_delay_min))} min</span>`);
+            if (Array.isArray(meta.wake_sources) && meta.wake_sources.length) chips.push(`<span class="ev-alerts-detail-chip"><b>Wake:</b> ${escHTML(meta.wake_sources.join(', '))}</span>`);
+            if (meta.th_harsh_braking   != null) chips.push(`<span class="ev-alerts-detail-chip"><b>Braking:</b> ${escHTML(String(meta.th_harsh_braking))}</span>`);
+            if (meta.th_harsh_accel     != null) chips.push(`<span class="ev-alerts-detail-chip"><b>Accel:</b> ${escHTML(String(meta.th_harsh_accel))}</span>`);
+            if (meta.th_harsh_cornering != null) chips.push(`<span class="ev-alerts-detail-chip"><b>Cornering:</b> ${escHTML(String(meta.th_harsh_cornering))}</span>`);
+            if (meta.th_overspeed_kmh   != null) chips.push(`<span class="ev-alerts-detail-chip"><b>Overspeed:</b> ${escHTML(String(meta.th_overspeed_kmh))} km/h</span>`);
+            if (meta.min_speed_kmh      != null) chips.push(`<span class="ev-alerts-detail-chip"><b>Min speed:</b> ${escHTML(String(meta.min_speed_kmh))} km/h</span>`);
+            if (meta.beep_enabled       != null) chips.push(`<span class="ev-alerts-detail-chip"><b>Beep:</b> ${meta.beep_enabled ? 'on' : 'off'}</span>`);
+            const colCount = $('table-head').querySelectorAll('th').length;
+            const detailTr = document.createElement('tr');
+            detailTr.className = 'ev-alert-detail-expanded';
+            detailTr.innerHTML = `<td class="ev-alert-detail-cell" colspan="${colCount}"><div class="ev-alert-detail-content">${chips.join('') || 'No details'}</div></td>`;
+            tr.insertAdjacentElement('afterend', detailTr);
           });
         });
 
@@ -3770,6 +3818,7 @@ function setup() {
   $('admin-add-user-btn').addEventListener('click',  () => $('new-user-modal').style.display = 'flex');
   $('admin-add-asset-btn').addEventListener('click', () => openVehicleModal());
   $('ota-refresh-btn')?.addEventListener('click', () => renderOtaPanel());
+  $('admin-add-profile-btn')?.addEventListener('click', () => openProfileModal(null));
   $('new-user-modal-close').addEventListener('click', () => $('new-user-modal').style.display = 'none');
   $('new-user-cancel-btn').addEventListener('click',  () => $('new-user-modal').style.display = 'none');
   $('new-user-modal').addEventListener('click', e => { if (e.target === $('new-user-modal')) $('new-user-modal').style.display = 'none'; });
@@ -4025,85 +4074,120 @@ async function openTrackerConfigModal(imei) {
   modal.style.display = 'flex';
   body.innerHTML = '<p style="color:var(--fg3);font-size:12px">Loading\u2026</p>';
 
-  let cfg;
+  let cfg, profiles;
   try {
-    cfg = await adminGetTrackerConfig(imei);
+    [cfg, profiles] = await Promise.all([
+      adminGetTrackerConfig(imei),
+      adminGetProfiles().catch(() => []),
+    ]);
   } catch (err) {
     body.innerHTML = `<p style="color:#f87171;font-size:12px">${escHTML(err.message)}</p>`;
     return;
   }
 
-  const sys = cfg.system; const db = cfg.driverBehavior; const dbT = db.thresholds;
-  const wakes = sys.wakeUpSourcesEnabled ?? [];
-  const wakeRows = WAKE_SOURCES.map(src =>
-    `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:4px">` +
-    `<input type="checkbox" name="tcm-wake-${src}"${wakes.includes(src) ? ' checked' : ''}> ` +
-    escHTML(src.replace(/_/g, ' ')) + `</label>`
-  ).join('');
+  const renderModal = (cfg, profiles) => {
+    const sys = cfg.system; const db = cfg.driverBehavior; const dbT = db.thresholds;
+    const wakes = sys.wakeUpSourcesEnabled ?? [];
+    const wakeRows = WAKE_SOURCES.map(src =>
+      `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:4px">` +
+      `<input type="checkbox" name="tcm-wake-${src}"${wakes.includes(src) ? ' checked' : ''}> ` +
+      escHTML(src.replace(/_/g, ' ')) + `</label>`
+    ).join('');
 
-  body.innerHTML =
-    `<div style="margin-bottom:12px;font-size:11px;color:var(--fg3)">Config version: <strong style="color:var(--fg2)">${cfg.schemaVersion ?? 1}</strong></div>` +
-    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">` +
-    // ── System ──
-    `<div>` +
-    `<div class="tcm-section-title">System</div>` +
-    `<div class="modal-field"><label>Ping interval (min)</label>` +
-    `<input class="tcm-input" type="number" id="tcm-ping" min="1" max="60" value="${sys.pingIntervalMin}"></div>` +
-    `<div class="modal-field"><label>Sleep delay (min)</label>` +
-    `<input class="tcm-input" type="number" id="tcm-sleep" min="1" max="120" value="${sys.sleepDelayMin}"></div>` +
-    `<div class="modal-field"><label>Wake sources</label>${wakeRows}</div>` +
-    `</div>` +
-    // ── Driver Behavior ──
-    `<div>` +
-    `<div class="tcm-section-title">Driver Behavior</div>` +
-    `<div class="modal-field"><label>Harsh braking (m/s²)</label>` +
-    `<input class="tcm-input" type="number" id="tcm-hbrk" min="0.1" max="10" step="0.1" value="${dbT.harshBraking}"></div>` +
-    `<div class="modal-field"><label>Harsh accel. (m/s²)</label>` +
-    `<input class="tcm-input" type="number" id="tcm-hacc" min="0.1" max="10" step="0.1" value="${dbT.harshAcceleration}"></div>` +
-    `<div class="modal-field"><label>Cornering (m/s²)</label>` +
-    `<input class="tcm-input" type="number" id="tcm-hcor" min="0.1" max="10" step="0.1" value="${dbT.harshCornering}"></div>` +
-    `<div class="modal-field"><label>Overspeed (km/h)</label>` +
-    `<input class="tcm-input" type="number" id="tcm-ovspd" min="50" max="300" value="${dbT.overspeed}"></div>` +
-    `<div class="modal-field"><label>Min. speed (km/h)</label>` +
-    `<input class="tcm-input" type="number" id="tcm-minspd" min="0" max="50" value="${db.minimumSpeedKmh}"></div>` +
-    `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:12px">` +
-    `<input type="checkbox" id="tcm-beep"${db.beepEnabled ? ' checked' : ''}> Beep alerts</label>` +
-    `</div>` +
-    `</div>` +
-    `<div id="tcm-error" class="auth-error" style="display:none;margin-top:8px"></div>` +
-    `<div class="modal-actions">` +
-    `<button type="button" id="tcm-cancel" class="modal-btn-secondary">Cancel</button>` +
-    `<button type="button" id="tcm-save" class="modal-btn-primary">Save</button>` +
-    `</div>`;
+    const currentProfile = profiles.find(p => p.id === cfg.profileID);
+    const profileOptions = [
+      `<option value="">Custom</option>`,
+      ...profiles.map(p => `<option value="${escAttr(p.id)}"${p.id === cfg.profileID ? ' selected' : ''}>${escHTML(p.name)}</option>`)
+    ].join('');
 
-  body.querySelector('#tcm-cancel').addEventListener('click', close);
-  body.querySelector('#tcm-save').addEventListener('click', async () => {
-    const errEl  = body.querySelector('#tcm-error');
-    const saveEl = body.querySelector('#tcm-save');
-    const getNum = id => parseFloat(body.querySelector(`#${id}`)?.value) || 0;
-    const getInt = id => parseInt(body.querySelector(`#${id}`)?.value, 10) || 0;
-    const selectedWakes = WAKE_SOURCES.filter(src => body.querySelector(`[name="tcm-wake-${src}"]`)?.checked);
-    const payload = {
-      imei,
-      system: { pingIntervalMin: getInt('tcm-ping'), sleepDelayMin: getInt('tcm-sleep'), wakeUpSourcesEnabled: selectedWakes },
-      driverBehavior: {
-        thresholds: { harshBraking: getNum('tcm-hbrk'), harshAcceleration: getNum('tcm-hacc'), harshCornering: getNum('tcm-hcor'), overspeed: getNum('tcm-ovspd') },
-        minimumSpeedKmh: getInt('tcm-minspd'),
-        beepEnabled: !!(body.querySelector('#tcm-beep')?.checked),
-      },
-    };
-    saveEl.disabled = true; errEl.style.display = 'none';
-    try {
-      await adminPutTrackerConfig(imei, payload);
-      close();
-      showToast('Tracker configuration saved.');
-      // Reload sensors so the Config row in the sidebar reflects the new schemaVersion immediately
-      await loadSensors();
-      renderSensorInfoCard();
-    } catch (err) {
-      errEl.textContent = err.message; errEl.style.display = 'block';
-    } finally { saveEl.disabled = false; }
-  });
+    body.innerHTML =
+      // ── Profile selector ──
+      `<div class="tcm-profile-row">` +
+      `<label style="font-size:11px;color:var(--fg3);white-space:nowrap">Based on profile</label>` +
+      `<select id="tcm-profile-select" class="tcm-input" style="flex:1;min-width:0">${profileOptions}</select>` +
+      `<button type="button" id="tcm-apply-profile" class="modal-btn-secondary admin-small-btn" style="white-space:nowrap">Apply profile</button>` +
+      `</div>` +
+      `<div style="margin-bottom:12px;font-size:11px;color:var(--fg3)">Config version: <strong style="color:var(--fg2)">${cfg.schemaVersion ?? 1}</strong></div>` +
+      `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">` +
+      // ── System ──
+      `<div>` +
+      `<div class="tcm-section-title">System</div>` +
+      `<div class="modal-field"><label>Ping interval (min)</label>` +
+      `<input class="tcm-input" type="number" id="tcm-ping" min="1" max="60" value="${sys.pingIntervalMin}"></div>` +
+      `<div class="modal-field"><label>Sleep delay (min)</label>` +
+      `<input class="tcm-input" type="number" id="tcm-sleep" min="1" max="120" value="${sys.sleepDelayMin}"></div>` +
+      `<div class="modal-field"><label>Wake sources</label>${wakeRows}</div>` +
+      `</div>` +
+      // ── Driver Behavior ──
+      `<div>` +
+      `<div class="tcm-section-title">Driver Behavior</div>` +
+      `<div class="modal-field"><label>Harsh braking (m/s²)</label>` +
+      `<input class="tcm-input" type="number" id="tcm-hbrk" min="0.1" max="10" step="0.1" value="${dbT.harshBraking}"></div>` +
+      `<div class="modal-field"><label>Harsh accel. (m/s²)</label>` +
+      `<input class="tcm-input" type="number" id="tcm-hacc" min="0.1" max="10" step="0.1" value="${dbT.harshAcceleration}"></div>` +
+      `<div class="modal-field"><label>Cornering (m/s²)</label>` +
+      `<input class="tcm-input" type="number" id="tcm-hcor" min="0.1" max="10" step="0.1" value="${dbT.harshCornering}"></div>` +
+      `<div class="modal-field"><label>Overspeed (km/h)</label>` +
+      `<input class="tcm-input" type="number" id="tcm-ovspd" min="50" max="300" value="${dbT.overspeed}"></div>` +
+      `<div class="modal-field"><label>Min. speed (km/h)</label>` +
+      `<input class="tcm-input" type="number" id="tcm-minspd" min="0" max="50" value="${db.minimumSpeedKmh}"></div>` +
+      `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:12px">` +
+      `<input type="checkbox" id="tcm-beep"${db.beepEnabled ? ' checked' : ''}> Beep alerts</label>` +
+      `</div>` +
+      `</div>` +
+      `<div id="tcm-error" class="auth-error" style="display:none;margin-top:8px"></div>` +
+      `<div class="modal-actions">` +
+      `<button type="button" id="tcm-cancel" class="modal-btn-secondary">Cancel</button>` +
+      `<button type="button" id="tcm-save" class="modal-btn-primary">Save</button>` +
+      `</div>`;
+
+    body.querySelector('#tcm-cancel').addEventListener('click', close);
+
+    // Apply profile → stamp profile fields onto tracker via server, then refresh form
+    body.querySelector('#tcm-apply-profile')?.addEventListener('click', async () => {
+      const selectedProfileID = body.querySelector('#tcm-profile-select')?.value;
+      if (!selectedProfileID) { showToast('Select a profile first.'); return; }
+      const applyBtn = body.querySelector('#tcm-apply-profile');
+      applyBtn.disabled = true;
+      try {
+        const updatedCfg = await adminApplyProfile(imei, selectedProfileID);
+        renderModal(updatedCfg, profiles);
+        showToast('Profile applied. Review and save if needed.');
+      } catch (err) {
+        const errEl = body.querySelector('#tcm-error');
+        if (errEl) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+      } finally { applyBtn.disabled = false; }
+    });
+
+    body.querySelector('#tcm-save').addEventListener('click', async () => {
+      const errEl  = body.querySelector('#tcm-error');
+      const saveEl = body.querySelector('#tcm-save');
+      const getNum = id => parseFloat(body.querySelector(`#${id}`)?.value) || 0;
+      const getInt = id => parseInt(body.querySelector(`#${id}`)?.value, 10) || 0;
+      const selectedWakes = WAKE_SOURCES.filter(src => body.querySelector(`[name="tcm-wake-${src}"]`)?.checked);
+      const payload = {
+        imei,
+        system: { pingIntervalMin: getInt('tcm-ping'), sleepDelayMin: getInt('tcm-sleep'), wakeUpSourcesEnabled: selectedWakes },
+        driverBehavior: {
+          thresholds: { harshBraking: getNum('tcm-hbrk'), harshAcceleration: getNum('tcm-hacc'), harshCornering: getNum('tcm-hcor'), overspeed: getNum('tcm-ovspd') },
+          minimumSpeedKmh: getInt('tcm-minspd'),
+          beepEnabled: !!(body.querySelector('#tcm-beep')?.checked),
+        },
+      };
+      saveEl.disabled = true; errEl.style.display = 'none';
+      try {
+        await adminPutTrackerConfig(imei, payload);
+        close();
+        showToast('Tracker configuration saved.');
+        await loadSensors();
+        renderSensorInfoCard();
+      } catch (err) {
+        errEl.textContent = err.message; errEl.style.display = 'block';
+      } finally { saveEl.disabled = false; }
+    });
+  };
+
+  renderModal(cfg, profiles);
 }
 
 async function adminGetTrackerConfig(imei) {
@@ -4152,19 +4236,274 @@ async function adminFetchSecurityEvents({ limit = 50, offset = 0, action = '', a
   return res.json();
 }
 
+// ─── Tracker Config Profiles API ─────────────────────────────────────────────
+async function adminGetProfiles() {
+  const res = await fetch('/api/admin/tracker-config-profiles', { headers: authHeaders() });
+  if (!res.ok) return [];
+  return res.json();
+}
+async function adminCreateProfile(payload) {
+  const res = await fetch('/api/admin/tracker-config-profiles', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+  return res.json();
+}
+async function adminUpdateProfile(id, payload) {
+  const res = await fetch(`/api/admin/tracker-config-profiles/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+  return res.json();
+}
+async function adminDeleteProfile(id) {
+  const res = await fetch(`/api/admin/tracker-config-profiles/${encodeURIComponent(id)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+}
+async function adminApplyProfile(imei, profileID) {
+  const res = await fetch(`/api/admin/trackers/${encodeURIComponent(imei)}/apply-profile/${encodeURIComponent(profileID)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+  return res.json();
+}
+
+// ─── Profile modal (create / edit) ───────────────────────────────────────────
+const WAKE_SOURCES_ALL = ['VOLTAGE_RISE', 'CAN_ACTIVITY', 'TIMER_BACKUP', 'ESPNOW_HMI', 'IMU_MOTION'];
+
+function openProfileModal(profile) {
+  const isEdit  = !!profile;
+  const wakes   = profile?.system?.wakeUpSourcesEnabled ?? ['VOLTAGE_RISE', 'CAN_ACTIVITY'];
+  const sys     = profile?.system     ?? { pingIntervalMin: 5, sleepDelayMin: 15 };
+  const db      = profile?.driverBehavior ?? { thresholds: { harshBraking: 3.2, harshAcceleration: 3.0, harshCornering: 2.8, overspeed: 120 }, minimumSpeedKmh: 20, beepEnabled: true };
+  const dbT     = db.thresholds;
+
+  const wakeRows = WAKE_SOURCES_ALL.map(src =>
+    `<label class="pm-wake-label"><input type="checkbox" name="pm-wake-${src}"${wakes.includes(src) ? ' checked' : ''}> ${escHTML(src.replace(/_/g, ' '))}</label>`
+  ).join('');
+
+  // Build modal DOM
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'display:flex;z-index:9999';
+  overlay.innerHTML = `
+    <div class="modal-card" style="max-width:560px;width:100%">
+      <div class="modal-header">
+        <h3>${isEdit ? 'Edit Profile' : 'New Config Profile'}</h3>
+        <button class="modal-close" id="pm-close">&#x2715;</button>
+      </div>
+      <div class="modal-field">
+        <label>Name *</label>
+        <input class="tcm-input" type="text" id="pm-name" maxlength="80" value="${escAttr(profile?.name ?? '')}" placeholder="e.g. Highway truck, Urban delivery…">
+      </div>
+      <div class="modal-field">
+        <label>Description</label>
+        <input class="tcm-input" type="text" id="pm-desc" value="${escAttr(profile?.description ?? '')}" placeholder="Optional notes…">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-top:4px">
+        <div>
+          <div class="tcm-section-title">System</div>
+          <div class="modal-field"><label>Ping interval (min)</label>
+            <input class="tcm-input" type="number" id="pm-ping" min="1" max="1440" value="${sys.pingIntervalMin}"></div>
+          <div class="modal-field"><label>Sleep delay (min)</label>
+            <input class="tcm-input" type="number" id="pm-sleep" min="1" max="10080" value="${sys.sleepDelayMin}"></div>
+          <div class="modal-field"><label>Wake sources</label>${wakeRows}</div>
+        </div>
+        <div>
+          <div class="tcm-section-title">Driver Behavior</div>
+          <div class="modal-field"><label>Harsh braking (m/s²)</label>
+            <input class="tcm-input" type="number" id="pm-hbrk" min="0.1" max="10" step="0.1" value="${dbT.harshBraking}"></div>
+          <div class="modal-field"><label>Harsh accel. (m/s²)</label>
+            <input class="tcm-input" type="number" id="pm-hacc" min="0.1" max="10" step="0.1" value="${dbT.harshAcceleration}"></div>
+          <div class="modal-field"><label>Cornering (m/s²)</label>
+            <input class="tcm-input" type="number" id="pm-hcor" min="0.1" max="10" step="0.1" value="${dbT.harshCornering}"></div>
+          <div class="modal-field"><label>Overspeed (km/h)</label>
+            <input class="tcm-input" type="number" id="pm-ovspd" min="1" max="300" value="${dbT.overspeed}"></div>
+          <div class="modal-field"><label>Min. speed (km/h)</label>
+            <input class="tcm-input" type="number" id="pm-minspd" min="0" max="250" value="${db.minimumSpeedKmh}"></div>
+          <label class="pm-beep-label"><input type="checkbox" id="pm-beep"${db.beepEnabled ? ' checked' : ''}> Beep alerts</label>
+        </div>
+      </div>
+      <div id="pm-error" class="auth-error" style="display:none;margin-top:8px"></div>
+      <div class="modal-actions">
+        <button type="button" id="pm-cancel" class="modal-btn-secondary">Cancel</button>
+        <button type="button" id="pm-save" class="modal-btn-primary">${isEdit ? 'Save changes' : 'Create Profile'}</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  const get  = id => overlay.querySelector(`#${id}`);
+  const num  = id => parseFloat(get(id)?.value) || 0;
+  const int  = id => parseInt(get(id)?.value, 10) || 0;
+  const close = () => document.body.removeChild(overlay);
+  get('pm-close').addEventListener('click', close);
+  get('pm-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  get('pm-save').addEventListener('click', async () => {
+    const errEl = get('pm-error');
+    const btn   = get('pm-save');
+    const selectedWakes = WAKE_SOURCES_ALL.filter(src => overlay.querySelector(`[name="pm-wake-${src}"]`)?.checked);
+    const payload = {
+      name:        get('pm-name').value.trim(),
+      description: get('pm-desc').value.trim() || null,
+      system: {
+        pingIntervalMin:      int('pm-ping'),
+        sleepDelayMin:        int('pm-sleep'),
+        wakeUpSourcesEnabled: selectedWakes,
+      },
+      driverBehavior: {
+        thresholds: {
+          harshBraking:      num('pm-hbrk'),
+          harshAcceleration: num('pm-hacc'),
+          harshCornering:    num('pm-hcor'),
+          overspeed:         num('pm-ovspd'),
+        },
+        minimumSpeedKmh: int('pm-minspd'),
+        beepEnabled:     !!get('pm-beep')?.checked,
+      },
+    };
+    btn.disabled = true; errEl.style.display = 'none';
+    try {
+      if (isEdit) await adminUpdateProfile(profile.id, payload);
+      else        await adminCreateProfile(payload);
+      close();
+      showToast(isEdit ? 'Profile updated.' : 'Profile created.');
+      await renderProfilesPanel();
+      renderAdminPanel();
+    } catch (err) {
+      errEl.textContent = err.message; errEl.style.display = 'block';
+    } finally { btn.disabled = false; }
+  });
+}
+
+// ─── Profiles Panel ───────────────────────────────────────────────────────────
+async function renderProfilesPanel() {
+  const container = $('admin-profiles-list');
+  if (!container) return;
+
+  container.innerHTML = '<p class="admin-loading">Loading\u2026</p>';
+  let profiles, trackers;
+  try {
+    [profiles, trackers] = await Promise.all([
+      adminGetProfiles(),
+      apiFetch('/api/admin/trackers'),
+    ]);
+    S.profiles = profiles;
+  } catch (err) {
+    container.innerHTML = `<p class="auth-error">${escHTML(err.message)}</p>`;
+    return;
+  }
+
+  if (!profiles.length) {
+    container.innerHTML = '<p class="sidebar-hint">No profiles yet. Click \u00ab + New Profile \u00bb to create one.</p>';
+    return;
+  }
+
+  const trackerOptions = trackers.length
+    ? trackers.map(t => `<option value="${escAttr(t.imei)}">${escHTML(t.sensorName ?? t.imei)}</option>`).join('')
+    : '<option value="">No trackers</option>';
+
+  container.innerHTML = profiles.map(p => {
+    const wakes = (p.system?.wakeUpSourcesEnabled ?? []).map(s => s.replace(/_/g, '\u202F')).join(', ');
+    const t = p.driverBehavior?.thresholds ?? {};
+    const sys = p.system ?? {};
+    const db  = p.driverBehavior ?? {};
+    return `
+      <div class="admin-profile-row" data-profile-id="${escAttr(p.id)}">
+        <div class="admin-profile-header">
+          <div class="admin-profile-meta">
+            <span class="admin-profile-name">${escHTML(p.name)}</span>
+            ${p.description ? `<span class="admin-profile-desc">${escHTML(p.description)}</span>` : ''}
+          </div>
+          <div class="admin-profile-actions">
+            <button class="modal-btn-secondary admin-small-btn profile-edit-btn" title="Edit">\u270E</button>
+            <button class="modal-btn-danger admin-small-btn profile-delete-btn" title="Delete">\uD83D\uDDD1</button>
+          </div>
+        </div>
+        <div class="admin-profile-fields">
+          <span>Ping&nbsp;${sys.pingIntervalMin}min</span>
+          <span>Sleep&nbsp;${sys.sleepDelayMin}min</span>
+          <span>Brake&nbsp;${t.harshBraking}m/s\u00B2</span>
+          <span>Accel&nbsp;${t.harshAcceleration}m/s\u00B2</span>
+          <span>Corner&nbsp;${t.harshCornering}m/s\u00B2</span>
+          <span>Overspd&nbsp;${t.overspeed}km/h</span>
+          ${db.beepEnabled ? '<span class="profile-chip">Beep ON</span>' : ''}
+        </div>
+        <div class="admin-profile-apply">
+          <label class="admin-profile-apply-label">Apply to tracker:</label>
+          <select class="profile-tracker-select">${trackerOptions}</select>
+          <button class="modal-btn-primary admin-small-btn profile-apply-btn">Apply</button>
+          <span class="profile-apply-status"></span>
+        </div>
+      </div>`;
+  }).join('');
+
+  container.querySelectorAll('.profile-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('[data-profile-id]');
+      const p   = profiles.find(x => x.id === row?.dataset.profileId);
+      if (p) openProfileModal(p);
+    });
+  });
+
+  container.querySelectorAll('.profile-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('[data-profile-id]');
+      const p   = profiles.find(x => x.id === row?.dataset.profileId);
+      if (!p) return;
+      if (!confirm(`Delete profile "${p.name}"? Trackers using it will not be affected.`)) return;
+      try {
+        await adminDeleteProfile(p.id);
+        showToast('Profile deleted.');
+        await renderProfilesPanel();
+        renderAdminPanel();
+      } catch (err) { alert(err.message); }
+    });
+  });
+
+  container.querySelectorAll('.profile-apply-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row    = btn.closest('[data-profile-id]');
+      const p      = profiles.find(x => x.id === row?.dataset.profileId);
+      const imei   = row?.querySelector('.profile-tracker-select')?.value;
+      const status = row?.querySelector('.profile-apply-status');
+      if (!p || !imei) return;
+      btn.disabled = true;
+      if (status) { status.textContent = ''; status.className = 'profile-apply-status'; }
+      try {
+        await adminApplyProfile(imei, p.id);
+        if (status) { status.textContent = '\u2714 Applied'; status.className = 'profile-apply-status ok'; }
+        showToast(`Profile "${p.name}" applied to ${imei}.`);
+      } catch (err) {
+        if (status) { status.textContent = err.message; status.className = 'profile-apply-status err'; }
+      } finally { btn.disabled = false; }
+    });
+  });
+}
+
 async function renderAdminPanel() {
   // Hub: just update count badges
   try {
-    const [users, assets, trackers, sec] = await Promise.all([
+    const [users, assets, trackers, sec, profiles] = await Promise.all([
       apiFetch('/api/admin/users'),
       apiFetch('/api/vehicles'),
       apiFetch('/api/admin/trackers'),
       adminFetchSecurityEvents({ limit: 1, offset: 0, action: S.secAudit.action, actor: S.secAudit.actor }),
+      adminGetProfiles(),
     ]);
     const cu = $('admin-count-users');    if (cu) cu.textContent = users.length;
     const ca = $('admin-count-assets');   if (ca) ca.textContent = assets.length;
     const ct = $('admin-count-trackers'); if (ct) ct.textContent = trackers.length;
     const cs = $('admin-count-security'); if (cs) cs.textContent = sec.total ?? 0;
+    const cp = $('admin-count-profiles'); if (cp) cp.textContent = profiles.length;
+    S.profiles = profiles;
   } catch (_) { /* counts unavailable */ }
 }
 
@@ -4531,6 +4870,7 @@ function switchAdminTab(tab) {
   if (tab === 'users')    renderUsersPanel();
   if (tab === 'assets')   renderAssetsPanel();
   if (tab === 'trackers') renderTrackersPanel();
+  if (tab === 'profiles') renderProfilesPanel();
   if (tab === 'security') renderSecurityPanel();
   if (tab === 'stats')    renderStatsPanel();
   if (tab === 'ota')      renderOtaPanel();

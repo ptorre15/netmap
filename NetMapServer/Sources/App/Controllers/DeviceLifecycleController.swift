@@ -22,15 +22,17 @@ final class DeviceLifecycleEvent: Model, Content, @unchecked Sendable {
     @OptionalField(key: "heading_deg")           var headingDeg:      Double?
     @OptionalField(key: "speed_kmh")             var speedKmh:        Double?
     @OptionalField(key: "gps_satellites")        var gpsSatellites:   Int?
+    @OptionalField(key: "metadata_json")          var metadataJSON:    String?   // free-form JSON detail (e.g. config payload)
     @Field(key: "received_at")                   var receivedAt:      Date
 
     init() {}
 
     init(imei: String, vehicleID: String, vehicleName: String,
          eventType: String, timestamp: Date,
-         resetReason: String?, wakeupSource: String?, batteryVoltageV: Double?,
-         gpsFixType: Int?, latitude: Double?, longitude: Double?,
-         headingDeg: Double?, speedKmh: Double?, gpsSatellites: Int?) {
+         resetReason: String? = nil, wakeupSource: String? = nil, batteryVoltageV: Double? = nil,
+         gpsFixType: Int? = nil, latitude: Double? = nil, longitude: Double? = nil,
+         headingDeg: Double? = nil, speedKmh: Double? = nil, gpsSatellites: Int? = nil,
+         metadataJSON: String? = nil) {
         self.imei             = imei
         self.vehicleID        = vehicleID
         self.vehicleName      = vehicleName
@@ -45,8 +47,18 @@ final class DeviceLifecycleEvent: Model, Content, @unchecked Sendable {
         self.headingDeg       = headingDeg
         self.speedKmh         = speedKmh
         self.gpsSatellites    = gpsSatellites
+        self.metadataJSON     = metadataJSON
         self.receivedAt       = Date()
     }
+}
+
+/// Migration: adds metadata_json column to device_lifecycle_events.
+struct AddMetadataToDeviceLifecycleEvents: AsyncMigration {
+    func prepare(on db: Database) async throws {
+        guard let sql = db as? SQLDatabase else { return }
+        try? await sql.raw("ALTER TABLE device_lifecycle_events ADD COLUMN metadata_json TEXT").run()
+    }
+    func revert(on db: Database) async throws { }
 }
 
 // MARK: - Migration
@@ -112,6 +124,7 @@ private struct LifecycleEventResponse: Encodable {
     let headingDeg:      Double?
     let speedKmh:        Double?
     let gpsSatellites:   Int?
+    let metadataJSON:    String?
     let receivedAt:      Date
 
     func encode(to encoder: Encoder) throws {
@@ -131,6 +144,7 @@ private struct LifecycleEventResponse: Encodable {
         try c.encodeIfPresent(headingDeg,      forKey: .headingDeg)
         try c.encodeIfPresent(speedKmh,        forKey: .speedKmh)
         try c.encodeIfPresent(gpsSatellites,   forKey: .gpsSatellites)
+        try c.encodeIfPresent(metadataJSON,     forKey: .metadataJSON)
         try c.encode(receivedAt,   forKey: .receivedAt)
     }
 
@@ -138,6 +152,7 @@ private struct LifecycleEventResponse: Encodable {
         case id, imei, vehicleID, vehicleName, eventType, timestamp
         case resetReason, wakeupSource, batteryVoltageV
         case gpsFixType, latitude, longitude, headingDeg, speedKmh, gpsSatellites
+        case metadataJSON
         case receivedAt
     }
 }
@@ -160,6 +175,7 @@ private extension DeviceLifecycleEvent {
             headingDeg:      headingDeg,
             speedKmh:        speedKmh,
             gpsSatellites:   gpsSatellites,
+            metadataJSON:    metadataJSON,
             receivedAt:      receivedAt
         )
     }

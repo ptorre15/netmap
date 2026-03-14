@@ -24,6 +24,7 @@ final class TrackerConfig: Model, @unchecked Sendable {
     @OptionalField(key: "last_applied_config_version") var lastAppliedConfigVersion: Int?
     @OptionalField(key: "firmware_version")    var firmwareVersion: String?
     @OptionalField(key: "updated_by")          var updatedBy: String?
+    @OptionalField(key: "profile_id")          var profileID: UUID?       // last applied TrackerConfigProfile
     @Timestamp(key: "created_at", on: .create) var createdAt: Date?
     @Timestamp(key: "updated_at", on: .update) var updatedAt: Date?
 
@@ -52,6 +53,19 @@ struct AddLastAppliedConfigVersion: AsyncMigration {
     func revert(on db: Database) async throws {
         try await db.schema(TrackerConfig.schema)
             .deleteField("last_applied_config_version")
+            .update()
+    }
+}
+
+struct AddProfileIDToTrackerConfig: AsyncMigration {
+    func prepare(on db: Database) async throws {
+        try await db.schema(TrackerConfig.schema)
+            .field("profile_id", .uuid)
+            .update()
+    }
+    func revert(on db: Database) async throws {
+        try await db.schema(TrackerConfig.schema)
+            .deleteField("profile_id")
             .update()
     }
 }

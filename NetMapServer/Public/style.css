@@ -72,6 +72,40 @@
 /* stat-value in dark mode uses fg1 instead of navy so it stays visible */
 [data-theme="dark"] .stat-value { color: var(--fg); }
 
+/* ── Light-theme contrast overrides ─────────────────────────── */
+/* Delay column: darken neon colours for legibility on white backgrounds */
+:root .td-delay-rt  { color: #059669 !important; }   /* emerald-600  */
+:root .td-delay-ok  { color: #4d7c0f !important; }   /* lime-700     */
+:root .td-delay-mid { color: #b45309 !important; }   /* amber-700    */
+:root .td-delay-hi  { color: #c2410c !important; }   /* orange-700   */
+:root .td-delay-off { color: #4b5563 !important; }   /* gray-600     */
+:root .td-delay-bad { color: #b91c1c !important; }   /* red-700      */
+/* Active pill toggles: darker stroke+text so they read on light bg */
+:root .ev-pill-toggle.active      { background: rgba(109,40,217,.1);  border-color: #7c3aed; color: #7c3aed; }
+:root .ev-pill-errors.active      { background: rgba(185,28,28,.08);  border-color: #b91c1c; color: #b91c1c; }
+:root .ev-pill-alerts.active      { background: rgba(180,83,9,.08);   border-color: #b45309; color: #b45309; }
+/* Alert/error card header text */
+:root .ev-alerts-card-header      { color: #b45309; }
+:root .ev-alerts-card-empty       { color: #047857; }
+:root .ev-errors-card-header      { color: #b91c1c; }
+:root .ev-errors-card-ok          { color: #047857; }
+/* ev-badge: boost saturation so colour text stays readable on light bg */
+:root .ev-badge {
+  background: color-mix(in srgb, var(--ev-color) 12%, transparent);
+  color: color-mix(in srgb, var(--ev-color) 100%, #000 30%);
+  border: 1px solid color-mix(in srgb, var(--ev-color) 40%, transparent);
+}
+/* Restore cleaner look in dark mode (no border needed there) */
+[data-theme="dark"] .ev-badge {
+  background: color-mix(in srgb, var(--ev-color) 15%, transparent);
+  color: var(--ev-color);
+  border: none;
+}
+/* Row-sysev detail button: visible in both themes */
+:root .row-sysev-detail-btn    { color: var(--fg3); }
+:root .row-sysev-detail-btn:hover { color: #7c3aed; background: rgba(109,40,217,.08); }
+[data-theme="dark"] .row-sysev-detail-btn:hover { color: #a78bfa; background: rgba(139,92,246,.12); }
+
 /* ── Reset ────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; }
@@ -800,6 +834,27 @@ body {
 
 /* ── Admin tracker pairing ── */
 .admin-trackers-list { display: flex; flex-direction: column; gap: 6px; padding: 6px 14px 10px; flex: 1; overflow-y: auto; min-height: 0; }
+
+/* ── Config Profiles panel ─────────────────────────── */
+.admin-profiles-list { display: flex; flex-direction: column; gap: 8px; padding: 6px 14px 10px; flex: 1; overflow-y: auto; min-height: 0; }
+.admin-profile-row { background: var(--bg3); border: 1px solid var(--sep); border-radius: var(--r); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+.admin-profile-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.admin-profile-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.admin-profile-name { font-size: 13px; font-weight: 700; color: var(--fg1); }
+.admin-profile-desc { font-size: 11px; color: var(--fg3); }
+.admin-profile-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.admin-profile-fields { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--fg3); }
+.profile-chip { background: rgba(99,102,241,.18); color: var(--m-blue); border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 600; }
+.admin-profile-apply { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid var(--sep); }
+.admin-profile-apply-label { font-size: 11px; color: var(--fg3); white-space: nowrap; }
+.profile-tracker-select { flex: 1; min-width: 120px; font-size: 12px; padding: 3px 6px; background: var(--bg1); border: 1px solid var(--sep); border-radius: 5px; color: var(--fg1); }
+.profile-apply-status { font-size: 11px; }
+.profile-apply-status.ok  { color: var(--ok); }
+.profile-apply-status.err { color: #f87171; }
+/* Profile row in tracker config modal */
+.tcm-profile-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--sep); flex-wrap: wrap; }
+.pm-wake-label { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; margin-bottom: 4px; }
+.pm-beep-label { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; margin-bottom: 12px; }
 .admin-tracker-row {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
   padding: 8px 14px; background: var(--bg3); border-radius: var(--r);
@@ -1791,6 +1846,14 @@ body {
 }
 .behavior-legend-row  { display: flex; align-items: center; gap: 6px; color: var(--fg2); }
 .behavior-legend-icon { display: flex; align-items: center; }
+
+/* ═══════════════════════════════════════════════════════════════
+   Compact density for tracker events table
+   ═══════════════════════════════════════════════════════════════ */
+#data-table.ev-compact td { padding: 4px 8px; font-size: 12px; }
+#data-table.ev-compact th { padding: 5px 8px; }
+#data-table.ev-compact .ev-badge { font-size: 11px; padding: 2px 6px; }
+#data-table.ev-compact td a[href] { font-size: 1.3em; line-height: 1; vertical-align: middle; }
 
 /* ═══════════════════════════════════════════════════════════════
    Journey group separator & compact timestamp

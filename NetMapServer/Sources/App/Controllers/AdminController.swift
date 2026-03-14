@@ -35,9 +35,10 @@ struct AdminController: RouteCollection {
         admin.delete("trackers", ":imei",             use: deleteTracker)  // DELETE /api/admin/trackers/:imei
         admin.delete("trackers", ":imei", "pair",     use: unpairTracker)  // DELETE /api/admin/trackers/:imei/pair
         admin.patch ("trackers", ":imei",             use: renameTracker)  // PATCH  /api/admin/trackers/:imei
-        admin.get   ("trackers", ":imei", "config",   use: getTrackerConfig)   // GET   /api/admin/trackers/:imei/config
-        admin.put   ("trackers", ":imei", "config",   use: upsertTrackerConfig) // PUT   /api/admin/trackers/:imei/config
-        admin.patch ("trackers", ":imei", "config",   use: patchTrackerConfig)  // PATCH /api/admin/trackers/:imei/config
+        admin.get   ("trackers", ":imei", "config",               use: getTrackerConfig)    // GET   /api/admin/trackers/:imei/config
+        admin.put   ("trackers", ":imei", "config",               use: upsertTrackerConfig)  // PUT   /api/admin/trackers/:imei/config
+        admin.patch ("trackers", ":imei", "config",               use: patchTrackerConfig)   // PATCH /api/admin/trackers/:imei/config
+        admin.post  ("trackers", ":imei", "apply-profile", ":profileID", use: applyProfileToTracker) // POST  /api/admin/trackers/:imei/apply-profile/:profileID
 
         // General sensor rename (SensorPush, AirTag, STIHL, ELA, TPMS…)
         admin.patch ("sensors", ":sensorID",          use: renameSensor)   // PATCH  /api/admin/sensors/:sensorID
@@ -373,6 +374,7 @@ struct AdminController: RouteCollection {
         var imei: String
         var updatedAt: Date?
         var updatedBy: String?
+        var profileID: String?    // UUID of the TrackerConfigProfile last applied (nil = custom)
         var system: TrackerConfigSystemPayload
         var driverBehavior: TrackerConfigDriverBehaviorPayload
     }
@@ -667,6 +669,58 @@ struct AdminController: RouteCollection {
         return try buildTrackerConfigPayload(from: cfg)
     }
 
+    /// POST /api/admin/trackers/:imei/apply-profile/:profileID
+    /// Stamps a TrackerConfigProfile onto the tracker, setting all config fields from the profile.
+    func applyProfileToTracker(req: Request) async throws -> Response {
+        guard let imeiRaw   = req.parameters.get("imei"),
+              let pidStr    = req.parameters.get("profileID"),
+              let profileID = UUID(uuidString: pidStr)
+        else { throw Abort(.badRequest, reason: "imei and profileID are required") }
+        let imei = imeiRaw.trimmingCharacters(in: .whitespaces)
+        guard !imei.isEmpty else { throw Abort(.badRequest, reason: "imei is required") }
+        guard try await trackerExists(imei: imei, on: req.db) else {
+            throw Abort(.notFound, reason: "Tracker not found")
+        }
+        guard let profile = try await TrackerConfigProfile.find(profileID, on: req.db) else {
+            throw Abort(.notFound, reason: "Profile not found")
+        }
+        let actor = req.authUser?.email
+
+        let cfg: TrackerConfig
+        if let existing = try await TrackerConfig.query(on: req.db).filter(\.$imei == imei).first() {
+            cfg = existing
+        } else {
+            cfg = TrackerConfig()
+            cfg.imei = imei
+            cfg.schemaVersion = 0
+        }
+        cfg.pingIntervalMin            = profile.pingIntervalMin
+        cfg.sleepDelayMin              = profile.sleepDelayMin
+        cfg.wakeUpSourcesJSON          = profile.wakeUpSourcesJSON
+        cfg.thresholdHarshBraking      = profile.thresholdHarshBraking
+        cfg.thresholdHarshAcceleration = profile.thresholdHarshAcceleration
+        cfg.thresholdHarshCornering    = profile.thresholdHarshCornering
+        cfg.thresholdOverspeedKmh      = profile.thresholdOverspeedKmh
+        cfg.minimumSpeedKmh            = profile.minimumSpeedKmh
+        cfg.beepEnabled                = profile.beepEnabled
+        cfg.profileID                  = profileID
+        cfg.updatedBy                  = actor
+        cfg.schemaVersion             += 1
+        try await cfg.save(on: req.db)
+        await req.auditSecurityEvent(
+            action: "admin.tracker.config.apply_profile",
+            targetType: "tracker",
+            targetID: imei,
+            metadata: [
+                "profile_id":   profileID.uuidString,
+                "profile_name": profile.name,
+                "schema_version": String(cfg.schemaVersion)
+            ]
+        )
+        let out = try buildTrackerConfigPayload(from: cfg)
+        return try await out.encodeResponse(status: .ok, for: req)
+    }
+
     /// PATCH /api/admin/sensors/:sensorID — renames any non-tracker sensor (SensorPush, AirTag, STIHL, ELA, TPMS…)
     func renameSensor(req: Request) async throws -> HTTPStatus {
         guard let sensorID = req.parameters.get("sensorID") else { throw Abort(.badRequest) }
@@ -751,6 +805,7 @@ struct AdminController: RouteCollection {
             imei: imei,
             updatedAt: nil,
             updatedBy: nil,
+            profileID: nil,
             system: TrackerConfigSystemPayload(
                 pingIntervalMin: 5,
                 sleepDelayMin: 15,
@@ -776,6 +831,7 @@ struct AdminController: RouteCollection {
             imei: cfg.imei,
             updatedAt: cfg.updatedAt ?? cfg.createdAt,
             updatedBy: cfg.updatedBy,
+            profileID: cfg.profileID?.uuidString,
             system: TrackerConfigSystemPayload(
                 pingIntervalMin: cfg.pingIntervalMin,
                 sleepDelayMin: cfg.sleepDelayMin,
@@ -891,6 +947,7 @@ struct AdminController: RouteCollection {
         cfg.beepEnabled = payload.driverBehavior.beepEnabled
         cfg.updatedBy = actor ?? payload.updatedBy
         if changed { cfg.schemaVersion += 1 }
+        cfg.profileID = nil   // manual full-replace breaks any profile link
     }
 
     private func applyPatchTrackerConfig(_ patch: TrackerConfigPatchPayload, to cfg: TrackerConfig, actor: String?) throws {
@@ -949,6 +1006,7 @@ struct AdminController: RouteCollection {
             || snapCornering != cfg.thresholdHarshCornering || snapOverspeed != cfg.thresholdOverspeedKmh
             || snapMinSpeed != cfg.minimumSpeedKmh || snapBeep != cfg.beepEnabled
         if changed { cfg.schemaVersion += 1 }
+        cfg.profileID = nil   // manual patch breaks any profile link
     }
 
     private func encodeWakeSources(_ values: [String]) throws -> String {
