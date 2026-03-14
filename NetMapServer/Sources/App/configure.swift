@@ -83,6 +83,7 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(AddLoadEstimationToVehicleEvents())        // load_confidence/samples/m_total_kg/m_load_kg on vehicle_events
     app.migrations.add(AddGpsToDeviceLifecycleEvents())           // GPS fields + gps_fix_type on device_lifecycle_events (spec v6)
     app.migrations.add(AddLastAppliedConfigVersion())             // last_applied_config_version on tracker_configs
+    app.migrations.add(AddFirmwareVersionToTrackerConfig())       // firmware_version on tracker_configs
     app.migrations.add(AddTelemetryCompositeIndexes())            // composite telemetry indexes for hot filters
     app.migrations.add(CreateDeviceJourneyStats())                // journey_stats device counters (spec v6)
     try await app.autoMigrate()   // non-blocking in async context

@@ -10,6 +10,7 @@ on:
       - "NetMapServer/**"
       - ".github/workflows/swift-tests.yml"
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   test:

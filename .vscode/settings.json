@@ -4,6 +4,10 @@
     "tasks.statusbar.taskFilter": [
         "NetMap: Build (Debug)",
         "NetMap: Build & Run",
-        "NetMap: Clean"
+        "NetMap: Clean",
+        "Server: Build",
+        "Server: Deploy (production)",
+        "Server: Restart",
+        "Server: Logs"
     ]
 }

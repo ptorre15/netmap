@@ -94,7 +94,7 @@
         {
             "label": "Server: Restart",
             "type": "shell",
-            "command": "launchctl unload ~/Library/LaunchAgents/com.netmap.server.plist 2>/dev/null; lsof -ti tcp:8092 | xargs kill -9 2>/dev/null; echo '⏹  Ancien processus arrêté'; sleep 1; cd '${workspaceFolder}/NetMapServer' && nohup .build/debug/App >> /tmp/netmap_server.log 2>&1 & disown\nsleep 2 && sudo caddy reload --config '${workspaceFolder}/NetMapServer/Caddyfile' --adapter caddyfile 2>/dev/null || sudo caddy start --config '${workspaceFolder}/NetMapServer/Caddyfile' --adapter caddyfile 2>/dev/null; sleep 3 && tail -8 /tmp/netmap_server.log",
+            "command": "ssh phil@192.168.1.84 'sudo systemctl restart netmap-server && sudo systemctl status netmap-server --no-pager'",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -106,9 +106,21 @@
         {
             "label": "Server: Logs",
             "type": "shell",
-            "command": "tail -f /tmp/netmap_server.log",
+            "command": "ssh phil@192.168.1.84 'journalctl -u netmap-server -f --no-pager'",
             "group": "build",
             "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Server: Deploy (production)",
+            "type": "shell",
+            "command": "cd '${workspaceFolder}/NetMapServer' && ./deploy/update.sh phil@192.168.1.84",
+            "group": "build",
             "presentation": {
                 "reveal": "always",
                 "panel": "dedicated",

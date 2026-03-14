@@ -28,7 +28,7 @@ case "$UBUNTU_RELEASE" in
   *)     SWIFT_PLATFORM="ubuntu2204" ; SWIFT_PLATFORM_NAME="ubuntu22.04" ;;
 esac
 
-SWIFT_XZ="swift-${SWIFT_VERSION}-RELEASE-${SWIFT_PLATFORM}.tar.gz"
+SWIFT_XZ="swift-${SWIFT_VERSION}-RELEASE-${SWIFT_PLATFORM_NAME}.tar.gz"
 SWIFT_URL="https://download.swift.org/swift-${SWIFT_VERSION}-release/${SWIFT_PLATFORM}/swift-${SWIFT_VERSION}-RELEASE/${SWIFT_XZ}"
 SWIFT_ROOT="/usr/local/swift"
 
@@ -46,8 +46,9 @@ apt-get update -q
 apt-get install -yq \
   binutils git gnupg2 libc6-dev libcurl4-openssl-dev \
   libedit2 libgcc-13-dev libsqlite3-dev libstdc++-13-dev \
-  libxml2-dev libz3-dev pkg-config tzdata unzip zlib1g-dev \
+  libxml2 libxml2-dev libz3-dev pkg-config tzdata unzip zlib1g-dev \
   curl rsync lsb-release openssl
+ldconfig
 
 # ── Utilisateur dédié ─────────────────────────────────────────────────────────
 if ! id "$APP_USER" &>/dev/null; then
@@ -97,6 +98,7 @@ chmod 755 "$INSTALL_DIR/bin/netmap-server"
 
 info "Synchronisation des fichiers statiques..."
 rsync -a --delete "$SRC_DIR/Public/" "$INSTALL_DIR/Public/"
+cp "$SRC_DIR/VERSION" "$INSTALL_DIR/VERSION"
 chown -R "$APP_USER:$APP_USER" "$INSTALL_DIR/Public"
 
 # ── Fichier d'environnement ───────────────────────────────────────────────────
@@ -156,6 +158,12 @@ if systemctl is-active --quiet "$SERVICE_NAME"; then
   success "Logs : journalctl -u $SERVICE_NAME -f"
 else
   die "Le service n'a pas démarré. Logs : journalctl -u $SERVICE_NAME -n 30"
+fi
+
+# Restore src ownership so the deploy user can rsync next time
+DEPLOY_USER=$(stat -c '%U' "$(dirname "$SRC_DIR")" 2>/dev/null || echo "")
+if [[ -n "$DEPLOY_USER" && "$DEPLOY_USER" != "root" ]]; then
+  chown -R "$DEPLOY_USER:$DEPLOY_USER" "$SRC_DIR"
 fi
 
 echo ""

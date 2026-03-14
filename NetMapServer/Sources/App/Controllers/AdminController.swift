@@ -52,6 +52,13 @@ struct AdminController: RouteCollection {
             Task { await LogBroadcaster.shared.add(ws) }
         }
         admin.get("security-events", use: listSecurityEvents) // GET /api/admin/security-events
+
+        // OTA firmware management
+        admin.get ("ota", "versions",                     use: otaGetVersions)       // GET   /api/admin/ota/versions
+        admin.get ("ota", "trackers",                     use: otaGetTrackers)       // GET   /api/admin/ota/trackers
+        admin.patch("ota", "trackers", ":imei",           use: otaSetFirmwareVersion) // PATCH /api/admin/ota/trackers/:imei
+        admin.get ("ota", "settings",                     use: otaGetSettings)       // GET   /api/admin/ota/settings
+        admin.put ("ota", "settings",                     use: otaSaveSettings)      // PUT   /api/admin/ota/settings
     }
 
     // ─── Server Logs ──────────────────────────────────────────────────────────
@@ -1084,4 +1091,117 @@ struct AdminController: RouteCollection {
 
 struct APIKeyResponse: Content {
     var apiKey: String
+}
+
+// MARK: - OTA Management
+extension AdminController {
+
+    struct OTAFirmwareFile: Content {
+        var version: Int
+        var filename: String
+        var size: Int?
+        var uploadedAt: String?
+    }
+
+    struct OTAVersionsResponse: Content {
+        var versions: [OTAFirmwareFile]
+        var latest: Int?
+    }
+
+    struct OTATrackerStatus: Content {
+        var imei: String
+        var vehicleName: String
+        var sensorName: String?
+        var firmwareVersion: String?
+    }
+
+    struct OTAFirmwarePatchBody: Content {
+        var firmwareVersion: String?
+    }
+
+    struct OTASettingsBody: Content {
+        var otaServerUrl: String
+    }
+
+    /// GET /api/admin/ota/versions — proxies OTA server firmware file listing
+    func otaGetVersions(req: Request) async throws -> OTAVersionsResponse {
+        let stored = try? await AppSetting.query(on: req.db)
+            .filter(\.$key == "ota_server_url").first()?.value
+        let otaURL = stored ?? Environment.get("OTA_SERVER_URL") ?? "http://127.0.0.1:8080"
+        do {
+            let res = try await req.client.get(URI("\(otaURL)/api/firmware/files"))
+            guard res.status == .ok else {
+                return OTAVersionsResponse(versions: [], latest: nil)
+            }
+            return (try? res.content.decode(OTAVersionsResponse.self))
+                ?? OTAVersionsResponse(versions: [], latest: nil)
+        } catch {
+            req.logger.warning("OTA proxy failed: \(error)")
+            return OTAVersionsResponse(versions: [], latest: nil)
+        }
+    }
+
+    /// GET /api/admin/ota/trackers — all trackers with their known firmware version
+    func otaGetTrackers(req: Request) async throws -> [OTATrackerStatus] {
+        guard let sql = req.db as? SQLDatabase else {
+            throw Abort(.internalServerError, reason: "SQL not available")
+        }
+        struct Row: Decodable {
+            var sensor_id: String
+            var vehicle_name: String
+            var sensor_name: String?
+            var firmware_version: String?
+        }
+        let rows = try await sql.raw("""
+            SELECT sr.sensor_id, sr.vehicle_name, sr.sensor_name,
+                   tc.firmware_version
+            FROM sensor_readings sr
+            LEFT JOIN tracker_configs tc ON UPPER(tc.imei) = UPPER(sr.sensor_id)
+            WHERE sr.brand = 'tracker'
+            GROUP BY sr.sensor_id
+            ORDER BY sr.vehicle_name, sr.sensor_id
+            """).all(decoding: Row.self)
+        return rows.map {
+            OTATrackerStatus(imei: $0.sensor_id, vehicleName: $0.vehicle_name,
+                             sensorName: $0.sensor_name, firmwareVersion: $0.firmware_version)
+        }
+    }
+
+    /// PATCH /api/admin/ota/trackers/:imei — manually record firmware version for a tracker
+    func otaSetFirmwareVersion(req: Request) async throws -> HTTPStatus {
+        guard let imei = req.parameters.get("imei") else { throw Abort(.badRequest) }
+        let body = try req.content.decode(OTAFirmwarePatchBody.self)
+        if let config = try await TrackerConfig.query(on: req.db)
+            .filter(\.$imei == imei).first() {
+            config.firmwareVersion = body.firmwareVersion
+            try await config.save(on: req.db)
+        }
+        return .ok
+    }
+
+    /// GET /api/admin/ota/settings
+    func otaGetSettings(req: Request) async throws -> OTASettingsBody {
+        let url = try await AppSetting.query(on: req.db)
+            .filter(\.$key == "ota_server_url").first()?.value
+            ?? Environment.get("OTA_SERVER_URL")
+            ?? "http://127.0.0.1:8080"
+        return OTASettingsBody(otaServerUrl: url)
+    }
+
+    /// PUT /api/admin/ota/settings
+    func otaSaveSettings(req: Request) async throws -> HTTPStatus {
+        let body = try req.content.decode(OTASettingsBody.self)
+        let urlStr = body.otaServerUrl.trimmingCharacters(in: .whitespaces)
+        guard !urlStr.isEmpty, URL(string: urlStr)?.scheme != nil else {
+            throw Abort(.badRequest, reason: "Invalid URL")
+        }
+        if let existing = try await AppSetting.query(on: req.db)
+            .filter(\.$key == "ota_server_url").first() {
+            existing.value = urlStr
+            try await existing.save(on: req.db)
+        } else {
+            try await AppSetting(key: "ota_server_url", value: urlStr).save(on: req.db)
+        }
+        return .ok
+    }
 }

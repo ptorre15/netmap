@@ -22,11 +22,25 @@ final class TrackerConfig: Model, @unchecked Sendable {
     @Field(key: "beep_enabled")                var beepEnabled: Bool
 
     @OptionalField(key: "last_applied_config_version") var lastAppliedConfigVersion: Int?
+    @OptionalField(key: "firmware_version")    var firmwareVersion: String?
     @OptionalField(key: "updated_by")          var updatedBy: String?
     @Timestamp(key: "created_at", on: .create) var createdAt: Date?
     @Timestamp(key: "updated_at", on: .update) var updatedAt: Date?
 
     init() {}
+}
+
+struct AddFirmwareVersionToTrackerConfig: AsyncMigration {
+    func prepare(on db: Database) async throws {
+        try await db.schema(TrackerConfig.schema)
+            .field("firmware_version", .string)
+            .update()
+    }
+    func revert(on db: Database) async throws {
+        try await db.schema(TrackerConfig.schema)
+            .deleteField("firmware_version")
+            .update()
+    }
 }
 
 struct AddLastAppliedConfigVersion: AsyncMigration {

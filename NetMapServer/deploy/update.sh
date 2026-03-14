@@ -40,9 +40,11 @@ ssh "$TARGET" bash <<'ENDSSH'
 set -euo pipefail
 export PATH="/usr/local/swift/usr/bin:$PATH"
 cd /opt/netmap/src
+# Clear any stale build lock from a previous failed build
+sudo rm -f /tmp/_opt_netmap_src_*.lock
 swift build -c release 2>&1
 BIN_PATH=$(swift build -c release --show-bin-path 2>/dev/null)/App
-cp "$BIN_PATH" /opt/netmap/bin/netmap-server.new
+cp "$BIN_PATH" /tmp/netmap-server.new
 ENDSSH
 success "Build terminé."
 
@@ -50,16 +52,19 @@ success "Build terminé."
 info "Redémarrage du service..."
 ssh "$TARGET" bash <<ENDSSH
 set -euo pipefail
-# Fichiers statiques
-rsync -a --delete /opt/netmap/src/Public/ /opt/netmap/Public/
-chown -R netmap:netmap /opt/netmap/Public
+# Fichiers statiques (no-group to avoid chgrp permission errors)
+rsync -a --no-group --delete /opt/netmap/src/Public/ /opt/netmap/Public/
+# Version file at working directory root (read by configure.swift on startup)
+sudo cp /opt/netmap/src/VERSION /opt/netmap/VERSION
+sudo chown -R netmap:netmap /opt/netmap/Public /opt/netmap/VERSION
 # Remplacement atomique du binaire
-mv /opt/netmap/bin/netmap-server.new /opt/netmap/bin/netmap-server
-chmod 755 /opt/netmap/bin/netmap-server
+sudo mv /tmp/netmap-server.new /opt/netmap/bin/netmap-server
+sudo chmod 755 /opt/netmap/bin/netmap-server
+sudo chown netmap:netmap /opt/netmap/bin/netmap-server
 # Redémarrage
-systemctl restart $SERVICE
+sudo systemctl restart $SERVICE
 sleep 2
-systemctl is-active --quiet $SERVICE && echo "Service actif." || { echo "ERREUR: service inactif." ; journalctl -u $SERVICE -n 20; exit 1; }
+sudo systemctl is-active --quiet $SERVICE && echo "Service actif." || { echo "ERREUR: service inactif." ; sudo journalctl -u $SERVICE -n 20; exit 1; }
 ENDSSH
 success "NetMapServer mis à jour et redémarré."
 

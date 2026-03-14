@@ -224,9 +224,9 @@ function renderPictoGrid(currentKey) {
 const SC = { ok: '#34d399', warn: '#fbbf24', danger: '#f87171', unknown: '#55556a' };
 const SC_BG = { ok: 'rgba(52,211,153,0.15)', warn: 'rgba(251,191,36,0.15)', danger: 'rgba(248,113,113,0.15)', unknown: 'rgba(85,85,106,0.15)' };
 
-function isTpms(s)    { return s.brand === 'michelin' || s.wheelPosition != null; }
-function isBattery(s) { return s.brand === 'stihl' || s.brand === 'ela' || s.brand === 'airtag'; }
-function isTracker(s) { return s?.brand === 'tracker'; }
+function isTpms(s)    { return !!s && (s.brand === 'michelin' || s.wheelPosition != null); }
+function isBattery(s) { return !!s && (s.brand === 'stihl' || s.brand === 'ela' || s.brand === 'airtag'); }
+function isTracker(s) { return !!s && s.brand === 'tracker'; }
 
 /** Format seconds as "Xd Xh Xm" (omits leading zero units) */
 function fmtDuration(secs) {
@@ -1009,6 +1009,7 @@ function renderStats() {
   document.querySelectorAll('.stat-cell').forEach(c => { c.className = 'stat-cell'; });
   showStatCells(false);
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
+  if (!sensor) return;
 
   if (isTpms(sensor)) {
     const target    = sensor.targetPressureBar;
@@ -4514,6 +4515,7 @@ function switchAdminTab(tab) {
   if (tab === 'trackers') renderTrackersPanel();
   if (tab === 'security') renderSecurityPanel();
   if (tab === 'stats')    renderStatsPanel();
+  if (tab === 'ota')      renderOtaPanel();
 }
 function openAdminPanel(tab = 'users') {
   $('admin-backdrop').style.display = '';
@@ -4873,4 +4875,171 @@ async function renderStatsPanel() {
       }
     });
   });
+}
+
+// ─── OTA Firmware Manager ────────────────────────────────────────────────────
+async function renderOtaPanel() {
+  const container = $('admin-ota-content');
+  if (!container) return;
+  container.innerHTML = '<p class="admin-loading">Loading\u2026</p>';
+
+  // Wire refresh button (once)
+  const refreshBtn = $('ota-refresh-btn');
+  if (refreshBtn && !refreshBtn._wired) {
+    refreshBtn._wired = true;
+    refreshBtn.addEventListener('click', renderOtaPanel);
+  }
+
+  try {
+    const [versionsData, trackers, settings] = await Promise.all([
+      apiFetch('/api/admin/ota/versions').catch(() => ({ versions: [], latest: null })),
+      apiFetch('/api/admin/ota/trackers').catch(() => []),
+      apiFetch('/api/admin/ota/settings').catch(() => ({ otaServerUrl: '' })),
+    ]);
+
+    const versions  = versionsData.versions ?? [];
+    const latestVer = versionsData.latest ?? null;
+
+    // ── Server URL config row ─────────────────────────────────────────────
+    const settingsHTML = `
+      <div class="ota-section">
+        <div class="ota-section-title">OTA Server</div>
+        <div class="ota-server-row">
+          <input id="ota-server-url-input" class="ota-url-input" type="text"
+            value="${escAttr(settings.otaServerUrl)}" placeholder="http://127.0.0.1:8080" spellcheck="false">
+          <button id="ota-server-save-btn" class="modal-btn-primary admin-small-btn">Save</button>
+          <span id="ota-server-msg" style="font-size:12px;margin-left:6px"></span>
+        </div>
+      </div>`;
+
+    // ── Firmware versions list ────────────────────────────────────────────
+    let versionsHTML = '';
+    if (!versions.length) {
+      versionsHTML = '<p class="sidebar-hint">No firmware files found on the OTA server. Configure the server URL above.</p>';
+    } else {
+      const rows = versions.map(v => {
+        const isLatest = v.version === latestVer;
+        const sizeKB   = v.size != null ? (v.size / 1024).toFixed(0) + ' KB' : '';
+        const date     = v.uploadedAt ? fmtTs(new Date(v.uploadedAt)) : '';
+        return `<div class="ota-fw-row${isLatest ? ' ota-fw-latest' : ''}">
+          <span class="ota-fw-version">v${escHTML(String(v.version))}${isLatest ? ' <span class="ota-badge-latest">latest</span>' : ''}</span>
+          <span class="ota-fw-name">${escHTML(v.filename)}</span>
+          <span class="ota-fw-meta">${escHTML(sizeKB)}${date ? ' &middot; ' + escHTML(date) : ''}</span>
+        </div>`;
+      });
+      versionsHTML = `<div class="ota-fw-list">${rows.join('')}</div>`;
+    }
+
+    // ── Per-tracker status table ──────────────────────────────────────────
+    let trackersHTML = '';
+    if (!trackers.length) {
+      trackersHTML = '<p class="sidebar-hint">No trackers registered.</p>';
+    } else {
+      const headerRow = `<tr>
+        <th>Tracker</th><th>Asset</th><th>Current FW</th><th>Status</th><th>Set Version</th>
+      </tr>`;
+      const bodyRows = trackers.map(t => {
+        const name    = t.sensorName ?? t.imei;
+        const ver     = t.firmwareVersion;
+        const verNum  = ver != null ? parseInt(ver, 10) : null;
+        let statusBadge;
+        if (latestVer == null) {
+          statusBadge = '<span class="ota-status-badge ota-status-unknown">unknown</span>';
+        } else if (ver == null) {
+          statusBadge = '<span class="ota-status-badge ota-status-unknown">not reported</span>';
+        } else if (verNum === latestVer) {
+          statusBadge = '<span class="ota-status-badge ota-status-ok">\u2713 up to date</span>';
+        } else {
+          statusBadge = `<span class="ota-status-badge ota-status-update">\u2191 update avail.</span>`;
+        }
+        return `<tr data-imei="${escAttr(t.imei)}">
+          <td class="ota-td-imei">${escHTML(name)}<br><span class="ota-imei-sub">${escHTML(t.imei)}</span></td>
+          <td>${escHTML(t.vehicleName)}</td>
+          <td>${ver != null ? `<code>v${escHTML(ver)}</code>` : '<span style="opacity:.4">—</span>'}</td>
+          <td>${statusBadge}</td>
+          <td>
+            <div class="ota-set-row">
+              <input type="number" class="ota-ver-input" min="0" step="1"
+                value="${ver != null ? escAttr(ver) : ''}" placeholder="${latestVer ?? ''}">
+              <button class="modal-btn admin-small-btn ota-set-btn">Set</button>
+              ${ver != null ? '<button class="modal-btn admin-small-btn ota-clear-btn">Clear</button>' : ''}
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+      trackersHTML = `<div class="ota-table-wrap"><table class="ota-tracker-table"><thead>${headerRow}</thead><tbody>${bodyRows}</tbody></table></div>`;
+    }
+
+    container.innerHTML = `
+      ${settingsHTML}
+      <div class="ota-section">
+        <div class="ota-section-title">Available Firmware${latestVer != null ? ` <span class="ota-latest-label">latest: v${latestVer}</span>` : ''}</div>
+        ${versionsHTML}
+      </div>
+      <div class="ota-section">
+        <div class="ota-section-title">Tracker OTA Status</div>
+        ${trackersHTML}
+      </div>`;
+
+    // Wire server URL save
+    container.querySelector('#ota-server-save-btn')?.addEventListener('click', async () => {
+      const url = container.querySelector('#ota-server-url-input').value.trim();
+      const msg = container.querySelector('#ota-server-msg');
+      try {
+        const res = await fetch('/api/admin/ota/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ otaServerUrl: url }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        msg.style.color = '#34d399';
+        msg.textContent = '\u2713 Saved';
+        setTimeout(() => renderOtaPanel(), 800);
+      } catch (err) {
+        msg.style.color = '#f87171';
+        msg.textContent = err.message;
+      }
+    });
+
+    // Wire set/clear version buttons for each tracker row
+    container.querySelectorAll('tr[data-imei]').forEach(row => {
+      const imei    = row.dataset.imei;
+      const setBtn  = row.querySelector('.ota-set-btn');
+      const clearBtn = row.querySelector('.ota-clear-btn');
+      const input   = row.querySelector('.ota-ver-input');
+
+      setBtn?.addEventListener('click', async () => {
+        const val = input.value.trim();
+        if (!val) { showToast('Enter a version number', 'error'); return; }
+        setBtn.disabled = true;
+        try {
+          const res = await fetch(`/api/admin/ota/trackers/${encodeURIComponent(imei)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ firmwareVersion: val }),
+          });
+          if (!res.ok) throw new Error(await res.text());
+          showToast(`Firmware version set to v${val}`);
+          renderOtaPanel();
+        } catch (err) { showToast(err.message, 'error'); setBtn.disabled = false; }
+      });
+
+      clearBtn?.addEventListener('click', async () => {
+        clearBtn.disabled = true;
+        try {
+          const res = await fetch(`/api/admin/ota/trackers/${encodeURIComponent(imei)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ firmwareVersion: null }),
+          });
+          if (!res.ok) throw new Error(await res.text());
+          showToast('Firmware version cleared');
+          renderOtaPanel();
+        } catch (err) { showToast(err.message, 'error'); clearBtn.disabled = false; }
+      });
+    });
+
+  } catch (err) {
+    container.innerHTML = `<p class="auth-error">${escHTML(err.message)}</p>`;
+  }
 }

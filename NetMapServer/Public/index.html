@@ -317,6 +317,10 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 3v18h18"/><path d="M7 16l4 -4l4 4l6 -6"/></svg>
         <span>Stats</span>
       </button>
+      <button class="admin-nav-btn" data-tab="ota">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4l0 12"/></svg>
+        <span>Firmware</span>
+      </button>
     </nav>
     <!-- Content area -->
     <div class="admin-content">
@@ -374,6 +378,14 @@
           <span class="admin-pane-title">Statistics</span>
         </div>
         <div id="admin-stats-cont" class="admin-stats-scroll"></div>
+      </div>
+      <!-- OTA Firmware tab -->
+      <div class="admin-tab-pane" id="admin-tab-ota">
+        <div class="admin-tab-toolbar">
+          <span class="admin-pane-title">Firmware OTA</span>
+          <button id="ota-refresh-btn" class="modal-btn admin-small-btn">&#8635; Refresh</button>
+        </div>
+        <div id="admin-ota-content"></div>
       </div>
     </div><!-- /.admin-content -->
   </div><!-- /.admin-body -->
