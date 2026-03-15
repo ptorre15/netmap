@@ -506,7 +506,7 @@ struct VehicleEventController: RouteCollection {
                 let otaBaseUrl = (try? await AppSetting.query(on: req.db)
                     .filter(\.$key == "ota_server_url").first()?.value)
                     ?? Environment.get("OTA_SERVER_URL")
-                    ?? "http://127.0.0.1:8080"
+                    ?? "http://127.0.0.1:9000"
                 let firmwareUrl = "\(otaBaseUrl)/firmware/\(pendingUpgrade.targetVersion).bin"
                 piggybackOTA = OTAPiggybackPayload(
                     requestId:     pendingUpgrade.id?.uuidString ?? "",

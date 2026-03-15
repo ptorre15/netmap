@@ -1218,7 +1218,7 @@ extension AdminController {
     func otaGetVersions(req: Request) async throws -> OTAVersionsResponse {
         let stored = try? await AppSetting.query(on: req.db)
             .filter(\.$key == "ota_server_url").first()?.value
-        let otaURL = stored ?? Environment.get("OTA_SERVER_URL") ?? "http://127.0.0.1:8080"
+        let otaURL = stored ?? Environment.get("OTA_SERVER_URL") ?? "http://127.0.0.1:9000"
         do {
             let res = try await req.client.get(URI("\(otaURL)/api/firmware/files"))
             guard res.status == .ok else {
@@ -1356,7 +1356,7 @@ extension AdminController {
         let url = try await AppSetting.query(on: req.db)
             .filter(\.$key == "ota_server_url").first()?.value
             ?? Environment.get("OTA_SERVER_URL")
-            ?? "http://127.0.0.1:8080"
+            ?? "http://127.0.0.1:9000"
         return OTASettingsBody(otaServerUrl: url)
     }
 

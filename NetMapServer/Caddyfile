@@ -50,6 +50,43 @@ track.netmap.fr {
 	}
 }
 
+# ── OTA Web Server (ESP32 firmware + database updates) ───────────────────────
+# Serves on port 9443 — ESP32 firmware connects to https://track.netmap.fr:9443
+# Flask/Gunicorn runs internally on 127.0.0.1:9000
+track.netmap.fr:9443 {
+	encode gzip zstd
+
+	# Large uploads (firmware .bin up to 300 MB, database up to 200 MB)
+	request_body {
+		max_size 300MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy localhost:9000 {
+		header_up X-Forwarded-For {remote_host}
+		# Allow enough time for large file uploads
+		transport http {
+			response_header_timeout 120s
+			dial_timeout 10s
+		}
+	}
+
+	log {
+		output file /var/log/caddy/ota_access.log {
+			roll_size 50mb
+			roll_keep 3
+			roll_keep_for 720h
+		}
+		format json
+	}
+}
+
 # ── Local development variant (no public domain needed) ──────────────────────
 # Uncomment the block below and comment out the block above to test HTTPS locally:
 #

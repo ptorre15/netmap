@@ -5172,7 +5172,7 @@ async function renderOtaPanel() {
         <div class="stats-chart-title">OTA Server Settings</div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
           <input type="text" id="ota-server-url-input" value="${escAttr(settings.otaServerUrl)}"
-            placeholder="http://192.168.1.x:8080" style="flex:1;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:12px">
+            placeholder="https://track.netmap.fr:9443" style="flex:1;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:12px">
           <button id="ota-save-settings-btn" class="modal-btn-primary admin-small-btn">Save</button>
         </div>
         <div id="ota-settings-error" class="auth-error" style="display:none;margin-top:6px"></div>
