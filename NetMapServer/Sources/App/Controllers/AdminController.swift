@@ -1167,6 +1167,7 @@ extension AdminController {
     struct OTAVersionsResponse: Content {
         var versions: [OTAFirmwareFile]
         var latest: Int?
+        var reachable: Bool?
     }
 
     struct OTATrackerStatus: Content {
@@ -1222,13 +1223,15 @@ extension AdminController {
         do {
             let res = try await req.client.get(URI("\(otaURL)/api/firmware/files"))
             guard res.status == .ok else {
-                return OTAVersionsResponse(versions: [], latest: nil)
+                return OTAVersionsResponse(versions: [], latest: nil, reachable: false)
             }
-            return (try? res.content.decode(OTAVersionsResponse.self))
+            var parsed = (try? res.content.decode(OTAVersionsResponse.self))
                 ?? OTAVersionsResponse(versions: [], latest: nil)
+            parsed.reachable = true
+            return parsed
         } catch {
             req.logger.warning("OTA proxy failed: \(error)")
-            return OTAVersionsResponse(versions: [], latest: nil)
+            return OTAVersionsResponse(versions: [], latest: nil, reachable: false)
         }
     }
 

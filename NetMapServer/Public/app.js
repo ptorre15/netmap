@@ -5161,15 +5161,20 @@ async function renderOtaPanel() {
 
     const versions = Array.isArray(versionsData.versions) ? versionsData.versions : [];
     const latestVersion = versionsData.latest ?? (versions.length ? versions[0].version : null);
+    const otaReachable = versionsData.reachable !== false;
 
     const versionOptions = versions.map(v =>
       `<option value="${escAttr(String(v.version))}">${escHTML(String(v.version))} — ${escHTML(v.filename)}${v.size ? ' (' + (v.size / 1024).toFixed(1) + ' KB)' : ''}</option>`
     ).join('');
 
     // ── Settings section ────────────────────────────────────────────────
+    const otaAdminUrl = settings.otaServerUrl ? settings.otaServerUrl.replace(/\/$/, '') + '/admin' : null;
     const settingsHtml = `
       <div class="stats-breakdown-box" style="margin-bottom:14px">
-        <div class="stats-chart-title">OTA Server Settings</div>
+        <div class="stats-chart-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>OTA Server Settings</span>
+          ${otaAdminUrl ? `<a href="${escAttr(otaAdminUrl)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--accent-hi);text-decoration:none">Open firmware manager ↗</a>` : ''}
+        </div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
           <input type="text" id="ota-server-url-input" value="${escAttr(settings.otaServerUrl)}"
             placeholder="https://track.netmap.fr:9443" style="flex:1;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:12px">
@@ -5193,7 +5198,7 @@ async function renderOtaPanel() {
               <td style="color:var(--fg3)">${v.uploadedAt ? fmtTs(v.uploadedAt) : '–'}</td>
             </tr>`).join('')}
           </tbody>
-        </table>` : '<div style="color:var(--fg3);font-size:12px;margin-top:6px">OTA server unreachable or no firmware files found.</div>'}
+        </table>` : `<div style="color:var(--fg3);font-size:12px;margin-top:6px">${otaReachable ? 'No firmware files uploaded yet.' : 'OTA server unreachable — check the server URL above.'}</div>`}
       </div>`;
 
     // ── Trackers table ─────────────────────────────────────────────────
