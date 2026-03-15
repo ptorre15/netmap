@@ -1,6 +1,6 @@
 'use strict';
 
-const WEB_VERSION = '1.0.22';
+const WEB_VERSION = '1.0.23';
 
 // ─── Auth state ────────────────────────────────────────────────────────────────────────────────
 const AUTH = { token: null, username: null, role: null,
