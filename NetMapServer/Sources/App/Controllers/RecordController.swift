@@ -77,6 +77,8 @@ struct SensorStat: Content {
     var latestLongitude:     Double?
     var trackerServerConfigVersion:  Int?   // schemaVersion stored on server for this tracker
     var trackerAppliedConfigVersion: Int?   // last configVersion reported by the tracker
+    var trackerProfileName:    String?      // active config profile name
+    var trackerProfileVersion: Int?         // active config profile version
 }
 
 struct PunctureRiskResponse: Content {
@@ -272,6 +274,8 @@ struct RecordController: RouteCollection {
             var reading_count:                  Int
             var server_config_version:          Int?
             var last_applied_config_version:    Int?
+            var profile_name:                   String?
+            var profile_version:                Int?
         }
 
         // User filter clause (non-admin sees only their linked assets)
@@ -363,9 +367,12 @@ struct RecordController: RouteCollection {
                 SELECT * FROM latest_orphan_tracker
             )
             SELECT c.*, tc.schema_version AS server_config_version,
-                         tc.last_applied_config_version
+                         tc.last_applied_config_version,
+                         tcp.name    AS profile_name,
+                         tcp.version AS profile_version
             FROM combined c
             LEFT JOIN tracker_configs tc ON tc.imei = c.sensor_id
+            LEFT JOIN tracker_config_profiles tcp ON tcp.id = tc.profile_id
             \(unsafeRaw: vehicleFilter)
             ORDER BY c.vehicle_name, c.wheel_position
             """).all(decoding: LatestRow.self)
@@ -395,7 +402,9 @@ struct RecordController: RouteCollection {
                 latestLatitude:               r.latitude,
                 latestLongitude:              r.longitude,
                 trackerServerConfigVersion:   r.server_config_version,
-                trackerAppliedConfigVersion:  r.last_applied_config_version
+                trackerAppliedConfigVersion:  r.last_applied_config_version,
+                trackerProfileName:    r.profile_name,
+                trackerProfileVersion: r.profile_version
             )
         }
     }

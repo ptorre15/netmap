@@ -40,6 +40,7 @@ struct TrackerConfigProfileController: RouteCollection {
         var id: String?
         var name: String
         var description: String?
+        var version: Int?
         var system: ProfileSystemPayload
         var driverBehavior: ProfileDriverBehaviorPayload
         var createdBy: String?
@@ -57,6 +58,7 @@ struct TrackerConfigProfileController: RouteCollection {
             id:          p.id?.uuidString,
             name:        p.name,
             description: p.description,
+            version:     p.version ?? 1,
             system: ProfileSystemPayload(
                 pingIntervalMin:      p.pingIntervalMin,
                 sleepDelayMin:        p.sleepDelayMin,
@@ -152,6 +154,7 @@ struct TrackerConfigProfileController: RouteCollection {
         try validate(dto)
         let profile = TrackerConfigProfile()
         try applyDTO(dto, to: profile, actor: req.authUser?.email)
+        profile.version = 1
         try await profile.save(on: req.db)
         await req.auditSecurityEvent(
             action: "admin.tracker_config_profile.create",
@@ -172,6 +175,7 @@ struct TrackerConfigProfileController: RouteCollection {
         let dto = try req.content.decode(ProfileDTO.self)
         try validate(dto)
         try applyDTO(dto, to: profile, actor: nil)
+        profile.version = (profile.version ?? 1) + 1
         try await profile.save(on: req.db)
         await req.auditSecurityEvent(
             action: "admin.tracker_config_profile.update",

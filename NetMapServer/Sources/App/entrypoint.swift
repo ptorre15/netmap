@@ -86,7 +86,7 @@ private func seedAdminIfNeeded(_ app: Application) async throws {
 @main
 struct Entrypoint {
     static func main() async throws {
-        var env = try Environment.detect()
+        let env = try Environment.detect()
         // Resolve log level from --log argument or LOG_LEVEL env var (Vapor convention)
         let logLevel: Logger.Level
         if let raw = Environment.get("LOG_LEVEL"), let lvl = Logger.Level(rawValue: raw) {

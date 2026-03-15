@@ -91,6 +91,7 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(AddObfcmToVehicleEvents())                 // obfcm_distance_km + obfcm_fuel_l on vehicle_events
     app.migrations.add(CreateTrackerConfigProfile())             // reusable config profile templates
     app.migrations.add(AddProfileIDToTrackerConfig())            // profile_id FK on tracker_configs
+    app.migrations.add(AddVersionToTrackerConfigProfile())       // version counter on tracker_config_profiles
     try await app.autoMigrate()   // non-blocking in async context
 
     // ── Seed built-in asset types if absent ─────────────────────

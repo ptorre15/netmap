@@ -1,5 +1,6 @@
 import Vapor
 import Fluent
+import SQLKit
 
 /// A reusable named configuration template that can be stamped onto any tracker.
 final class TrackerConfigProfile: Model, @unchecked Sendable {
@@ -22,11 +23,30 @@ final class TrackerConfigProfile: Model, @unchecked Sendable {
     @Field(key: "minimum_speed_kmh")           var minimumSpeedKmh: Int
     @Field(key: "beep_enabled")                var beepEnabled: Bool
 
+    @OptionalField(key: "version")             var version: Int?       // increments on each profile update; 1-based
+
     @OptionalField(key: "created_by")          var createdBy: String?
     @Timestamp(key: "created_at", on: .create) var createdAt: Date?
     @Timestamp(key: "updated_at", on: .update) var updatedAt: Date?
 
     init() {}
+}
+
+struct AddVersionToTrackerConfigProfile: AsyncMigration {
+    func prepare(on db: Database) async throws {
+        try await db.schema(TrackerConfigProfile.schema)
+            .field("version", .int)
+            .update()
+        // Back-fill: existing profiles become v1
+        if let sql = db as? SQLDatabase {
+            try await sql.raw("UPDATE tracker_config_profiles SET version = 1 WHERE version IS NULL").run()
+        }
+    }
+    func revert(on db: Database) async throws {
+        try await db.schema(TrackerConfigProfile.schema)
+            .deleteField("version")
+            .update()
+    }
 }
 
 struct CreateTrackerConfigProfile: AsyncMigration {

@@ -1,6 +1,6 @@
 'use strict';
 
-const WEB_VERSION = '1.0.23';
+const WEB_VERSION = '1.0.24';
 
 // ─── Auth state ────────────────────────────────────────────────────────────────────────────────
 const AUTH = { token: null, username: null, role: null,
@@ -595,11 +595,24 @@ function renderSensors() {
     if (s.latestLatitude != null && s.latestLongitude != null)
       parts.push(`<span style="color:#60a5fa;font-weight:600">${s.latestLatitude.toFixed(4)}, ${s.latestLongitude.toFixed(4)}</span>`);
     const valueSpan = parts.length ? ' \u00b7 ' + parts.join(' \u00b7 ') : '';
+    const cfgParts = [];
+    if (s.trackerAppliedConfigVersion != null || s.trackerServerConfigVersion != null) {
+      const dv = s.trackerAppliedConfigVersion, sv2 = s.trackerServerConfigVersion;
+      let cfgLabel, cfgColor;
+      if (dv == null) { cfgLabel = sv2 != null ? `v${sv2} \u23f3` : 'none'; cfgColor = sv2 != null ? '#fbbf24' : '#6b7280'; }
+      else if (sv2 == null || dv >= sv2) { cfgLabel = `v${dv} \u2713`; cfgColor = '#34d399'; }
+      else { cfgLabel = `v${dv}\u2192v${sv2}`; cfgColor = '#fbbf24'; }
+      cfgParts.push(`<span style="color:${cfgColor}">Config ${cfgLabel}</span>`);
+    }
+    if (s.trackerProfileName)
+      cfgParts.push(`<span style="color:#94a3b8">${escHTML(s.trackerProfileName)} <span style="opacity:.55;font-size:10px">v${s.trackerProfileVersion ?? 1}</span></span>`);
+    const cfgLine = cfgParts.length ? `<div class="s-sub" style="margin-top:1px">${cfgParts.join(' \u00b7 ')}</div>` : '';
     return `<div class="sensor-row${sel ? ' selected' : ''}" data-sid="${escAttr(s.sensorID)}">
       <div class="s-dot" style="background:${dotCol}"></div>
       <div class="s-info">
         <div class="s-name">${label}</div>
         <div class="s-sub"><span class="s-brand" data-brand="${escAttr(s.brand)}">${escHTML(BRAND_LABELS[s.brand] ?? s.brand)}</span>${valueSpan}</div>
+        ${cfgLine}
       </div>
     </div>`;
   }).join('');
@@ -886,6 +899,9 @@ function renderSensorInfoCard() {
         color = '#fbbf24';
       }
       rows.push(siRow('Config', label, color));
+    }
+    if (s.trackerProfileName) {
+      rows.push(siRow('Profile', `${escHTML(s.trackerProfileName)} <span style="opacity:.55;font-size:10px">v${s.trackerProfileVersion ?? 1}</span>`));
     }
   }
   if (s.latestTimestamp) rows.unshift(siRow('Last seen', fmtDT(s.latestTimestamp), stale ? '#f87171' : '#34d399'));
@@ -4102,7 +4118,7 @@ async function openTrackerConfigModal(imei) {
     const currentProfile = profiles.find(p => p.id === cfg.profileID);
     const profileOptions = [
       `<option value="">Custom</option>`,
-      ...profiles.map(p => `<option value="${escAttr(p.id)}"${p.id === cfg.profileID ? ' selected' : ''}>${escHTML(p.name)}</option>`)
+      ...profiles.map(p => `<option value="${escAttr(p.id)}"${p.id === cfg.profileID ? ' selected' : ''}>${escHTML(p.name)} — v${p.version ?? 1}</option>`)
     ].join('');
 
     body.innerHTML =
@@ -4112,7 +4128,12 @@ async function openTrackerConfigModal(imei) {
       `<select id="tcm-profile-select" class="tcm-input" style="flex:1;min-width:0">${profileOptions}</select>` +
       `<button type="button" id="tcm-apply-profile" class="modal-btn-secondary admin-small-btn" style="white-space:nowrap">Apply profile</button>` +
       `</div>` +
-      `<div style="margin-bottom:12px;font-size:11px;color:var(--fg3)">Config version: <strong style="color:var(--fg2)">${cfg.schemaVersion ?? 1}</strong></div>` +
+      `<div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--fg3)">` +
+      `<span>Config revision: <strong style="color:var(--fg2)">${cfg.schemaVersion ?? 1}</strong></span>` +
+      (currentProfile
+        ? `<span>Profile: <strong style="color:var(--fg2)">${escHTML(currentProfile.name)}</strong>&nbsp;<span style="opacity:.6">v${currentProfile.version ?? 1}</span></span>`
+        : `<span style="opacity:.55">Custom configuration</span>`) +
+      `</div>` +
       `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">` +
       // ── System ──
       `<div>` +
@@ -4425,6 +4446,7 @@ async function renderProfilesPanel() {
         <div class="admin-profile-header">
           <div class="admin-profile-meta">
             <span class="admin-profile-name">${escHTML(p.name)}</span>
+            <span style="font-size:10px;font-weight:600;opacity:.55;margin-left:5px">v${p.version ?? 1}</span>
             ${p.description ? `<span class="admin-profile-desc">${escHTML(p.description)}</span>` : ''}
           </div>
           <div class="admin-profile-actions">
