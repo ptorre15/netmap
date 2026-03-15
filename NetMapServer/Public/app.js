@@ -901,7 +901,7 @@ function renderSensorInfoCard() {
       rows.push(siRow('Config', label, color));
     }
     if (s.trackerProfileName) {
-      rows.push(siRow('Profile', `${escHTML(s.trackerProfileName)} <span style="opacity:.55;font-size:10px">v${s.trackerProfileVersion ?? 1}</span>`));
+      rows.push(`<div class="si-row"><span class="si-label">Profile</span><span class="si-val">${escHTML(s.trackerProfileName)} <span style="opacity:.55;font-size:10px">v${s.trackerProfileVersion ?? 1}</span></span></div>`);
     }
   }
   if (s.latestTimestamp) rows.unshift(siRow('Last seen', fmtDT(s.latestTimestamp), stale ? '#f87171' : '#34d399'));
