@@ -12,7 +12,8 @@ private func validTimestamp(_ candidate: Date?) -> Date {
 
 func normalizeJourneyDistanceKm(_ raw: Double?) -> Double? {
     guard let raw, raw >= 0 else { return nil }
-    return raw
+    // Values >= 1000 are assumed to be in meters (device firmware quirk); convert to km.
+    return raw >= 1000 ? raw / 1000.0 : raw
 }
 
 // MARK: - Piggyback config response structs
