@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   security-events: write
+  pull-requests: read
 
 jobs:
   trivy:
@@ -29,6 +30,7 @@ jobs:
   gitleaks:
     name: Gitleaks Secret Scan
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout
         uses: actions/checkout@v4
