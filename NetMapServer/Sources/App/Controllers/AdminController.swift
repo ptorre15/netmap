@@ -1158,7 +1158,7 @@ struct APIKeyResponse: Content {
 extension AdminController {
 
     struct OTAFirmwareFile: Content {
-        var version: Int
+        var version: String
         var filename: String
         var size: Int?
         var uploadedAt: String?
@@ -1166,7 +1166,7 @@ extension AdminController {
 
     struct OTAVersionsResponse: Content {
         var versions: [OTAFirmwareFile]
-        var latest: Int?
+        var latest: String?
         var reachable: Bool?
     }
 
