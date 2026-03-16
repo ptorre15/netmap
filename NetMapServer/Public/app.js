@@ -1059,13 +1059,13 @@ function showMode(mode) {
   const noData = S.records.length === 0;
   D.chartCont.style.display  = mode === 'chart'  && !noData ? 'flex'  : 'none';
   D.mapCont.style.display    = mode === 'map'    && !noData ? 'flex'  : 'none';
-  D.tableCont.style.display  = mode === 'table'  && !noData ? 'flex'  : 'none';
+  D.tableCont.style.display  = mode === 'table' ? 'flex' : 'none';
   D.alertsCont.style.display = mode === 'alerts'            ? 'block' : 'none';
   D.deviceCont.style.display  = mode === 'device'            ? 'block' : 'none';
   D.wheelsCont.style.display  = mode === 'wheels'            ? 'block' : 'none';
   D.errorsCont.style.display  = mode === 'errors'            ? 'block' : 'none';
   D.fleetCont.style.display   = mode === 'fleet'             ? 'block' : 'none';
-  D.emptyState.style.display = noData && !['alerts','device','wheels','errors','fleet'].includes(mode) ? 'flex' : 'none';
+  D.emptyState.style.display = noData && !['alerts','device','wheels','errors','fleet','table'].includes(mode) ? 'flex' : 'none';
   // Period bar: hide for modes that don't use a time range
   $('period-bar').style.display = ['fleet', 'device', 'errors'].includes(mode) ? 'none' : '';
   // Hide top toolbar + stats bar when nothing meaningful to show
@@ -2520,15 +2520,15 @@ async function renderTable() {
       const { from, to } = getRange();
       events = await apiFetch(`/api/vehicle-events?imei=${encodeURIComponent(sensor.sensorID)}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&limit=2000`);
       allEvents = events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).reverse();
-      if (showSysEvents()) {
-        const lc = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&since=${encodeURIComponent(from.toISOString())}&limit=500`).catch(() => []);
-        lifecycleEvents = lc.filter(e => new Date(e.timestamp) <= to).map(e => ({ ...e, _src: 'lifecycle' }));
-      }
+      // Always fetch lifecycle events: shown when toggled on, OR when there are no driving events
+      const lc = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&since=${encodeURIComponent(from.toISOString())}&limit=500`).catch(() => []);
+      lifecycleEvents = lc.filter(e => new Date(e.timestamp) <= to).map(e => ({ ...e, _src: 'lifecycle' }));
       if (showAlerts()) {
         const al = await apiFetch(`/api/driver-behavior?imei=${encodeURIComponent(sensor.sensorID)}&limit=1000`).catch(() => []);
         alertEvents = al.map(b => ({ ...b, _src: 'alert' }));
       }
-      let evBase = showSysEvents() ? [...allEvents, ...lifecycleEvents] : allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
+      const showLC = showSysEvents() || allEvents.length === 0;
+      let evBase = showLC ? [...allEvents, ...lifecycleEvents] : allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
       if (showAlerts()) evBase = [...evBase, ...alertEvents];
       events = evBase.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     } catch(err) {
@@ -2799,7 +2799,7 @@ async function renderTable() {
       }
 
       async function getBaseEvents() {
-        if (showSysEvents() && !lifecycleEvents.length) {
+        if ((showSysEvents() || allEvents.length === 0) && !lifecycleEvents.length) {
           const lc = await apiFetch(`/api/device-lifecycle?imei=${encodeURIComponent(sensor.sensorID)}&since=${encodeURIComponent(evFrom.toISOString())}&limit=500`).catch(() => []);
           lifecycleEvents = lc.filter(e => new Date(e.timestamp) <= evTo).map(e => ({ ...e, _src: 'lifecycle' }));
         }
@@ -2807,7 +2807,8 @@ async function renderTable() {
           const al = await apiFetch(`/api/driver-behavior?imei=${encodeURIComponent(sensor.sensorID)}&limit=1000`).catch(() => []);
           alertEvents = al.map(b => ({ ...b, _src: 'alert' }));
         }
-        let base = showSysEvents() ? [...allEvents, ...lifecycleEvents] : allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
+        const showLC = showSysEvents() || allEvents.length === 0;
+        let base = showLC ? [...allEvents, ...lifecycleEvents] : allEvents.filter(e => !GPS_TYPES.includes(e.eventType));
         if (showAlerts()) base = [...base, ...alertEvents];
         return base.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       }

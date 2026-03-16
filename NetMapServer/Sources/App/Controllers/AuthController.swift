@@ -264,16 +264,20 @@ struct AuthController: RouteCollection {
     }
 
     private func clearSessionCookie(on response: Response) {
-        response.cookies[sessionCookieName()] = HTTPCookies.Value(
-            string: "",
-            expires: Date(timeIntervalSince1970: 0),
-            maxAge: 0,
-            domain: nil,
-            path: "/",
-            isSecure: cookieSecureEnabled(),
-            isHTTPOnly: true,
-            sameSite: .strict
-        )
+        // Clear both possible cookie names to remove stale cookies from prior configs
+        for name in ["__Host-session", "session"] {
+            let secure = name.hasPrefix("__Host-")
+            response.cookies[name] = HTTPCookies.Value(
+                string: "",
+                expires: Date(timeIntervalSince1970: 0),
+                maxAge: 0,
+                domain: nil,
+                path: "/",
+                isSecure: secure,
+                isHTTPOnly: true,
+                sameSite: .strict
+            )
+        }
     }
 
     /// Generates a readable initial password like "Kx3-Bm7-Rp2"

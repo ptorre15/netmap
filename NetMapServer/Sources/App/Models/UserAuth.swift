@@ -93,24 +93,27 @@ struct OptionalBearerAuthMiddleware: AsyncMiddleware {
 }
 
 func authUserFromBearerOrCookie(_ request: Request) async throws -> AuthUser? {
-    let tokenValue: String? = {
-        if let bearer = request.headers.bearerAuthorization {
-            return bearer.token
+    // Bearer token takes priority
+    if let bearer = request.headers.bearerAuthorization {
+        if let token = try await UserToken.query(on: request.db)
+            .filter(\.$value == bearer.token)
+            .filter(\.$expiresAt > Date())
+            .first() {
+            return AuthUser(userID: token.userID, email: token.email, role: token.role)
         }
-        for name in sessionCookieNames {
-            if let cookie = request.cookies[name], !cookie.string.isEmpty {
-                return cookie.string
-            }
-        }
-        return nil
-    }()
-    guard let tokenValue else { return nil }
-    guard let token = try await UserToken.query(on: request.db)
-        .filter(\.$value == tokenValue)
-        .filter(\.$expiresAt > Date())
-        .first()
-    else { return nil }
-    return AuthUser(userID: token.userID, email: token.email, role: token.role)
+    }
+    // Try every known session cookie name — a stale cookie for one name
+    // should not block a valid cookie under another name.
+    for name in sessionCookieNames {
+        guard let cookie = request.cookies[name], !cookie.string.isEmpty else { continue }
+        guard let token = try await UserToken.query(on: request.db)
+            .filter(\.$value == cookie.string)
+            .filter(\.$expiresAt > Date())
+            .first()
+        else { continue }
+        return AuthUser(userID: token.userID, email: token.email, role: token.role)
+    }
+    return nil
 }
 
 /// Requires `authUser.role == "admin"`.
