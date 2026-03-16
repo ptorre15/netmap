@@ -1217,9 +1217,10 @@ extension AdminController {
 
     /// GET /api/admin/ota/versions — proxies OTA server firmware file listing
     func otaGetVersions(req: Request) async throws -> OTAVersionsResponse {
-        let stored = try? await AppSetting.query(on: req.db)
-            .filter(\.$key == "ota_server_url").first()?.value
-        let otaURL = stored ?? Environment.get("OTA_SERVER_URL") ?? "http://127.0.0.1:9000"
+        // Always proxy via the internal address — the stored ota_server_url is the
+        // public-facing URL used in firmware download links sent to trackers, and may
+        // not be reachable from the server itself (e.g. HTTPS loopback issue).
+        let otaURL = Environment.get("OTA_INTERNAL_URL") ?? "http://127.0.0.1:9000"
         do {
             let res = try await req.client.get(URI("\(otaURL)/api/firmware/files"))
             guard res.status == .ok else {
