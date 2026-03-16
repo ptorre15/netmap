@@ -34,17 +34,18 @@ jobs:
             --exclude='.build/' \
             --exclude='*.db' \
             --exclude='.DS_Store' \
-            ./NetMapServer/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/netmap/src/
+            ./NetMapServer/ deploy@${{ secrets.DEPLOY_HOST }}:/opt/netmap/src/
 
       - name: Build & restart on server
         run: |
           ssh -i ~/.ssh/deploy_key \
             -p ${{ secrets.DEPLOY_PORT || '22' }} \
             -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            deploy@${{ secrets.DEPLOY_HOST }} \
             bash << 'ENDSSH'
           set -euo pipefail
           export PATH="/usr/local/swift/usr/bin:$PATH"
+          HELPER="sudo /opt/netmap/scripts/netmap-deploy-helper.sh"
 
           echo "▶ Building..."
           cd /opt/netmap/src
@@ -54,17 +55,14 @@ jobs:
           cp "$BIN" /opt/netmap/bin/netmap-server.new
 
           echo "▶ Syncing static files..."
-          rsync -a --delete /opt/netmap/src/Public/ /opt/netmap/Public/
-          sudo chown -R netmap:netmap /opt/netmap/Public
+          $HELPER sync-public
 
           echo "▶ Replacing binary..."
-          sudo mv /opt/netmap/bin/netmap-server.new /opt/netmap/bin/netmap-server
-          sudo chmod 755 /opt/netmap/bin/netmap-server
-          sudo chown netmap:netmap /opt/netmap/bin/netmap-server
+          $HELPER install-binary
 
           echo "▶ Restarting service..."
-          sudo systemctl restart netmap-server
+          $HELPER restart
           sleep 2
-          sudo systemctl is-active --quiet netmap-server && echo "✓ Service running." || \
-            { sudo journalctl -u netmap-server -n 30; exit 1; }
+          systemctl is-active --quiet netmap-server && echo "✓ Service running." || \
+            { journalctl -u netmap-server -n 30; exit 1; }
           ENDSSH
