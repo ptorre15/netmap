@@ -1,4 +1,35 @@
-netmap_data.db
+# Swift build artefacts
+.build/
+*.o
+*.d
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# macOS
 .DS_Store
-NetMapApp/.DS_Store
-NetMapApp/NetMap/.DS_Store
+
+# Xcode / SPM (Package.resolved is committed intentionally so CI can cache Swift packages)
+*.xcodeproj/
+*.xcworkspace/
+.swiftpm/
+
+# TLS certificates and private keys — never commit
+*.pem
+*.key
+*.crt
+*.p12
+*.cer
+
+# Local environment — never commit real secrets
+.env
+# But do commit the documented template
+!.env.example
+
+# Server-generated log files
+*.log

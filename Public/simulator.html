@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NetMap — Tracker Simulator</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    /* ── Reset & tokens ─────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #0d1117;
+      --bg2:     #161b22;
+      --bg3:     #1c2128;
+      --bg4:     #252b37;
+      --border:  #30363d;
+      --fg:      #c9d1d9;
+      --fg2:     #8b949e;
+      --fg3:     #6e7681;
+      --accent:  #58a6ff;
+      --green:   #3fb950;
+      --red:     #f85149;
+      --yellow:  #e3b341;
+      --orange:  #f97316;
+      --purple:  #bc8cff;
+      --r:       6px;
+    }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 12.5px;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 9px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 14px; font-weight: 600; white-space: nowrap; }
+    .hbadge {
+      display: flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: 20px;
+      background: var(--bg3); border: 1px solid var(--border);
+      font-size: 11px; font-weight: 500;
+    }
+    .hbadge.active { background: rgba(63,185,80,.12); border-color: rgba(63,185,80,.3); color: var(--green); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg3); flex-shrink: 0; }
+    .dot.active { background: var(--green); animation: blink 1.4s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+    .hspacer { flex: 1; }
+    .himei { font-family: monospace; font-size: 11px; color: var(--fg2); }
+
+    /* ── Layout ─────────────────────────────────────────── */
+    main {
+      flex: 1; min-height: 0;
+      display: grid;
+      grid-template-columns: 300px 1fr 230px;
+      overflow: hidden;
+    }
+
+    /* ── Panels ─────────────────────────────────────────── */
+    .panel {
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 8px;
+      gap: 6px;
+      overflow-y: auto;
+    }
+    .panel:last-child { border-right: none; border-left: 1px solid var(--border); }
+
+    /* ── Section headings ────────────────────────────────── */
+    .sec {
+      font-size: 9.5px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .08em;
+      color: var(--fg3);
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 2px;
+    }
+    .sec::after { content: ''; flex:1; height: 1px; background: var(--border); }
+
+    /* ── Buttons ─────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 5px 8px; border-radius: var(--r);
+      border: 1px solid var(--border); background: var(--bg3);
+      color: var(--fg); cursor: pointer; font-size: 11px; font-weight: 500;
+      transition: background .12s, border-color .12s;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { background: var(--bg4); }
+    .btn:disabled { opacity: .38; cursor: not-allowed; }
+    .btn.full  { width: 100%; }
+    .btn.sm    { padding: 3px 7px; font-size: 10.5px; }
+    .btn.primary { background: rgba(88,166,255,.15); border-color: rgba(88,166,255,.4); color: var(--accent); }
+    .btn.primary:hover:not(:disabled) { background: rgba(88,166,255,.25); }
+    .btn.green  { background: rgba(63,185,80,.12); border-color: rgba(63,185,80,.35); color: var(--green); }
+    .btn.green:hover:not(:disabled) { background: rgba(63,185,80,.22); }
+    .btn.red    { background: rgba(248,81,73,.12); border-color: rgba(248,81,73,.35); color: var(--red); }
+    .btn.red:hover:not(:disabled){ background: rgba(248,81,73,.22); }
+    .btn.amber  { background: rgba(227,179,65,.12); border-color: rgba(227,179,65,.35); color: var(--yellow); }
+    .btn.amber:hover:not(:disabled){ background: rgba(227,179,65,.22); }
+    .btng { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+    .btng3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px; }
+
+    /* ── Sliders ─────────────────────────────────────────── */
+    .slider-wrap { display: flex; flex-direction: column; gap: 2px; }
+    .slider-lbl  { display: flex; justify-content: space-between; font-size: 11px; color: var(--fg2); }
+    .slider-lbl strong { color: var(--fg); }
+    input[type=range] {
+      -webkit-appearance: none; width: 100%;
+      height: 4px; border-radius: 2px;
+      background: var(--border); outline: none; cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 13px; height: 13px;
+      border-radius: 50%; background: var(--accent); cursor: pointer;
+    }
+    input[type=range]::-moz-range-thumb {
+      width: 13px; height: 13px; border-radius: 50%;
+      background: var(--accent); border: none; cursor: pointer;
+    }
+
+    /* ── Form fields ─────────────────────────────────────── */
+    .field { display: flex; flex-direction: column; gap: 2px; }
+    .field label { font-size: 10.5px; color: var(--fg2); }
+    .field input, .field select {
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--fg); padding: 4px 7px;
+      border-radius: var(--r); font-size: 11.5px; outline: none; width: 100%;
+    }
+    .field input:focus, .field select:focus { border-color: var(--accent); }
+
+    /* ── Journey info box ────────────────────────────────── */
+    .jbox {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 8px;
+    }
+    .jbox-id { font-family: monospace; font-size: 9.5px; color: var(--accent); word-break: break-all; margin-bottom: 5px; }
+    .jrow { display: flex; justify-content: space-between; font-size: 11px; color: var(--fg2); margin-top: 3px; }
+    .jrow span { color: var(--fg); font-weight: 600; }
+
+    /* ── Counter table ───────────────────────────────────── */
+    .ctable {
+      display: grid;
+      grid-template-columns: 50px 1fr 1fr 1fr;
+      gap: 2px 4px;
+      font-size: 10px;
+    }
+    .ctable .ch { color: var(--fg3); font-weight: 600; text-align: center; font-size: 9.5px; text-transform: uppercase; }
+    .ctable .cl { color: var(--fg2); display: flex; align-items: center; }
+    .ctable .cv { text-align: center; font-weight: 700; color: var(--fg); }
+    .ctable .cv.red { color: var(--red); }
+    .ctable .cv.yellow { color: var(--yellow); }
+    .ctable .cv.orange { color: var(--orange); }
+
+    /* ── Map wrapper ─────────────────────────────────────── */
+    .map-wrap { position: relative; display: flex; flex-direction: column; overflow: hidden; }
+    #map { flex: 1; min-height: 200px; }
+
+    /* Overlay on map */
+    .telem-overlay {
+      position: absolute; bottom: 14px; left: 14px; z-index: 1001;
+      background: rgba(13,17,23,.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(48,54,61,.8);
+      border-radius: 8px;
+      padding: 10px 16px;
+      display: grid; grid-template-columns: repeat(4, 60px); gap: 6px 14px;
+      pointer-events: none;
+    }
+    .tov { text-align: center; }
+    .tov-val { font-size: 20px; font-weight: 700; line-height: 1; }
+    .tov-key { font-size: 9px; letter-spacing: .06em; color: var(--fg2); margin-top: 2px; }
+
+    /* ── Tabs ────────────────────────────────────────────── */
+    .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 8px; flex-shrink: 0; }
+    .tab {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: var(--fg2); cursor: pointer; font-size: 12px;
+      padding: 5px 10px; margin-bottom: -1px; transition: color .12s;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tcont { display: none; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+    .tcont.active { display: flex; }
+
+    /* ── Event log ───────────────────────────────────────── */
+    .log {
+      flex: 1; min-height: 0; overflow-y: auto;
+      font-family: 'SFMono-Regular', Consolas, monospace; font-size: 10.5px;
+      display: flex; flex-direction: column-reverse; gap: 1px;
+    }
+    .le { padding: 2px 5px; border-radius: 3px; line-height: 1.55; }
+    .le.ok   { color: var(--green); }
+    .le.err  { color: var(--red); }
+    .le.info { color: var(--fg2); }
+    .le.warn { color: var(--yellow); }
+
+    /* ── Divider ─────────────────────────────────────────── */
+    .divider { height: 1px; background: var(--border); flex-shrink: 0; }
+
+    /* ── Connection badge ────────────────────────────────── */
+    .conn { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--fg2); }
+    .conn .dot { flex-shrink: 0; }
+
+    /* ── Running badge ───────────────────────────────────── */
+    .run-badge {
+      display: inline-block;
+      background: rgba(63,185,80,.15); color: var(--green);
+      border-radius: 3px; padding: 1px 5px; font-size: 9.5px; font-weight: 700;
+      letter-spacing: .04em; vertical-align: middle; margin-left: 4px;
+    }
+
+    /* ── Scrollbar ───────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Checkbox ────────────────────────────────────────── */
+    .chk { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: var(--fg2); user-select: none; }
+    .chk input { accent-color: var(--accent); cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══════════════════════════════════════════════════════════ -->
+<header>
+  <h1>🚗 NetMap Tracker Simulator</h1>
+  <div class="hbadge" id="statusBadge">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">Idle</span>
+  </div>
+  <div class="hspacer"></div>
+  <div class="himei">IMEI: <strong id="headerImei">SIMULATOR-001</strong></div>
+</header>
+
+<!-- ═══ MAIN ══════════════════════════════════════════════════════════════ -->
+<main>
+
+  <!-- ── LEFT PANEL ─────────────────────────────────────────────────────── -->
+  <div class="panel">
+
+    <!-- Journey controls -->
+    <div>
+      <div class="sec">Journey</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <button class="btn full green" id="btnStart" onclick="startJourney()">▶ Start Journey</button>
+        <button class="btn full red"   id="btnEnd"   onclick="endJourney()"   disabled>⏹ End Journey</button>
+        <button class="btn full sm"    id="btnDrive" onclick="manualDriving()" disabled>📍 Send Driving Event</button>
+      </div>
+    </div>
+
+    <!-- Active journey info (shown only when active) -->
+    <div id="jInfoBox" style="display:none">
+      <div class="sec">Active Journey</div>
+      <div class="jbox">
+        <div class="jbox-id" id="jIdText"></div>
+        <div class="jrow">Duration  <span id="jDuration">0:00</span></div>
+        <div class="jrow">Distance  <span id="jDist">0.00 km</span></div>
+        <div class="jrow">Fuel used <span id="jFuel">0.00 L</span></div>
+        <div class="jrow">DB events <span id="jEvents">0</span></div>
+      </div>
+    </div>
+
+    <!-- Auto drive -->
+    <div>
+      <div class="sec">Auto Drive <span id="autoBadge" class="run-badge" style="display:none">RUNNING</span></div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div class="field">
+          <label>Route</label>
+          <select id="routeSel" onchange="onRouteChange()">
+            <option value="paris">🗼 Paris — Champs-Élysées</option>
+            <option value="lyon">🏙️ Lyon — Presqu'île</option>
+            <option value="autoroute">🛣️ Autoroute A6</option>
+            <option value="countryside">🌳 Countryside Roads</option>
+          </select>
+        </div>
+        <div class="slider-wrap">
+          <div class="slider-lbl">Speed <strong><span id="spdVal">60</span> km/h</strong></div>
+          <input type="range" id="spdSlider" min="5" max="180" value="60" oninput="onSpeedChange(this.value)">
+        </div>
+        <div class="slider-wrap">
+          <div class="slider-lbl">Send every <strong><span id="intVal">5</span> s</strong></div>
+          <input type="range" id="intSlider" min="2" max="30" value="5" oninput="onIntervalChange(this.value)">
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="btn green" style="flex:1" id="btnAutoStart" onclick="startAuto()">▶ Auto</button>
+          <button class="btn amber" style="flex:1" id="btnAutoStop"  onclick="stopAuto()" disabled>⏸ Stop</button>
+        </div>
+        <div style="display:flex;gap:12px">
+          <label class="chk"><input type="checkbox" id="chkLoop" checked> Loop</label>
+          <label class="chk"><input type="checkbox" id="chkBehav" checked> Rnd behavior</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Load Estimation -->
+    <div>
+      <div class="sec">Load Estimation</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label class="chk"><input type="checkbox" id="chkLoad" checked onchange="saveConfig();sim.loadEnabled=this.checked;updateLoadOverlay()"> Include load in events</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+          <div class="field">
+            <label>Empty mass (kg)</label>
+            <input id="cfgEmptyMass" type="number" min="300" max="30000" value="1400" oninput="saveConfig();sim.loadEmptyKg=+this.value">
+          </div>
+          <div class="field">
+            <label>Payload (kg)</label>
+            <input id="cfgPayload" type="number" min="0" max="20000" value="0" oninput="saveConfig();sim.loadPayloadKg=+this.value">
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--fg3)">Confidence: low@5 · medium@30 · high@100 · σ=5%</div>
+      </div>
+    </div>
+
+    <!-- Driver behavior -->
+    <div>
+      <div class="sec">Driver Behavior</div>
+      <div class="btng">
+        <button class="btn red  sm" onclick="sendBehavior(2, 7.5+rnd(3), 800+rnd(400))">🛑 Brake</button>
+        <button class="btn amber sm" onclick="sendBehavior(3, 4+rnd(2), 1200+rnd(500))">💨 Accel</button>
+        <button class="btn amber sm" onclick="sendBehavior(4, 4+rnd(2), 1500+rnd(600))">↩ Corner</button>
+        <button class="btn red  sm" onclick="sendBehavior(6, 140+rnd(30), 5000+rnd(3000))">🚀 Overspeed</button>
+        <button class="btn      sm" onclick="sendBehavior(5, 0, 30000+rnd(30000))">💤 Idling</button>
+        <button class="btn      sm" onclick="sendBehavior(1, 4800+rnd(600), 2000+rnd(1000))">🔊 Revving</button>
+      </div>
+    </div>
+
+    <!-- Device events -->
+    <div>
+      <div class="sec">Device Events</div>
+      <div class="btng">
+        <button class="btn sm" onclick="sendLifecycle('boot','POWERON')">⚡ Boot</button>
+        <button class="btn sm" onclick="sendLifecycle('boot','PANIC')">💥 Panic</button>
+        <button class="btn sm" onclick="sendLifecycle('sleep')">😴 Sleep</button>
+        <button class="btn sm" onclick="sendLifecycle('wake_up')">☀ Wake</button>
+        <button class="btn sm" onclick="sendPing()">📡 Ping</button>
+        <button class="btn sm" onclick="sendLifecycle('gps_acquired')">📶 GPS OK</button>
+      </div>
+      <div style="margin-top:5px">
+        <button class="btn full sm" onclick="sendJourneyStats()">📊 Send journey_stats now</button>
+      </div>
+    </div>
+
+    <!-- Delivery counters -->
+    <div>
+      <div class="sec">Delivery</div>
+      <div class="ctable">
+        <div></div>
+        <div class="ch">DB sent</div><div class="ch">FF sent</div><div class="ch">Fail</div>
+        <div class="cl">Journey</div>
+        <div class="cv" id="cJDb">0</div><div class="cv" id="cJFf">0</div><div class="cv red" id="cJFail">0</div>
+        <div class="cl">Boot</div>
+        <div class="cv" id="cBDb">0</div><div class="cv" id="cBFf">0</div><div class="cv red" id="cBFail">0</div>
+        <div class="cl">Lifetime</div>
+        <div class="cv" id="cLDb">0</div><div class="cv" id="cLFf">0</div><div class="cv red" id="cLFail">0</div>
+      </div>
+      <div class="ctable" style="margin-top:6px">
+        <div></div>
+        <div class="ch">Total</div><div class="ch">Exception</div><div class="ch">Brownout</div>
+        <div class="cl">Reboots</div>
+        <div class="cv" id="cRTotal">1</div>
+        <div class="cv yellow" id="cRExc">0</div>
+        <div class="cv orange" id="cRBrown">0</div>
+      </div>
+    </div>
+
+  </div><!-- end left panel -->
+
+  <!-- ── CENTER: MAP ────────────────────────────────────────────────────── -->
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="telem-overlay">
+      <div class="tov"><div class="tov-val" id="ovSpd">0</div><div class="tov-key">KM/H</div></div>
+      <div class="tov"><div class="tov-val" id="ovRpm">800</div><div class="tov-key">RPM</div></div>
+      <div class="tov"><div class="tov-val" id="ovFuel">80%</div><div class="tov-key">FUEL</div></div>
+      <div class="tov"><div class="tov-val" id="ovSat">10</div><div class="tov-key">SAT</div></div>
+      <div class="tov"><div class="tov-val" id="ovLoad" style="font-size:13px">—</div><div class="tov-key">LOAD</div></div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT PANEL ────────────────────────────────────────────────────── -->
+  <div class="panel" style="overflow:hidden">
+    <div class="tabs">
+      <button class="tab active" id="tabLog"    onclick="switchTab('Log')">📋 Log</button>
+      <button class="tab"        id="tabConfig" onclick="switchTab('Config')">⚙️ Config</button>
+    </div>
+
+    <!-- Log tab -->
+    <div class="tcont active" id="tcontLog">
+      <div id="eventLog" class="log"></div>
+      <button class="btn sm" onclick="clearLog()">🗑 Clear</button>
+    </div>
+
+    <!-- Config tab -->
+    <div class="tcont" id="tcontConfig" style="overflow-y:auto">
+      <div class="field">
+        <label>IMEI (device identifier)</label>
+        <input id="cfgImei" value="SIMULATOR-001" oninput="saveConfig()">
+      </div>
+      <div class="field">
+        <label>API Key</label>
+        <input id="cfgApiKey" type="password" placeholder="Enter API key" oninput="saveConfig()">
+      </div>
+      <div class="field">
+        <label>Server URL</label>
+        <input id="cfgUrl" oninput="saveConfig()">
+      </div>
+      <div class="field">
+        <label>Starting odometer (km)</label>
+        <input id="cfgOdo" type="number" value="12480" oninput="saveConfig()">
+      </div>
+      <div class="field">
+        <label>Starting fuel level (%)</label>
+        <input id="cfgFuel" type="number" min="0" max="100" value="80" oninput="saveConfig()">
+      </div>
+      <div class="divider"></div>
+      <div class="conn">
+        <div class="dot" id="connDot"></div>
+        <span id="connLbl">Not tested</span>
+      </div>
+      <button class="btn full sm" onclick="testConnection()">🔌 Test Connection</button>
+      <div class="divider"></div>
+      <p style="font-size:10.5px;color:var(--fg2);line-height:1.6">
+        <strong style="color:var(--fg)">Quick start:</strong><br>
+        1. Build &amp; start the server<br>
+        2. Click <em>Test Connection</em><br>
+        3. Click <em>▶ Auto</em> to begin a simulated journey<br><br>
+        Ping events use the <code style="color:var(--accent)">ffEventsSent</code> counter (fire-and-forget, not retried) to match firmware behaviour.<br><br>
+        <strong style="color:var(--fg)">journey_stats</strong> is auto-sent after every <em>End Journey</em>.
+      </p>
+    </div>
+
+  </div><!-- end right panel -->
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// ROUTES
+// ═══════════════════════════════════════════════════════════════════════════
+const ROUTES = {
+  paris: {
+    name: "Paris — Champs-Élysées", center: [48.870, 2.308], zoom: 14, speedHint: 50,
+    wps: [
+      [48.8738,2.2950],[48.8718,2.3022],[48.8700,2.3079],[48.8679,2.3143],
+      [48.8658,2.3200],[48.8635,2.3253],[48.8612,2.3315],[48.8592,2.3390],
+      [48.8612,2.3462],[48.8641,2.3432],[48.8668,2.3370],[48.8691,2.3292],
+      [48.8714,2.3215],[48.8730,2.3090],[48.8738,2.2950],
+    ],
+  },
+  lyon: {
+    name: "Lyon — Presqu'île", center: [45.762, 4.836], zoom: 14, speedHint: 40,
+    wps: [
+      [45.7641,4.8202],[45.7619,4.8238],[45.7594,4.8279],[45.7568,4.8310],
+      [45.7541,4.8340],[45.7514,4.8372],[45.7499,4.8420],[45.7517,4.8462],
+      [45.7549,4.8490],[45.7580,4.8474],[45.7609,4.8443],[45.7633,4.8403],
+      [45.7646,4.8350],[45.7644,4.8268],[45.7641,4.8202],
+    ],
+  },
+  autoroute: {
+    name: "Autoroute A6", center: [48.655, 2.435], zoom: 12, speedHint: 120,
+    wps: [
+      [48.7100,2.3750],[48.6990,2.3875],[48.6880,2.3990],[48.6770,2.4110],
+      [48.6660,2.4220],[48.6550,2.4330],[48.6440,2.4440],[48.6330,2.4545],
+      [48.6220,2.4648],[48.6110,2.4750],[48.6000,2.4855],[48.5890,2.4960],
+      [48.5780,2.5060],[48.5670,2.5165],[48.5560,2.5270],
+    ],
+  },
+  countryside: {
+    name: "Countryside Roads", center: [48.762, 2.215], zoom: 13, speedHint: 70,
+    wps: [
+      [48.7600,2.1900],[48.7579,2.2002],[48.7545,2.2098],[48.7503,2.2186],
+      [48.7481,2.2300],[48.7491,2.2404],[48.7521,2.2482],[48.7559,2.2434],
+      [48.7591,2.2326],[48.7623,2.2244],[48.7643,2.2148],[48.7643,2.2050],
+      [48.7622,2.1968],[48.7600,2.1900],
+    ],
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIMULATION STATE
+// ═══════════════════════════════════════════════════════════════════════════
+const sim = {
+  // Journey
+  journeyActive: false,
+  journeyId:     null,
+  journeyStart:  null,
+  autoRunning:   false,
+  driveTimer:    null,
+  jTimer:        null,
+
+  // Route position
+  wpIdx:       0,
+  segProg:     0,
+  lat:         48.870,
+  lon:         2.308,
+  heading:     90,
+
+  // Telemetry
+  speedTarget: 60,
+  speedActual: 0,
+  rpm:         800,
+  fuelPct:     80,
+  odometer:    12480,
+  jDistKm:     0,
+  jFuelL:      0,
+  gpsSat:      10,
+  gpsFixType:  3,
+  // OBFCM lifetime accumulators (persist across journeys)
+  obfcmDistKm: 12480,
+  obfcmFuelL:  0,
+
+  // Delivery counters (mirror firmware)
+  jDb:0, jFf:0, jFail:0,
+  bDb:0, bFf:0, bFail:0,
+  ltDb:0, ltFf:0, ltFail:0,
+  rtTotal:1, rtExc:0, rtBrown:0,
+
+  // Load estimation simulation (mirrors load_estimator.c phases)
+  loadEnabled:    true,   // whether to include load object in events
+  loadEmptyKg:    1400,   // calibrated empty vehicle mass (kg)
+  loadPayloadKg:  0,      // extra payload to simulate (kg)
+  loadPhase:      3,      // 3 = operational (produces results)
+  loadSamples:    0,      // accumulated this trip
+  loadConfidence: 'not_ready', // current confidence string
+  loadMTotalKg:   null,
+  loadMLoadKg:    null,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════════════════
+function loadConfig() {
+  document.getElementById('cfgUrl').value = window.location.origin;
+  let s = {};
+  try {
+    s = JSON.parse(localStorage.getItem('nm_sim') || '{}');
+    if (s.imei)     document.getElementById('cfgImei').value     = s.imei;
+    if (s.apiKey && s.apiKey !== 'netmap-key' && s.apiKey !== 'netmap-dev')   document.getElementById('cfgApiKey').value   = s.apiKey;
+    if (s.url)      document.getElementById('cfgUrl').value      = s.url;
+    if (s.odo)      document.getElementById('cfgOdo').value      = s.odo;
+    if (s.fuel)     document.getElementById('cfgFuel').value     = s.fuel;
+    if (s.speed)  { document.getElementById('spdSlider').value   = s.speed;    onSpeedChange(s.speed); }
+    if (s.intv)   { document.getElementById('intSlider').value   = s.intv;     onIntervalChange(s.intv); }
+    if (s.route)  { document.getElementById('routeSel').value    = s.route; }
+    if (s.emptyMass !== undefined) document.getElementById('cfgEmptyMass').value = s.emptyMass;
+    if (s.payload   !== undefined) document.getElementById('cfgPayload').value   = s.payload;
+    if (s.loadEnabled !== undefined) document.getElementById('chkLoad').checked  = s.loadEnabled;
+  } catch(_) {}
+  sim.speedTarget    = +document.getElementById('spdSlider').value;
+  sim.fuelPct        = +document.getElementById('cfgFuel').value;
+  sim.odometer       = +document.getElementById('cfgOdo').value;
+  sim.obfcmDistKm    = s.obfcmDistKm !== undefined ? s.obfcmDistKm : sim.odometer;
+  sim.obfcmFuelL     = s.obfcmFuelL  !== undefined ? s.obfcmFuelL  : 0;
+  sim.loadEnabled    = document.getElementById('chkLoad').checked;
+  sim.loadEmptyKg    = +document.getElementById('cfgEmptyMass').value || 1400;
+  sim.loadPayloadKg  = +document.getElementById('cfgPayload').value || 0;
+  // Seed lifetime counters with plausible pre-existing history
+  sim.ltDb    = 100 + Math.floor(Math.random() * 600);
+  sim.ltFf    = 40  + Math.floor(Math.random() * 200);
+  sim.ltFail  = Math.floor(Math.random() * 12);
+  sim.rtTotal = 1   + Math.floor(Math.random() * 8);
+  updateHeaderImei();
+  updateCounters();
+}
+
+function saveConfig() {
+  localStorage.setItem('nm_sim', JSON.stringify({
+    imei:        g('cfgImei').value,
+    apiKey:      g('cfgApiKey').value,
+    url:         g('cfgUrl').value,
+    odo:         g('cfgOdo').value,
+    fuel:        g('cfgFuel').value,
+    speed:       g('spdSlider').value,
+    intv:        g('intSlider').value,
+    route:       g('routeSel').value,
+    loadEnabled:  g('chkLoad').checked,
+    emptyMass:    g('cfgEmptyMass').value,
+    payload:      g('cfgPayload').value,
+    obfcmDistKm:  sim.obfcmDistKm,
+    obfcmFuelL:   sim.obfcmFuelL,
+  }));
+  updateHeaderImei();
+}
+
+const g    = id => document.getElementById(id);
+const cfgV = id => g(id).value.trim();
+const rnd  = n  => Math.random() * n;
+
+function updateHeaderImei() { g('headerImei').textContent = cfgV('cfgImei'); }
+function driveIntervalMs()  { return +g('intSlider').value * 1000; }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GEO UTILS
+// ═══════════════════════════════════════════════════════════════════════════
+function haversine(la1, lo1, la2, lo2) {
+  const R = 6371, r = Math.PI/180;
+  const dL = (la2-la1)*r, dG = (lo2-lo1)*r;
+  const a  = Math.sin(dL/2)**2 + Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dG/2)**2;
+  return 2*R*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function bearing(la1, lo1, la2, lo2) {
+  const r = Math.PI/180, dG = (lo2-lo1)*r;
+  const y = Math.sin(dG)*Math.cos(la2*r);
+  const x = Math.cos(la1*r)*Math.sin(la2*r) - Math.sin(la1*r)*Math.cos(la2*r)*Math.cos(dG);
+  return ((Math.atan2(y,x)*180/Math.PI)+360)%360;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// API
+// ═══════════════════════════════════════════════════════════════════════════
+async function post(payload, isFF = false) {
+  let ok = false, statusCode = 0;
+  try {
+    const res = await fetch(`${cfgV('cfgUrl')}/api/vehicle-events`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': cfgV('cfgApiKey') },
+      body:    JSON.stringify([payload]),
+    });
+    ok = res.ok; statusCode = res.status;
+    // Piggyback config?
+    if (ok && !isFF) {
+      try {
+        const j = await res.json();
+        if (j && j.config) log(`⚙️ config piggyback v${j.config.schemaVersion}`, 'info');
+      } catch(_) {}
+    }
+    if (!ok) log(`❌ ${payload.eventType} → HTTP ${statusCode}`, 'err');
+  } catch(e) {
+    log(`❌ ${payload.eventType} → ${e.message}`, 'err');
+  }
+
+  if (isFF) {
+    if (ok) { sim.bFf++; sim.ltFf++; }
+    else    { sim.bFail++; sim.ltFail++; }
+  } else {
+    if (ok) { sim.jDb++; sim.bDb++; sim.ltDb++; }
+    else    { sim.jFail++; sim.bFail++; sim.ltFail++; }
+  }
+  updateCounters();
+  return ok;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOAD ESTIMATION SIMULATION
+// ═══════════════════════════════════════════════════════════════════════════
+/**
+ * Mirrors load_estimator.c logic at a high level:
+ *  - Phase 3 (operational): produces estimates after a warmup of ~5 samples
+ *  - Adds gaussian noise (σ ≈ 5 % of total mass) to simulate sensor variance
+ *  - Confidence climbs: not_ready → low (5 samples) → medium (30) → high (100)
+ *  - Returns null when loadEnabled is false or phase < 3
+ */
+function buildLoadPayload() {
+  if (!sim.loadEnabled) return null;
+  if (sim.loadPhase < 3) return null;   // not yet operational
+
+  const conf = sim.loadConfidence;
+  if (conf === 'not_ready') return null; // guard: shouldn't reach here with phase 3
+
+  const empty   = sim.loadEmptyKg;
+  const payload = sim.loadPayloadKg;
+  const total   = empty + payload;
+
+  // Gaussian noise ≈ 5 % σ of total mass (Box-Muller)
+  const u1 = Math.max(1e-10, Math.random()), u2 = Math.random();
+  const noise = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2) * total * 0.05;
+  const mTotal = Math.max(0, Math.round((total + noise) * 10) / 10);
+  const mLoad  = Math.max(0, Math.round((payload + noise) * 10) / 10);
+
+  sim.loadMTotalKg = mTotal;
+  sim.loadMLoadKg  = mLoad;
+  updateLoadOverlay();
+
+  const obj = { confidence: conf, samples: sim.loadSamples };
+  if (mTotal > 0) obj.mTotalKg = mTotal;
+  // Only include mLoadKg when empty mass is calibrated (always true in phase 3)
+  obj.mLoadKg = mLoad;
+  return obj;
+}
+
+/** Called each driving tick to accumulate samples and upgrade confidence. */
+function tickLoadEstimator() {
+  if (!sim.loadEnabled || sim.loadPhase < 3) return;
+  sim.loadSamples++;
+  if      (sim.loadSamples >= 100) sim.loadConfidence = 'high';
+  else if (sim.loadSamples >= 30)  sim.loadConfidence = 'medium';
+  else if (sim.loadSamples >= 5)   sim.loadConfidence = 'low';
+  else                             sim.loadConfidence = 'not_ready';
+  updateLoadOverlay();
+}
+
+function resetLoadTrip() {
+  sim.loadSamples    = 0;
+  sim.loadConfidence = 'not_ready';
+  sim.loadMTotalKg   = null;
+  sim.loadMLoadKg    = null;
+  updateLoadOverlay();
+}
+
+function updateLoadOverlay() {
+  const el = g('ovLoad');
+  if (!el) return;
+  if (!sim.loadEnabled || sim.loadPhase < 3 || sim.loadConfidence === 'not_ready') {
+    el.textContent = '—';
+    return;
+  }
+  const val = sim.loadMLoadKg != null ? `${Math.round(sim.loadMLoadKg)} kg` : '?';
+  const badge = { high: '●', medium: '◑', low: '○' }[sim.loadConfidence] || '○';
+  el.textContent = `${badge} ${val}`;
+}
+
+async function testConnection() {
+  const dot = g('connDot'), lbl = g('connLbl');
+  lbl.textContent = 'Testing…';
+  try {
+    const res  = await fetch(`${cfgV('cfgUrl')}/health`);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      dot.className   = 'dot'; dot.style.background = 'var(--green)';
+      lbl.textContent = `Connected — ${data.server||'NetMapServer'} v${data.version||'?'}`;
+    } else {
+      dot.className   = 'dot'; dot.style.background = 'var(--red)';
+      lbl.textContent = `HTTP ${res.status}`;
+    }
+  } catch(e) {
+    dot.className   = 'dot'; dot.style.background = 'var(--red)';
+    lbl.textContent = e.message;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// JOURNEY
+// ═══════════════════════════════════════════════════════════════════════════
+async function startJourney() {
+  if (sim.journeyActive) return;
+
+  // Reset journey state
+  sim.journeyId    = 'SIM-' + Date.now().toString(36).toUpperCase();
+  sim.journeyStart = Date.now();
+  sim.jDistKm      = 0;
+  sim.jFuelL       = 0;
+  sim.jDb = sim.jFf = sim.jFail = 0;
+
+  // Reset position to route start
+  const wps = ROUTES[cfgV('routeSel')].wps;
+  sim.lat = wps[0][0]; sim.lon = wps[0][1];
+  sim.wpIdx = 0; sim.segProg = 0;
+  sim.heading = wps.length > 1 ? bearing(wps[0][0], wps[0][1], wps[1][0], wps[1][1]) : 0;
+
+  sim.journeyActive = true;
+  drivenCoords = [[sim.lat, sim.lon]];
+  updateJourneyUI();
+  resetLoadTrip();
+
+  log(`🚦 journey_start  id=${sim.journeyId}`, 'info');
+  const startLoad = buildLoadPayload();
+  const startPayload = {
+    imei:          cfgV('cfgImei'),
+    eventType:     'journey_start',
+    timestamp:     ts(),
+    latitude:      sim.lat,
+    longitude:     sim.lon,
+    headingDeg:    Math.round(sim.heading),
+    speedKmh:         0,
+    odometerKm:       sim.odometer,
+    fuelLevelPct:     Math.round(sim.fuelPct),
+    obfcmDistanceKm:  Math.round(sim.obfcmDistKm * 10) / 10,
+    obfcmFuelL:       Math.round(sim.obfcmFuelL * 100) / 100,
+    gpsSatellites:    sim.gpsSat,
+    gpsFixType:       sim.gpsFixType,
+  };
+  if (startLoad) startPayload.load = startLoad;
+  const ok = await post(startPayload);
+  if (ok) log(`✅ journey_start`, 'ok');
+
+  updateMap();
+  sim.jTimer = setInterval(tickJourneyInfo, 1000);
+}
+
+async function endJourney() {
+  if (!sim.journeyActive) return;
+  sim.journeyActive = false;
+  stopAuto();
+  clearInterval(sim.jTimer);
+  updateJourneyUI();
+
+  log(`🏁 journey_end  dist=${sim.jDistKm.toFixed(2)}km`, 'info');
+  const endLoad = buildLoadPayload();
+  const endPayload = {
+    imei:                 cfgV('cfgImei'),
+    eventType:            'journey_end',
+    timestamp:            ts(),
+    latitude:             sim.lat,
+    longitude:            sim.lon,
+    headingDeg:           Math.round(sim.heading),
+    speedKmh:             0,
+    odometerKm:           Math.round(sim.odometer * 10) / 10,
+    journeyDistanceKm:    Math.round(sim.jDistKm * 100) / 100,
+    journeyFuelConsumedL: Math.round(sim.jFuelL  * 100) / 100,
+    fuelLevelPct:         Math.round(sim.fuelPct),
+    obfcmDistanceKm:      Math.round(sim.obfcmDistKm * 10) / 10,
+    obfcmFuelL:           Math.round(sim.obfcmFuelL * 100) / 100,
+    gpsSatellites:        sim.gpsSat,
+    gpsFixType:           sim.gpsFixType,
+  };
+  if (endLoad) endPayload.load = endLoad;
+  const ok = await post(endPayload);
+  if (ok) {
+    const loadInfo = endLoad ? `  load=${endLoad.mLoadKg != null ? Math.round(endLoad.mLoadKg) + 'kg' : '?'} (${endLoad.confidence})` : '';
+    log(`✅ journey_end${loadInfo}`, 'ok');
+  }
+
+  // Auto-send journey_stats immediately after (mirrors firmware queue order)
+  await sendJourneyStats();
+}
+
+async function sendJourneyStats() {
+  log(`📊 journey_stats`, 'info');
+  const ok = await post({
+    imei:      cfgV('cfgImei'),
+    eventType: 'journey_stats',
+    timestamp: ts(),
+    journey:  { dbEventsSent: sim.jDb,   ffEventsSent: sim.jFf,   postFailures: sim.jFail  },
+    boot:     { dbEventsSent: sim.bDb,   ffEventsSent: sim.bFf,   postFailures: sim.bFail  },
+    lifetime: {
+      dbEventsSent:    sim.ltDb,  ffEventsSent: sim.ltFf,   postFailures: sim.ltFail,
+      rebootsTotal:    sim.rtTotal,
+      rebootsException: sim.rtExc,
+      rebootsBrownout:  sim.rtBrown,
+    },
+  });
+  if (ok) log(`✅ journey_stats  j_db=${sim.jDb} j_ff=${sim.jFf} j_fail=${sim.jFail} lt_reboots=${sim.rtTotal}`, 'ok');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DRIVING
+// ═══════════════════════════════════════════════════════════════════════════
+async function manualDriving() { await buildDriving(); }
+
+async function buildDriving() {
+  const noise  = (Math.random() - .5) * 8;
+  const speed  = Math.max(0, sim.speedTarget + noise);
+  sim.rpm = Math.round(800 + (speed / 120) * 3000 + (Math.random() - .5) * 200);
+  tickLoadEstimator();
+  const loadSnap = buildLoadPayload();
+  const payload = {
+    imei:                 cfgV('cfgImei'),
+    eventType:            'driving',
+    timestamp:            ts(),
+    latitude:             +(sim.lat.toFixed(6)),
+    longitude:            +(sim.lon.toFixed(6)),
+    headingDeg:           Math.round(sim.heading),
+    speedKmh:             Math.round(speed * 10) / 10,
+    engineRpm:            sim.rpm,
+    fuelLevelPct:         Math.round(sim.fuelPct),
+    odometerKm:           Math.round(sim.odometer * 10) / 10,
+    journeyDistanceKm:    Math.round(sim.jDistKm * 100) / 100,
+    journeyFuelConsumedL: Math.round(sim.jFuelL  * 100) / 100,
+    obfcmDistanceKm:      Math.round(sim.obfcmDistKm * 10) / 10,
+    obfcmFuelL:           Math.round(sim.obfcmFuelL * 100) / 100,
+    gpsSatellites:        sim.gpsSat,
+    gpsFixType:           sim.gpsFixType,
+  };
+  if (loadSnap) payload.load = loadSnap;
+  const ok = await post(payload);
+  if (ok) log(`✅ driving  ${speed.toFixed(0)} km/h  ${sim.lat.toFixed(4)},${sim.lon.toFixed(4)}`, 'ok');
+  updateOverlay();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTO DRIVE
+// ═══════════════════════════════════════════════════════════════════════════
+async function startAuto() {
+  if (sim.autoRunning) return;
+  if (!sim.journeyActive) await startJourney();
+  sim.autoRunning = true;
+  g('btnAutoStart').disabled = true;
+  g('btnAutoStop').disabled  = false;
+  g('autoBadge').style.display = 'inline-block';
+  scheduleNext();
+}
+
+function stopAuto() {
+  sim.autoRunning = false;
+  clearTimeout(sim.driveTimer);
+  g('btnAutoStart').disabled = false;
+  g('btnAutoStop').disabled  = true;
+  g('autoBadge').style.display = 'none';
+}
+
+function scheduleNext() {
+  if (!sim.autoRunning) return;
+  sim.driveTimer = setTimeout(async () => {
+    await autoTick();
+    scheduleNext();
+  }, driveIntervalMs());
+}
+
+async function autoTick() {
+  if (!sim.autoRunning || !sim.journeyActive) return;
+  const sec  = driveIntervalMs() / 1000;
+  const dist = (sim.speedTarget * sec) / 3600; // km
+
+  advanceRoute(ROUTES[cfgV('routeSel')].wps, dist);
+
+  // Fuel: 8 L/100km city, 6.5 L/100km highway
+  const lp100   = sim.speedTarget > 90 ? 6.5 : 8.0;
+  const fuelUsed = dist * lp100 / 100;
+  sim.jFuelL      += fuelUsed;
+  sim.odometer    += dist;
+  sim.jDistKm     += dist;
+  sim.obfcmDistKm += dist;
+  sim.obfcmFuelL  += fuelUsed;
+  sim.fuelPct      = Math.max(0, sim.fuelPct - fuelUsed / 0.65); // ~65L tank
+
+  // GPS quality variation
+  sim.gpsSat = Math.random() < .05 ? 4 + Math.floor(rnd(3)) : 8 + Math.floor(rnd(6));
+
+  await buildDriving();
+
+  // Random driver behavior injection
+  if (g('chkBehav').checked && Math.random() < .12) {
+    const opts = [
+      [2, 7.5+rnd(3), 800+rnd(400)],
+      [3, 4+rnd(2),   1200+rnd(500)],
+      [4, 4+rnd(2),   1500+rnd(600)],
+      [1, 4800+rnd(600), 2000+rnd(1000)],
+    ];
+    const p = opts[Math.floor(Math.random() * opts.length)];
+    await sendBehavior(p[0], p[1], Math.round(p[2]));
+  }
+
+  tickJourneyInfo();
+}
+
+function advanceRoute(wps, distKm) {
+  let remaining = distKm, guard = 0;
+  const loop = g('chkLoop').checked;
+
+  while (remaining > 1e-9 && guard++ < 200) {
+    const n   = wps.length;
+    const cur = wps[sim.wpIdx % n];
+    const nxt = wps[(sim.wpIdx + 1) % n];
+    if (!nxt) break;
+
+    const segLen  = haversine(cur[0], cur[1], nxt[0], nxt[1]);
+    if (segLen < 1e-9) { sim.wpIdx++; continue; }
+
+    const usedSeg = sim.segProg * segLen;
+    const canMove = segLen - usedSeg;
+
+    if (remaining >= canMove) {
+      remaining -= canMove;
+      sim.segProg = 0;
+      const next = sim.wpIdx + 1;
+      if (next >= n - 1) {
+        if (loop) { sim.wpIdx = 0; }
+        else { stopAuto(); endJourney(); return; }
+      } else {
+        sim.wpIdx = next;
+      }
+    } else {
+      sim.segProg += remaining / segLen;
+      remaining = 0;
+    }
+  }
+
+  // Interpolate current lat/lon
+  const cur = wps[sim.wpIdx % wps.length];
+  const nxt = wps[(sim.wpIdx + 1) % wps.length];
+  if (nxt) {
+    sim.lat     = cur[0] + (nxt[0] - cur[0]) * sim.segProg;
+    sim.lon     = cur[1] + (nxt[1] - cur[1]) * sim.segProg;
+    sim.heading = bearing(cur[0], cur[1], nxt[0], nxt[1]);
+  }
+
+  drivenCoords.push([sim.lat, sim.lon]);
+  if (drivenCoords.length > 2000) drivenCoords.splice(0, 100);
+  updateMap();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DRIVER BEHAVIOR
+// ═══════════════════════════════════════════════════════════════════════════
+const BNAMES = { 1:'revving', 2:'braking', 3:'acceleration', 4:'cornering', 5:'idling', 6:'overspeed' };
+
+async function sendBehavior(type, value, ms) {
+  const name = BNAMES[type] || `type${type}`;
+  log(`🧠 driver_behavior  ${name}  val=${value.toFixed(1)}  ms=${Math.round(ms)}`, 'info');
+  const ok = await post({
+    imei:                cfgV('cfgImei'),
+    eventType:           'driver_behavior',
+    timestamp:           ts(),
+    driverBehaviorType:  type,
+    alertValueMax:       Math.round(value * 10) / 10,
+    alertDurationMs:     Math.round(ms),
+    latitude:            +(sim.lat.toFixed(6)),
+    longitude:           +(sim.lon.toFixed(6)),
+    headingDeg:          Math.round(sim.heading),
+    speedKmh:            sim.speedTarget,
+    engineRpm:           sim.rpm,
+    fuelLevelPct:        Math.round(sim.fuelPct),
+    odometerKm:          Math.round(sim.odometer * 10) / 10,
+    journeyDistanceKm:   Math.round(sim.jDistKm * 100) / 100,
+    journeyFuelConsumedL:Math.round(sim.jFuelL  * 100) / 100,
+    obfcmDistanceKm:     Math.round(sim.obfcmDistKm * 10) / 10,
+    obfcmFuelL:          Math.round(sim.obfcmFuelL * 100) / 100,
+    gpsSatellites:       sim.gpsSat,
+    gpsFixType:          sim.gpsFixType,
+  });
+  if (ok) log(`✅ ${name}  val=${value.toFixed(1)} ms=${Math.round(ms)}`, 'ok');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DEVICE LIFECYCLE
+// ═══════════════════════════════════════════════════════════════════════════
+async function sendLifecycle(type, resetReason) {
+  let payload = {
+    imei:      cfgV('cfgImei'),
+    eventType: type,
+    timestamp: ts(),
+    latitude:  +(sim.lat.toFixed(6)),
+    longitude: +(sim.lon.toFixed(6)),
+  };
+  if (type === 'boot') {
+    const isPanic = resetReason === 'PANIC';
+    payload.resetReason    = resetReason || 'POWERON';
+    payload.batteryVoltageV = 12.4 + rnd(.4);
+    sim.rtTotal++;
+    if (isPanic) sim.rtExc++;
+    // Boot resets per-boot counters
+    sim.bDb = sim.bFf = sim.bFail = 0;
+    log(`⚡ boot  reason=${payload.resetReason}  reboots=${sim.rtTotal}${isPanic ? '  ⚠️ PANIC' : ''}`, isPanic ? 'warn' : 'info');
+  } else if (type === 'sleep') {
+    payload.batteryVoltageV = 12.1 + rnd(.3);
+    log(`😴 sleep`, 'info');
+  } else if (type === 'wake_up') {
+    payload.wakeupSource    = 'VOLTAGE_RISE';
+    payload.batteryVoltageV = 12.6 + rnd(.3);
+    log(`☀ wake_up`, 'info');
+  } else if (type === 'gps_acquired') {
+    payload.gpsSatellites = 10; payload.gpsFixType = 3;
+    sim.gpsSat = 10; sim.gpsFixType = 3;
+    log(`📶 gps_acquired`, 'info');
+  } else {
+    log(`📵 ${type}`, 'info');
+  }
+  const ok = await post(payload);
+  if (ok) log(`✅ ${type}`, 'ok');
+  updateCounters();
+}
+
+async function sendPing() {
+  log(`📡 ping (fire-and-forget)`, 'info');
+  const ok = await post({
+    imei:          cfgV('cfgImei'),
+    eventType:     'ping',
+    timestamp:     ts(),
+    latitude:      +(sim.lat.toFixed(6)),
+    longitude:     +(sim.lon.toFixed(6)),
+    headingDeg:    Math.round(sim.heading),
+    speedKmh:      sim.speedTarget,
+    gpsSatellites: sim.gpsSat,
+    gpsFixType:    sim.gpsFixType,
+  }, true /* fire-and-forget */);
+  if (ok) log(`✅ ping`, 'ok');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAP
+// ═══════════════════════════════════════════════════════════════════════════
+let map, carMarker, routeLine, drivenLine;
+let drivenCoords = [];
+
+function initMap() {
+  map = L.map('map', { zoomControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+  }).addTo(map);
+  onRouteChange();
+}
+
+function onRouteChange() {
+  const key   = cfgV('routeSel');
+  const route = ROUTES[key];
+  g('spdSlider').value = route.speedHint;
+  onSpeedChange(route.speedHint);
+  if (!map) return;
+  map.setView(route.center, route.zoom);
+  if (routeLine) routeLine.remove();
+  routeLine = L.polyline(route.wps, { color: '#58a6ff', weight: 3, opacity: .45, dashArray: '7,7' }).addTo(map);
+  drivenCoords = [];
+  if (drivenLine) drivenLine.remove();
+  drivenLine = L.polyline([], { color: '#3fb950', weight: 4, opacity: .85 }).addTo(map);
+  const wp = route.wps;
+  sim.lat = wp[0][0]; sim.lon = wp[0][1];
+  sim.wpIdx = 0; sim.segProg = 0;
+  sim.heading = wp.length > 1 ? bearing(wp[0][0], wp[0][1], wp[1][0], wp[1][1]) : 0;
+  updateCarMarker();
+  saveConfig();
+}
+
+function updateMap() {
+  updateCarMarker();
+  if (drivenLine && drivenCoords.length > 1) drivenLine.setLatLngs(drivenCoords);
+  if (map && drivenCoords.length > 0) map.panTo([sim.lat, sim.lon], { animate: true, duration: .4 });
+}
+
+function updateCarMarker() {
+  if (!map) return;
+  const icon = L.divIcon({
+    html: `<div style="transform:rotate(${sim.heading}deg);font-size:22px;line-height:1;filter:drop-shadow(0 1px 4px rgba(0,0,0,.6))">🚗</div>`,
+    className: '', iconSize: [28, 28], iconAnchor: [14, 14],
+  });
+  if (!carMarker) {
+    carMarker = L.marker([sim.lat, sim.lon], { icon }).addTo(map);
+  } else {
+    carMarker.setLatLng([sim.lat, sim.lon]);
+    carMarker.setIcon(icon);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI UPDATES
+// ═══════════════════════════════════════════════════════════════════════════
+function onSpeedChange(v) {
+  sim.speedTarget = +v;
+  g('spdVal').textContent = v;
+  saveConfig();
+}
+function onIntervalChange(v) {
+  g('intVal').textContent = v;
+  saveConfig();
+}
+
+function updateJourneyUI() {
+  const a = sim.journeyActive;
+  g('btnStart').disabled   = a;
+  g('btnEnd').disabled     = !a;
+  g('btnDrive').disabled   = !a;
+  g('statusDot').className = 'dot' + (a ? ' active' : '');
+  g('statusText').textContent = a ? 'Journey active' : 'Idle';
+  g('statusBadge').className  = 'hbadge' + (a ? ' active' : '');
+  g('jInfoBox').style.display = a ? 'block' : 'none';
+  g('jIdText').textContent    = sim.journeyId || '';
+}
+
+function tickJourneyInfo() {
+  if (!sim.journeyActive) return;
+  const e = Date.now() - sim.journeyStart;
+  const m = Math.floor(e / 60000), s = Math.floor((e % 60000) / 1000);
+  g('jDuration').textContent = `${m}:${String(s).padStart(2, '0')}`;
+  g('jDist').textContent     = `${sim.jDistKm.toFixed(2)} km`;
+  g('jFuel').textContent     = `${sim.jFuelL.toFixed(2)} L`;
+  g('jEvents').textContent   = sim.jDb;
+}
+
+function updateOverlay() {
+  g('ovSpd').textContent  = Math.round(sim.speedTarget);
+  g('ovRpm').textContent  = sim.rpm;
+  g('ovFuel').textContent = `${Math.round(sim.fuelPct)}%`;
+  g('ovSat').textContent  = sim.gpsSat;
+}
+
+function updateCounters() {
+  g('cJDb').textContent    = sim.jDb;   g('cJFf').textContent    = sim.jFf;   g('cJFail').textContent  = sim.jFail;
+  g('cBDb').textContent    = sim.bDb;   g('cBFf').textContent    = sim.bFf;   g('cBFail').textContent  = sim.bFail;
+  g('cLDb').textContent    = sim.ltDb;  g('cLFf').textContent    = sim.ltFf;  g('cLFail').textContent  = sim.ltFail;
+  g('cRTotal').textContent = sim.rtTotal;
+  g('cRExc').textContent   = sim.rtExc;
+  g('cRBrown').textContent = sim.rtBrown;
+  updateOverlay();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOG
+// ═══════════════════════════════════════════════════════════════════════════
+function log(msg, cls = 'info') {
+  const el  = g('eventLog');
+  const now = new Date();
+  const t   = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const div = Object.assign(document.createElement('div'), { className: `le ${cls}`, textContent: `[${t}] ${msg}` });
+  el.prepend(div);
+  while (el.children.length > 400) el.removeChild(el.lastChild);
+}
+function clearLog() { g('eventLog').innerHTML = ''; }
+function pad(n) { return String(n).padStart(2, '0'); }
+function ts()   { return new Date().toISOString(); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════════════════
+function switchTab(name) {
+  ['Log', 'Config'].forEach(n => {
+    g('tab'   + n).classList.toggle('active', n === name);
+    g('tcont' + n).classList.toggle('active', n === name);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  loadConfig();
+  initMap();
+  updateJourneyUI();
+  log('Simulator ready — configure API key and click ▶ Auto to begin.', 'info');
+});
+</script>
+</body>
+</html>

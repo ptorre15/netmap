@@ -1,0 +1,63 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'deploy' to confirm"
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.confirm == 'deploy' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+        
+      - name: Sync sources
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            --exclude='.build/' \
+            --exclude='*.db' \
+            --exclude='*.sqlite' \
+            --exclude='.DS_Store' \
+            --exclude='.git/' \
+            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/netmap/src/
+
+      - name: Build on server
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash <<'ENDSSH'
+          set -euo pipefail
+          export PATH="/usr/local/swift/usr/bin:$PATH"
+          cd /opt/netmap/src
+          sudo rm -f /tmp/_opt_netmap_src_*.lock
+          swift build -c release 2>&1
+          BIN_PATH=$(swift build -c release --show-bin-path 2>/dev/null)/App
+          cp "$BIN_PATH" /tmp/netmap-server.new
+          ENDSSH
+
+      - name: Restart service
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash <<'ENDSSH'
+          set -euo pipefail
+          sudo cp -a /opt/netmap/src/Public/. /opt/netmap/Public/
+          sudo cp /opt/netmap/src/VERSION /opt/netmap/VERSION
+          sudo chown -R netmap:netmap /opt/netmap/Public /opt/netmap/VERSION
+          sudo mv /tmp/netmap-server.new /opt/netmap/bin/netmap-server
+          sudo chmod 755 /opt/netmap/bin/netmap-server
+          sudo chown netmap:netmap /opt/netmap/bin/netmap-server
+          sudo systemctl restart netmap-server
+          sleep 2
+          sudo systemctl is-active --quiet netmap-server && echo "Service running." || { sudo journalctl -u netmap-server -n 20; exit 1; }
+          ENDSSH

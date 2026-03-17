@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.0
+
+    env:
+      # ── Runtime env vars needed for tests ─────────────────────────────────
+      # Secrets (API_KEY, SETUP_SECRET, ADMIN_*) live only on the server
+      # in /etc/netmap/netmap-server.env — not stored in GitHub.
+      PORT: "8092"
+      BIND_HOST: "127.0.0.1"
+      DB_PATH: "/tmp/netmap_test.db"
+      LOG_LEVEL: "warning"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Run tests
+        run: swift test --parallel
