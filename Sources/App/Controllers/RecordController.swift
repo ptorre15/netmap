@@ -173,7 +173,7 @@ struct RecordController: RouteCollection {
                 "vehicleID":    p.vehicleID,
                 "brand":        p.brand,
                 "pressureBar":  p.pressureBar as Any,
-                "temperatureC": p.temperatureC as Any,
+                "temperatureC": p.sanitizedTemperatureC as Any,
                 "batteryPct":   p.batteryPct as Any,
                 "timestamp":    ISO8601DateFormatter().string(from: p.timestamp),
             ]
