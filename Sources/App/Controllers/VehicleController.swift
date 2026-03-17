@@ -1,5 +1,6 @@
 import Vapor
 import Fluent
+import FluentSQL
 
 struct VehicleController: RouteCollection {
 
@@ -122,7 +123,7 @@ struct VehicleController: RouteCollection {
         try await UserAsset.query(on: req.db).filter(\.$assetID == id).delete()
         try await SensorReading.query(on: req.db).filter(\.$vehicleID == id.uuidString).delete()
         if let sql = req.db as? SQLDatabase {
-            try await sql.raw("DELETE FROM vehicle_events WHERE vehicle_id = \(bind: id.uuidString)").run()
+            try await sql.raw("DELETE FROM vehicle_events WHERE vehicle_id = \(id.uuidString)").run()
         }
         try await v.delete(on: req.db)
         return .noContent
