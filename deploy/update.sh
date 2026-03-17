@@ -24,6 +24,10 @@ info()    { echo -e "\033[1;34m▶\033[0m  $*"; }
 success() { echo -e "\033[1;32m✓\033[0m  $*"; }
 die()     { echo -e "\033[1;31m✗\033[0m  $*" >&2; exit 1; }
 
+# ── 0. Bump version ──────────────────────────────────────────────────────────
+info "Bumping patch version..."
+"$SCRIPT_DIR/bump-version.sh" patch
+
 # ── 1. Sync sources ──────────────────────────────────────────────────────────
 info "Syncing sources to $TARGET:$REMOTE_SRC ..."
 ssh "$TARGET" "mkdir -p $REMOTE_SRC"
