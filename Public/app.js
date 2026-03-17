@@ -177,7 +177,7 @@ function gpsCell(e) {
     : '';
   return link + badge;
 }
-const PRODUCT_VARIANT_LABELS = { coin: 'ELA Blue Coin', puck: 'ELA Blue Puck', unknown: 'ELA Beacon' };
+const PRODUCT_VARIANT_LABELS = { coin: 'ELA Blue Coin', coin_t: 'ELA Blue Coin T', puck: 'ELA Blue Puck', puck_t: 'ELA Blue Puck T', unknown: 'ELA Beacon' };
 
 // ─── Pictogram icon library (Tabler Icons — tabler.io) ──────────────────────
 const _SVG = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;

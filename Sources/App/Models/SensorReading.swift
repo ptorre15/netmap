@@ -20,12 +20,27 @@ struct SensorPayload: Content {
     var sensorName:        String?         // human-readable name: AirTag name, Stihl product, custom label…
     var healthPct:         Int?            // 0-100, Stihl Smart Battery health
     var chargingCycles:    Int?            // Stihl Smart Battery charge cycles
-    var productVariant:    String?         // ELA product variant: "coin" | "puck" | "unknown"
+    var productVariant:    String?         // ELA product variant: "coin" | "puck" | "unknown" | "coin_t" | "puck_t"
     var totalSeconds:      Int?            // Stihl total operating / discharge time (seconds)
     var gpsSatellites:     Int?            // GPS tracker: number of satellites in view
     var latitude:          Double?
     var longitude:         Double?
     var timestamp:         Date
+
+    // MARK: - Helpers
+
+    /// ELA product variants that include a physical temperature sensor.
+    /// Standard ELA beacons ("coin", "puck", "unknown") do NOT have a temperature sensor;
+    /// only "coin_t" (ELA Blue Coin T) and "puck_t" (ELA Blue Puck T) do.
+    static let elaTemperatureVariants: Set<String> = ["coin_t", "puck_t"]
+
+    /// Temperature filtered by sensor capability.
+    /// Returns nil for ELA sensors whose product variant does not include a temperature sensor,
+    /// preventing spurious values sent by the companion app from being stored or broadcast.
+    var sanitizedTemperatureC: Double? {
+        guard brand == "ela" else { return temperatureC }
+        return Self.elaTemperatureVariants.contains(productVariant ?? "") ? temperatureC : nil
+    }
 }
 
 // MARK: - Fluent Model (SQLite row)
@@ -65,7 +80,7 @@ final class SensorReading: Model, Content, @unchecked Sendable {
         brand             = p.brand
         wheelPosition     = p.wheelPosition
         pressureBar       = p.pressureBar
-        temperatureC      = p.temperatureC
+        temperatureC      = p.sanitizedTemperatureC
         vbattVolts        = p.vbattVolts
         targetPressureBar = p.targetPressureBar
         batteryPct        = p.batteryPct

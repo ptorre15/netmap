@@ -127,6 +127,87 @@ final class TelemetryRegressionTests: XCTestCase {
         }
     }
 
+    func testElaTemperatureFilteredForNonTempVariants() async throws {
+        try await withApp { app in
+            let tester = try app.testable()
+            let now = ISO8601DateFormatter().string(from: Date())
+
+            // ELA "coin" variant (no temperature sensor): temperature must be discarded
+            let coinPayload = """
+            [{
+              "sensorID": "ELA-COIN-001",
+              "vehicleID": "00000000-0000-0000-0000-000000000001",
+              "vehicleName": "Test Vehicle",
+              "brand": "ela",
+              "productVariant": "coin",
+              "batteryPct": 80,
+              "temperatureC": 87.0,
+              "timestamp": "\(now)"
+            }]
+            """
+            try await tester.test(.POST, "api/records/batch", beforeRequest: { req async throws in
+                req.headers.add(name: "X-API-Key", value: "test-key")
+                req.headers.contentType = .json
+                req.body = .init(string: coinPayload)
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .created)
+            })
+
+            try await tester.test(.GET, "api/sensors/latest", beforeRequest: { req async throws in
+                req.headers.add(name: "X-API-Key", value: "test-key")
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .ok)
+                guard let data = res.body.string.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                    return XCTFail("Expected JSON array")
+                }
+                let target = json.first { ($0["sensorID"] as? String) == "ELA-COIN-001" }
+                XCTAssertNotNil(target, "ELA coin sensor should appear in /api/sensors/latest")
+                XCTAssertNil(target?["latestTemperatureC"],
+                             "Temperature must be nil for ELA 'coin' variant (no temperature sensor)")
+            })
+
+            // ELA "coin_t" variant (with temperature sensor): temperature must be stored
+            let coinTPayload = """
+            [{
+              "sensorID": "ELA-COIN-T-001",
+              "vehicleID": "00000000-0000-0000-0000-000000000001",
+              "vehicleName": "Test Vehicle",
+              "brand": "ela",
+              "productVariant": "coin_t",
+              "batteryPct": 75,
+              "temperatureC": 22.5,
+              "timestamp": "\(now)"
+            }]
+            """
+            try await tester.test(.POST, "api/records/batch", beforeRequest: { req async throws in
+                req.headers.add(name: "X-API-Key", value: "test-key")
+                req.headers.contentType = .json
+                req.body = .init(string: coinTPayload)
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .created)
+            })
+
+            try await tester.test(.GET, "api/sensors/latest", beforeRequest: { req async throws in
+                req.headers.add(name: "X-API-Key", value: "test-key")
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .ok)
+                guard let data = res.body.string.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                    return XCTFail("Expected JSON array")
+                }
+                let target = json.first { ($0["sensorID"] as? String) == "ELA-COIN-T-001" }
+                XCTAssertNotNil(target, "ELA coin_t sensor should appear in /api/sensors/latest")
+                XCTAssertNotNil(target?["latestTemperatureC"],
+                                "Temperature must be stored for ELA 'coin_t' variant (has temperature sensor)")
+                if let temp = target?["latestTemperatureC"] as? Double {
+                    XCTAssertEqual(temp, 22.5, accuracy: 0.01)
+                }
+            })
+        }
+    }
+
+
     func testLifecycleEventStoredInDedicatedEndpoint() async throws {
         try await withApp { app in
             let tester = try app.testable()
