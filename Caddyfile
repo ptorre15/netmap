@@ -1,0 +1,99 @@
+# NetMap Server — Caddy reverse proxy with automatic HTTPS
+#
+# Domain is read from the NETMAP_DOMAIN environment variable.
+# Set it before starting Caddy:
+#   export NETMAP_DOMAIN=track.yourserver.com
+#
+# For local testing only (no public domain):
+#   export NETMAP_DOMAIN=localhost:8443  (and add `tls internal` inside the block)
+{$NETMAP_DOMAIN} {
+	# Compress responses
+	encode gzip zstd
+
+	# No browser cache for local JS/CSS so fixes are picked up immediately
+	@localAssets path *.js *.css
+	header @localAssets Cache-Control "no-store, no-cache, must-revalidate"
+
+	# ── Simulator: relaxed CSP (page uses inline onclick handlers) ────────
+	handle /simulator.html {
+		header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		header X-Content-Type-Options "nosniff"
+		header Referrer-Policy "strict-origin-when-cross-origin"
+		header Content-Security-Policy "default-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; connect-src 'self' https:; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org; object-src 'none'"
+		header -Server
+		reverse_proxy localhost:{$PORT} {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+
+	# ── All other routes: strict security headers ─────────────────────────
+	handle {
+		header {
+			Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+			X-Content-Type-Options "nosniff"
+			X-Frame-Options "DENY"
+			Referrer-Policy "strict-origin-when-cross-origin"
+			Content-Security-Policy "default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https://unpkg.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org; connect-src 'self' https://router.project-osrm.org https://*.tile.openstreetmap.org; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+			-Server
+		}
+		reverse_proxy localhost:{$PORT} {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+
+	# Logging
+	log {
+		output file /var/log/caddy/netmap_access.log {
+			roll_size 100mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
+		format json
+	}
+}
+
+# ── OTA Web Server (ESP32 firmware + database updates) ───────────────────────
+# Serves on port {$OTA_PORT} — ESP32 firmware connects to https://{$NETMAP_DOMAIN}:{$OTA_PORT}
+# Flask/Gunicorn runs internally on 127.0.0.1:{$OTA_INTERNAL_PORT}
+{$NETMAP_DOMAIN}:{$OTA_PORT} {
+	encode gzip zstd
+
+	# Large uploads (firmware .bin up to 300 MB, database up to 200 MB)
+	request_body {
+		max_size 300MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy localhost:{$OTA_INTERNAL_PORT} {
+		header_up X-Forwarded-For {remote_host}
+		# Allow enough time for large file uploads
+		transport http {
+			response_header_timeout 120s
+			dial_timeout 10s
+		}
+	}
+
+	log {
+		output file /var/log/caddy/ota_access.log {
+			roll_size 50mb
+			roll_keep 3
+			roll_keep_for 720h
+		}
+		format json
+	}
+}
+
+# ── Local development variant (no public domain needed) ──────────────────────
+# Uncomment the block below and comment out the block above to test HTTPS locally:
+#
+# localhost:8443 {
+#     tls internal
+#     reverse_proxy localhost:8092
+#     encode gzip
+# }
