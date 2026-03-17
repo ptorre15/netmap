@@ -1523,6 +1523,7 @@ body {
   line-height: 1; opacity: .6; transition: opacity .15s, color .15s;
 }
 .ac-edit-btn:hover { opacity: 1; color: var(--m-blue); }
+.ac-delete-btn:hover { opacity: 1; color: var(--danger) !important; }
 
 /* ═══════════════════════════════════════════════════════════════
    Wheels overview (combined TPMS)

@@ -553,6 +553,8 @@ function renderSensors() {
   const sLabel      = `${sCount} sensor${sCount !== 1 ? 's' : ''}`;
   const editBtn     = AUTH.isAdmin && sv
     ? `<button id="edit-vehicle-btn" class="ac-edit-btn" title="Edit asset"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg></button>` : '';
+  const deleteBtn   = AUTH.isAdmin && !sv
+    ? `<button id="delete-unregistered-asset-btn" class="ac-edit-btn ac-delete-btn" title="Delete asset"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button>` : '';
   D.assetCard.innerHTML = `
     <div class="asset-card">
       <div class="ac-left">
@@ -562,12 +564,40 @@ function renderSensors() {
       </div>
       <div class="ac-right">
         <div class="ac-icon">${typeIcon}</div>
-        <div class="ac-name">${assetName}${editBtn}</div>
+        <div class="ac-name">${assetName}${editBtn}${deleteBtn}</div>
         ${subText ? `<div class="ac-sub">${subText}</div>` : ''}
       </div>
     </div>`;
   if (AUTH.isAdmin && sv) {
     D.assetCard.querySelector('#edit-vehicle-btn')?.addEventListener('click', () => openVehicleModal(sv));
+  }
+  if (AUTH.isAdmin && !sv) {
+    D.assetCard.querySelector('#delete-unregistered-asset-btn')?.addEventListener('click', () => {
+      const sensorCount = entry.sensors.length;
+      showDeleteModal({
+        title: 'Delete asset?',
+        body: `Remove "${entry.name}" and delete all sensor data (${sensorCount} sensor${sensorCount !== 1 ? 's' : ''})? This cannot be undone.`,
+        confirmLabel: 'Delete',
+        onConfirm: async () => {
+          try {
+            await Promise.all(entry.sensors.map(async s => {
+              if (s.brand === 'tracker') {
+                await adminDeleteTracker(s.sensorID);
+              } else {
+                const res = await fetch(`/api/sensors/pair/${encodeURIComponent(s.sensorID)}`, { method: 'DELETE', headers: authHeaders() });
+                if (!res.ok && res.status !== 204) { const e = await res.json().catch(() => ({})); throw new Error(e.reason || `HTTP ${res.status}`); }
+              }
+            }));
+            S.vehicleFilter = null; S.selected = null; S.records = [];
+            await loadSensors();
+            renderSidebar(); renderAll();
+            showToast('Asset removed.');
+          } catch (err) {
+            showToast(`Failed to delete asset: ${err.message}`, 'error');
+          }
+        },
+      });
+    });
   }
   if (!sensors.length) {
     D.sensorList.innerHTML = '<div class="sidebar-hint">No sensors</div>';
