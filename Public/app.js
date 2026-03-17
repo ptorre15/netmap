@@ -505,6 +505,15 @@ function groupByVehicle() {
       else { groups[`srv-${sv.id}`] = { id: `srv-${sv.id}`, name: sv.name, sensors: [], serverVehicle: sv }; }
     }
   }
+  // Consolidate orphaned sensor groups (sensors but no server vehicle) into a same-named
+  // group that has a server vehicle. This handles stale vehicleIDs that linger in
+  // vehicle_events after a vehicle is deleted/re-created or a tracker is re-paired.
+  for (const key of Object.keys(groups)) {
+    const g = groups[key];
+    if (g.serverVehicle || !g.sensors.length) continue;
+    const target = Object.values(groups).find(t => t !== g && t.name.toLowerCase() === g.name.toLowerCase() && t.serverVehicle);
+    if (target) { target.sensors.push(...g.sensors); delete groups[key]; }
+  }
   return groups;
 }
 
