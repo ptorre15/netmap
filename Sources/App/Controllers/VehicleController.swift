@@ -118,9 +118,12 @@ struct VehicleController: RouteCollection {
         guard let id = req.parameters.get("vehicleID", as: UUID.self),
               let v  = try await Vehicle.find(id, on: req.db)
         else { throw Abort(.notFound) }
-        // Cascade: remove user-asset links and all sensor readings for this vehicle
+        // Cascade: remove user-asset links, sensor readings, and tracker journey events for this vehicle
         try await UserAsset.query(on: req.db).filter(\.$assetID == id).delete()
         try await SensorReading.query(on: req.db).filter(\.$vehicleID == id.uuidString).delete()
+        if let sql = req.db as? SQLDatabase {
+            try await sql.raw("DELETE FROM vehicle_events WHERE vehicle_id = \(bind: id.uuidString)").run()
+        }
         try await v.delete(on: req.db)
         return .noContent
     }
