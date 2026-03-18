@@ -759,6 +759,9 @@ function renderSensors() {
   }).join('');
 
   D.sensorList.innerHTML = html;
+  D.sensorList.classList.remove('sidebar-list-enter');
+  void D.sensorList.offsetWidth;
+  D.sensorList.classList.add('sidebar-list-enter');
 }
 
 // ─── Fleet summary bar ───────────────────────────────────────────────────────
@@ -1088,6 +1091,18 @@ function renderStats() {
   }
 }
 
+// ─── Panel entrance helper ────────────────────────────────────────────────────
+// Sets display and, when making visible, fires the fadeUp animation by
+// removing+re-adding .panel-enter after a forced reflow.
+function revealPanel(el, disp) {
+  el.style.display = disp;
+  if (disp !== 'none' && el) {
+    el.classList.remove('panel-enter');
+    void el.offsetWidth;           // force reflow so animation restarts
+    el.classList.add('panel-enter');
+  }
+}
+
 // ─── Show/hide content areas ──────────────────────────────────────────────────
 function showMode(mode) {
   S.mode = mode;
@@ -1096,15 +1111,18 @@ function showMode(mode) {
     b.dataset.mode === mode || (mode === 'alerts' && b.dataset.mode === 'table')
   ));
   const noData = S.records.length === 0;
-  D.chartCont.style.display  = mode === 'chart'  && !noData ? 'flex'  : 'none';
-  D.mapCont.style.display    = mode === 'map'    && !noData ? 'flex'  : 'none';
-  D.tableCont.style.display  = mode === 'table' ? 'flex' : 'none';
-  D.alertsCont.style.display = mode === 'alerts'            ? 'block' : 'none';
-  D.deviceCont.style.display  = mode === 'device'            ? 'block' : 'none';
-  D.wheelsCont.style.display  = mode === 'wheels'            ? 'block' : 'none';
-  D.errorsCont.style.display  = mode === 'errors'            ? 'block' : 'none';
-  D.fleetCont.style.display   = mode === 'fleet'             ? 'block' : 'none';
+  revealPanel(D.chartCont,  mode === 'chart'  && !noData ? 'flex'  : 'none');
+  revealPanel(D.mapCont,    mode === 'map'    && !noData ? 'flex'  : 'none');
+  revealPanel(D.tableCont,  mode === 'table' ? 'flex' : 'none');
+  revealPanel(D.alertsCont, mode === 'alerts'            ? 'block' : 'none');
+  revealPanel(D.deviceCont, mode === 'device'            ? 'block' : 'none');
+  revealPanel(D.wheelsCont, mode === 'wheels'            ? 'block' : 'none');
+  revealPanel(D.errorsCont, mode === 'errors'            ? 'block' : 'none');
+  revealPanel(D.fleetCont,  mode === 'fleet'             ? 'block' : 'none');
   D.emptyState.style.display = noData && !['alerts','device','wheels','errors','fleet','table'].includes(mode) ? 'flex' : 'none';
+  if (D.emptyState.style.display === 'flex') {
+    D.emptyState.classList.remove('panel-enter'); void D.emptyState.offsetWidth; D.emptyState.classList.add('panel-enter');
+  }
   // Period bar: hide for modes that don't use a time range
   $('period-bar').style.display = ['fleet', 'device', 'errors'].includes(mode) ? 'none' : '';
   // Hide top toolbar + stats bar when nothing meaningful to show
