@@ -332,15 +332,33 @@ body {
 #custom-range input[type="datetime-local"]:focus { border-color: var(--m-blue); box-shadow: 0 0 0 2px rgba(99,102,241,.2); }
 
 #stats-bar { display: flex; align-items: stretch; flex-shrink: 0; background: var(--bg2); border-bottom: 2px solid var(--bg4); }
-.stat-cell { flex: 1; padding: 14px 18px; border-right: 1px solid var(--sep); display: flex; flex-direction: column; gap: 4px; border-top: 3px solid var(--sep); }
+.stat-cell {
+  flex: 1; padding: 14px 18px; border-right: 1px solid var(--sep);
+  display: flex; flex-direction: column; gap: 4px;
+  border-top: 4px solid var(--sep);
+  position: relative; overflow: hidden;
+  transition: border-top-color 0.25s ease;
+}
+/* Gradient wash — tinted from the top border colour */
+.stat-cell::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(160deg, rgba(180,186,205,.09) 0%, transparent 55%);
+  pointer-events: none;
+  transition: background 0.25s ease;
+}
 .stat-cell:last-child { border-right: none; }
 .stat-label { font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: var(--fg3); }
-.stat-value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.3px; color: var(--m-navy); }
+.stat-value { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; color: var(--m-navy); }
 .stat-value-sm { font-size: 13px; }
 .stat-sub   { font-size: 12px; color: var(--fg3); }
+/* Status accent — border colour + matching gradient wash */
 .stat-cell.ok     { border-top-color: var(--ok); }
+.stat-cell.ok::before     { background: linear-gradient(160deg, rgba(5,150,105,.10)  0%, transparent 55%); }
 .stat-cell.warn   { border-top-color: var(--warn); }
+.stat-cell.warn::before   { background: linear-gradient(160deg, rgba(217,119,6,.10)  0%, transparent 55%); }
 .stat-cell.danger { border-top-color: var(--danger); }
+.stat-cell.danger::before { background: linear-gradient(160deg, rgba(220,38,38,.10)  0%, transparent 55%); }
 
 #mode-bar { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
 .mode-btn {
