@@ -156,6 +156,36 @@ const WS_RECONNECT_MS = 5_000;   // WebSocket reconnect delay after unexpected c
 const HOURS = { '1H': 1, '24H': 24, '7D': 168, '30D': 720 };
 const WHEEL_LABELS  = { FL: 'Front Left', FR: 'Front Right', RL: 'Rear Left', RR: 'Rear Right' };
 const BRAND_LABELS  = { tpms: 'TPMS', stihl: 'STIHL', ela: 'ELA Innovation', airtag: 'AirTag', tracker: 'GPS Tracker' };
+
+// ─── Spark ring buffers (last SPARK_MAX readings per sensor) ──────────────────
+const SPARK_MAX = 12;
+const sparkBuffer = new Map(); // sensorID → number[]
+
+function updateSparkBuffers() {
+  for (const s of S.sensors) {
+    let val = null;
+    if (s.latestBatteryPct != null)    val = s.latestBatteryPct;
+    else if (s.latestTemperatureC != null) val = s.latestTemperatureC;
+    if (val == null) continue;
+    if (!sparkBuffer.has(s.sensorID)) sparkBuffer.set(s.sensorID, []);
+    const buf = sparkBuffer.get(s.sensorID);
+    buf.push(val);
+    if (buf.length > SPARK_MAX) buf.splice(0, buf.length - SPARK_MAX);
+  }
+}
+
+function sparklineSVG(vals, color) {
+  if (!vals || vals.length < 2) return '';
+  const W = 44, H = 16, pad = 1.5;
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = max - min || 1;
+  const pts = vals.map((v, i) => {
+    const x = pad + i * (W - 2 * pad) / (vals.length - 1);
+    const y = H - pad - ((v - min) / range) * (H - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
 const GPS_FIX_LABELS = {
   0: { icon: '–',  label: 'No fix',   color: '#6b7280' },
   2: { icon: '○',  label: '2D',       color: '#fbbf24' },
@@ -749,14 +779,25 @@ function renderSensors() {
       valueSpan = ` \u00b7 <span style="color:#60a5fa;font-weight:600">${s.latestTemperatureC.toFixed(1)}\u00b0C</span>`;
     }
     const brandLabel = BRAND_LABELS[s.brand] ?? s.brand;
+    const sparkVals  = sparkBuffer.get(s.sensorID);
+    let sparkCol = '#6366F1';
+    if (s.latestBatteryPct != null) {
+      const pct = s.latestBatteryPct;
+      sparkCol = pct > 50 ? '#34d399' : pct > 20 ? '#fbbf24' : '#f87171';
+    } else if (s.latestTemperatureC != null) {
+      sparkCol = '#60a5fa';
+    }
+    const spark = sparklineSVG(sparkVals, sparkCol);
     return `<div class="sensor-row${sel ? ' selected' : ''}" data-sid="${escAttr(s.sensorID)}">
       <div class="s-dot" style="background:${dotCol}"></div>
       <div class="s-info">
         <div class="s-name">${label}</div>
         <div class="s-sub"><span class="s-brand" data-brand="${escAttr(s.brand)}">${escHTML(brandLabel)}</span>${valueSpan}</div>
       </div>
+      ${spark}
     </div>`;
   }).join('');
+
 
   D.sensorList.innerHTML = html;
   D.sensorList.classList.remove('sidebar-list-enter');
@@ -3835,6 +3876,7 @@ async function refresh() {
   S.loading = true;
   try {
     await Promise.all([loadSensors(), loadServerVehicles()]);
+    updateSparkBuffers();
     renderSidebar();
     if (S.selected) { await loadRecords(); renderAll(); }
   } catch (e) { console.error('refresh:', e); }
@@ -3879,6 +3921,19 @@ function _wsConnect() {
       if (msg.temperatureC != null) s.latestTemperatureC = msg.temperatureC;
       if (msg.batteryPct   != null) s.latestBatteryPct   = msg.batteryPct;
       s.latestTimestamp = msg.timestamp ?? s.latestTimestamp;
+    }
+
+    // Update spark buffer for this sensor on each live push
+    if (s) {
+      let sparkVal = null;
+      if (s.latestBatteryPct != null)    sparkVal = s.latestBatteryPct;
+      else if (s.latestTemperatureC != null) sparkVal = s.latestTemperatureC;
+      if (sparkVal != null) {
+        if (!sparkBuffer.has(s.sensorID)) sparkBuffer.set(s.sensorID, []);
+        const buf = sparkBuffer.get(s.sensorID);
+        buf.push(sparkVal);
+        if (buf.length > SPARK_MAX) buf.splice(0, buf.length - SPARK_MAX);
+      }
     }
 
     // Re-render sidebar status dots + fleet summary without a full round-trip
