@@ -157,9 +157,19 @@ body {
   color: rgba(255,255,255,0.75); border: 1px solid rgba(255,255,255,0.15);
   transition: all var(--trans);
 }
-.status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.35); }
+.status-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.35); flex-shrink: 0; }
 .status-pill.live { background: rgba(26,140,78,0.25); border-color: rgba(26,140,78,0.5); color: #7DE8A8; }
-.status-pill.live .dot { background: #7DE8A8; animation: pulse 3s ease-in-out infinite; }
+.status-pill.live .dot {
+  background: #7DE8A8;
+  box-shadow: 0 0 0 0 rgba(125,232,168,.7);
+  animation: sonar 2s ease-out infinite;
+}
+@keyframes sonar {
+  0%   { box-shadow: 0 0 0 0   rgba(125,232,168,.7); }
+  70%  { box-shadow: 0 0 0 7px rgba(125,232,168,.0); }
+  100% { box-shadow: 0 0 0 0   rgba(125,232,168,.0); }
+}
+/* Legacy pulse kept for non-live states that still reference it */
 @keyframes pulse {
   0%,100% { opacity: 1; }
   50%      { opacity: .4; }
@@ -2125,7 +2135,16 @@ tr.journey-sep-row td {
    WebSocket live indicator
    ═══════════════════════════════════════════════════════════════ */
 .status-pill.ws-live { border-color: rgba(96,165,250,0.4); background: rgba(37,99,235,0.15); }
-.status-pill.ws-live .dot { background: #60a5fa; animation: pulse 1.5s infinite; }
+.status-pill.ws-live .dot {
+  background: #60a5fa;
+  box-shadow: 0 0 0 0 rgba(96,165,250,.7);
+  animation: sonar-blue 1.5s ease-out infinite;
+}
+@keyframes sonar-blue {
+  0%   { box-shadow: 0 0 0 0   rgba(96,165,250,.7); }
+  70%  { box-shadow: 0 0 0 7px rgba(96,165,250,.0); }
+  100% { box-shadow: 0 0 0 0   rgba(96,165,250,.0); }
+}
 
 /* ═══════════════════════════════════════════════════════════════
    Threshold alert editor
