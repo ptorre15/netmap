@@ -256,4 +256,154 @@ final class TelemetryRegressionTests: XCTestCase {
             })
         }
     }
+
+    // MARK: - Fix 6: new regression tests
+
+    /// Rate limiter blocks an IP after 5 failed login attempts (ipLimit = 5).
+    func testLoginRateLimiterIPBlocksAfterMaxAttempts() async throws {
+        try await withApp { app in
+            let tester = try app.testable()
+            let payload = #"{"email":"nonexistent@example.com","password":"wrong"}"#
+
+            // Attempts 1–5: each should return 401 (bad credentials) and increment the failure count.
+            for _ in 1...5 {
+                try await tester.test(.POST, "api/auth/login", beforeRequest: { req async throws in
+                    req.headers.contentType = .json
+                    req.body = .init(string: payload)
+                }, afterResponse: { res async throws in
+                    XCTAssertEqual(res.status, .unauthorized)
+                })
+            }
+
+            // Attempt 6: the bucket is now full; login must be blocked before credential check.
+            try await tester.test(.POST, "api/auth/login", beforeRequest: { req async throws in
+                req.headers.contentType = .json
+                req.body = .init(string: payload)
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .tooManyRequests,
+                               "6th attempt from the same IP should be rate-limited (429)")
+            })
+        }
+    }
+
+    /// An unknown eventType value must be rejected with HTTP 400.
+    func testUnknownEventTypeReturns400() async throws {
+        try await withApp { app in
+            let tester = try app.testable()
+            let payload = """
+            {
+              "imei": "TEST-IMEI-BAD-TYPE",
+              "eventType": "completely_bogus_type_xyz",
+              "timestamp": "2024-01-01T00:00:00Z",
+              "latitude": 48.8566,
+              "longitude": 2.3522
+            }
+            """
+            try await tester.test(.POST, "api/vehicle-events", beforeRequest: { req async throws in
+                req.headers.add(name: "X-API-Key", value: "test-key")
+                req.headers.contentType = .json
+                req.body = .init(string: payload)
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .badRequest,
+                               "An unrecognised eventType should be rejected with HTTP 400")
+            })
+        }
+    }
+
+    /// Posting the same telemetry event twice must store it only once (idempotent ingestion).
+    func testTelemetryDeduplicationSkipsDuplicate() async throws {
+        try await withApp { app in
+            let tester = try app.testable()
+            let fixedTimestamp = "2024-06-01T12:00:00Z"
+            let payload = """
+            {
+              "imei": "TEST-IMEI-DEDUP-001",
+              "eventType": "driving",
+              "timestamp": "\(fixedTimestamp)",
+              "latitude": 48.8566,
+              "longitude": 2.3522,
+              "speedKmh": 30.0
+            }
+            """
+
+            // First POST: should be stored (201).
+            try await tester.test(.POST, "api/vehicle-events", beforeRequest: { req async throws in
+                req.headers.add(name: "X-API-Key", value: "test-key")
+                req.headers.contentType = .json
+                req.body = .init(string: payload)
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .created)
+            })
+
+            // Second POST (identical payload): server responds 201 but dedup silently skips storage.
+            try await tester.test(.POST, "api/vehicle-events", beforeRequest: { req async throws in
+                req.headers.add(name: "X-API-Key", value: "test-key")
+                req.headers.contentType = .json
+                req.body = .init(string: payload)
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .created)
+            })
+
+            // The vehicle_events list must contain exactly one record for this IMEI.
+            try await tester.test(.GET, "api/vehicle-events?imei=TEST-IMEI-DEDUP-001", beforeRequest: { req async throws in
+                req.headers.add(name: "X-API-Key", value: "test-key")
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .ok)
+                guard let data = res.body.string.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                    return XCTFail("Expected JSON array")
+                }
+                XCTAssertEqual(json.count, 1, "Duplicate telemetry event must be deduplicated — only 1 row expected")
+            })
+        }
+    }
+
+    /// `normalizeJourneyDistanceKm` must clamp values that would exceed 2 000 km after conversion.
+    func testNormalizeJourneyDistanceKmClamp() {
+        // 5 000 000 m → 5 000 km → clamped to 2 000 km
+        XCTAssertEqual(normalizeJourneyDistanceKm(5_000_000.0) ?? -1, 2_000.0, accuracy: 0.001)
+        // 3 000 000 m → 3 000 km → clamped to 2 000 km
+        XCTAssertEqual(normalizeJourneyDistanceKm(3_000_000.0) ?? -1, 2_000.0, accuracy: 0.001)
+        // 2 000 000 m → exactly 2 000 km → not clamped (boundary value)
+        XCTAssertEqual(normalizeJourneyDistanceKm(2_000_000.0) ?? -1, 2_000.0, accuracy: 0.001)
+        // 1 500 000 m → 1 500 km → not clamped
+        XCTAssertEqual(normalizeJourneyDistanceKm(1_500_000.0) ?? -1, 1_500.0, accuracy: 0.001)
+    }
+
+    /// The API key middleware must accept valid keys and reject invalid ones with HTTP 401.
+    func testAPIKeyHashValidation() async throws {
+        try await withApp { app in
+            let tester = try app.testable()
+            let payload = """
+            {
+              "imei": "TEST-IMEI-APIKEY-001",
+              "eventType": "driving",
+              "timestamp": "2024-06-02T10:00:00Z",
+              "latitude": 48.8566,
+              "longitude": 2.3522,
+              "speedKmh": 20.0
+            }
+            """
+
+            // Correct API key → must be accepted.
+            try await tester.test(.POST, "api/vehicle-events", beforeRequest: { req async throws in
+                req.headers.add(name: "X-API-Key", value: "test-key")
+                req.headers.contentType = .json
+                req.body = .init(string: payload)
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .created,
+                               "Valid API key should be accepted by the middleware")
+            })
+
+            // Wrong API key → must be rejected.
+            try await tester.test(.POST, "api/vehicle-events", beforeRequest: { req async throws in
+                req.headers.add(name: "X-API-Key", value: "wrong-key-should-fail")
+                req.headers.contentType = .json
+                req.body = .init(string: payload)
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .unauthorized,
+                               "Invalid API key should be rejected with 401")
+            })
+        }
+    }
 }

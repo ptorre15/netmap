@@ -28,6 +28,7 @@ final class Vehicle: Model, Content, @unchecked Sendable {
     @Field(key: "created_by")                  var createdBy:     String
     @Timestamp(key: "created_at", on: .create) var createdAt:     Date?
     @Timestamp(key: "updated_at", on: .update) var updatedAt:     Date?
+    @Timestamp(key: "deleted_at", on: .delete) var deletedAt:     Date?
 
     init() {}
 
@@ -124,5 +125,21 @@ struct AddIconKeyToVehicle: AsyncMigration {
     }
     func revert(on db: Database) async throws {
         // SQLite: no DROP COLUMN — no-op
+    }
+}
+
+// MARK: - Add soft-delete support migration (v4)
+
+struct AddSoftDeleteToVehicle: AsyncMigration {
+    func prepare(on db: Database) async throws {
+        guard let sql = db as? SQLDatabase else {
+            try await db.schema(Vehicle.schema).field("deleted_at", .datetime).update()
+            return
+        }
+        // try? is intentional: idempotent if the column was already added manually
+        try? await sql.raw("ALTER TABLE vehicles ADD COLUMN deleted_at DATETIME").run()
+    }
+    func revert(on db: Database) async throws {
+        // SQLite does not support DROP COLUMN in older versions — no-op
     }
 }

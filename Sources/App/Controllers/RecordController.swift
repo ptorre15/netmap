@@ -6,8 +6,7 @@ import SQLKit
 
 struct APIKeyMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
-        let currentKey = request.application.currentAPIKey
-        guard request.headers.first(name: "X-API-Key") == currentKey else {
+        guard request.application.isValidAPIKey(request.headers.first(name: "X-API-Key") ?? "") else {
             throw Abort(.unauthorized, reason: "Invalid or missing API key. Set X-API-Key header.")
         }
         return try await next.respond(to: request)
@@ -19,8 +18,7 @@ struct APIKeyMiddleware: AsyncMiddleware {
 struct APIKeyOrAdminMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
         // Accept valid API key
-        let currentKey = request.application.currentAPIKey
-        if request.headers.first(name: "X-API-Key") == currentKey {
+        if request.application.isValidAPIKey(request.headers.first(name: "X-API-Key") ?? "") {
             return try await next.respond(to: request)
         }
         // Accept admin auth via Bearer token or session cookie
@@ -37,8 +35,7 @@ struct APIKeyOrAdminMiddleware: AsyncMiddleware {
 struct APIKeyOrBearerMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
         // Accept valid API key
-        let currentKey = request.application.currentAPIKey
-        if request.headers.first(name: "X-API-Key") == currentKey {
+        if request.application.isValidAPIKey(request.headers.first(name: "X-API-Key") ?? "") {
             return try await next.respond(to: request)
         }
         // Accept valid auth via Bearer token or session cookie (any role)

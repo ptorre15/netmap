@@ -149,18 +149,24 @@ struct AdminController: RouteCollection {
     // ─── API Key ─────────────────────────────────────────────────────────────
 
     func getAPIKey(req: Request) async throws -> APIKeyResponse {
-        APIKeyResponse(apiKey: req.application.currentAPIKey)
+        let key = req.application.currentAPIKey
+        if key.isEmpty {
+            return APIKeyResponse(apiKey: "[Key is set securely -- rotate to generate a new displayable key]")
+        }
+        return APIKeyResponse(apiKey: key)
     }
 
     func rotateAPIKey(req: Request) async throws -> APIKeyResponse {
-        let newKey = randomKey()
+        let newKey  = randomKey()
+        let stored  = "sha256v1:" + sha256Hex(newKey)
         if let existing = try await AppSetting.query(on: req.db).filter(\.$key == "api_key").first() {
-            existing.value = newKey
+            existing.value = stored
             try await existing.save(on: req.db)
         } else {
-            try await AppSetting(key: "api_key", value: newKey).save(on: req.db)
+            try await AppSetting(key: "api_key", value: stored).save(on: req.db)
         }
-        req.application.currentAPIKey = newKey
+        req.application.currentAPIKey     = newKey
+        req.application.currentAPIKeyHash = sha256Hex(newKey)
         req.logger.warning("API key rotated by \(req.authUser?.email ?? "unknown").")
         await req.auditSecurityEvent(
             action: "api_key.rotate",
@@ -1072,6 +1078,7 @@ struct AdminController: RouteCollection {
         var oldestReading: Date?
         var newestReading: Date?
         var dbSizeBytes: Int?
+        var uptimeSeconds: Int    // seconds since last server boot
     }
 
     func getStats(req: Request) async throws -> AdminStatsResponse {
@@ -1093,7 +1100,7 @@ struct AdminController: RouteCollection {
         async let totalVehEv      = sql.raw("SELECT COUNT(*) AS n FROM vehicle_events").first(decoding: CountRow.self)
         async let totalLC         = sql.raw("SELECT COUNT(*) AS n FROM device_lifecycle_events").first(decoding: CountRow.self)
         async let totalDB         = sql.raw("SELECT COUNT(*) AS n FROM driver_behavior_events").first(decoding: CountRow.self)
-        async let totalVehicles   = sql.raw("SELECT COUNT(*) AS n FROM vehicles").first(decoding: CountRow.self)
+        async let totalVehicles   = sql.raw("SELECT COUNT(*) AS n FROM vehicles WHERE deleted_at IS NULL").first(decoding: CountRow.self)
         async let totalUsers      = sql.raw("SELECT COUNT(*) AS n FROM users").first(decoding: CountRow.self)
 
         async let readings30d     = sql.raw("SELECT COUNT(*) AS n FROM sensor_readings WHERE timestamp >= \(bind: threshold30)").first(decoding: CountRow.self)
@@ -1145,7 +1152,8 @@ struct AdminController: RouteCollection {
             topTrackers: top.map { TrackerStat(imei: $0.imei, name: $0.name, events7d: $0.n, lastSeenAt: $0.last_ts.map { Date(timeIntervalSince1970: $0) }) },
             oldestReading: oldest?.ts.map { Date(timeIntervalSince1970: $0) } ?? nil,
             newestReading: newest?.ts.map { Date(timeIntervalSince1970: $0) } ?? nil,
-            dbSizeBytes: pages.map { $0.page_count * $0.page_size }
+            dbSizeBytes: pages.map { $0.page_count * $0.page_size },
+            uptimeSeconds: Int(Date().timeIntervalSince(req.application.startedAt))
         )
     }
 }
