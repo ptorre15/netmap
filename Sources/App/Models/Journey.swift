@@ -2,6 +2,52 @@ import Fluent
 import Vapor
 import SQLKit
 
+// MARK: - Telemetry string enumerations
+// These are the only values accepted from tracker devices.
+// Unknown eventType values are rejected at ingestion (HTTP 400).
+// Unknown resetReason / wakeupSource values are logged as warnings but stored
+// as-is so that new firmware values don't break data ingestion.
+
+/// All event types that a tracker device may send to POST /api/vehicle-events.
+enum TelemetryEventType: String, CaseIterable {
+    // Journey state machine → vehicle_events table
+    case journeyStart   = "journey_start"
+    case driving        = "driving"
+    case journeyEnd     = "journey_end"
+    // Routed to separate tables (not stored in vehicle_events)
+    case driverBehavior = "driver_behavior"
+    case journeyStats   = "journey_stats"
+    case boot           = "boot"
+    case sleep          = "sleep"
+    case wakeUp         = "wake_up"
+    case ping           = "ping"
+    case gpsAcquired    = "gps_acquired"
+    case gpsLost        = "gps_lost"
+}
+
+/// Known reset-reason strings reported on 'boot' events.
+/// Unknown values are accepted with a warning (firmware may add new reasons).
+enum ResetReason: String, CaseIterable {
+    case powerOn  = "POWERON"
+    case panic    = "PANIC"
+    case deepSleep = "DEEPSLEEP"
+    case brownout = "BROWNOUT"
+    case wdt      = "WDT"
+    case sw       = "SW"
+    case unknown  = "UNKNOWN"
+}
+
+/// Known wake-up source strings reported on 'wake_up' events.
+/// Unknown values are accepted with a warning (firmware may add new sources).
+enum WakeupSource: String, CaseIterable {
+    case voltageRise = "VOLTAGE_RISE"
+    case canActivity = "CAN_ACTIVITY"
+    case rtc         = "RTC"
+    case gpio        = "GPIO"
+    case uart        = "UART"
+    case timer       = "TIMER"
+}
+
 // MARK: - DTO
 // Payload minimal envoyé par le tracker : seul l'IMEI est obligatoire.
 // Le serveur résout vehicleID/vehicleName et gère le journeyID automatiquement.
