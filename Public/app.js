@@ -335,7 +335,7 @@ const S = {
   mode: 'chart', records: [],
   loading: false, timer: null,
   ws: null, wsConnected: false,
-  pChart: null, tChart: null, wovChart: null, wovTChart: null, leafletMap: null,
+  pChart: null, tChart: null, wovChart: null, wovTChart: null, leafletMap: null, fleetMap: null,
   mapMatchEnabled: false,
   allJourneysMode: false,
   secAudit: { limit: 50, offset: 0, total: 0, action: '', actor: '' },
@@ -3570,6 +3570,7 @@ function renderFleet() {
   const entry   = S.vehicleFilter ? groups[S.vehicleFilter] : null;
   const sensors = entry?.sensors ?? [];
   if (!sensors.length) {
+    if (S.fleetMap) { S.fleetMap.remove(); S.fleetMap = null; }
     D.fleetCont.innerHTML = '<div class="bat-loading-full"><p>No sensors for this vehicle.</p></div>';
     return;
   }
@@ -3629,7 +3630,15 @@ function renderFleet() {
     </div>`;
   }).join('');
 
-  D.fleetCont.innerHTML = `<div class="fleet-grid">${cards}</div>`;
+  // Determine whether there are mappable trackers
+  const trackers = sensors.filter(s => s.brand === 'tracker'
+    && s.latestLatitude != null && s.latestLongitude != null);
+  const showMap = trackers.length > 0;
+
+  D.fleetCont.innerHTML =
+    (showMap ? '<div id="fleet-map-el"></div>' : '') +
+    `<div class="fleet-grid">${cards}</div>`;
+
   D.fleetCont.querySelectorAll('.fleet-card[data-sid]').forEach(card => {
     card.addEventListener('click', () => {
       const sid = card.dataset.sid;
@@ -3642,6 +3651,58 @@ function renderFleet() {
       });
     });
   });
+
+  // ── Fleet overview map ──────────────────────────────────────────────────────
+  if (S.fleetMap) { S.fleetMap.remove(); S.fleetMap = null; }
+  if (!showMap) return;
+
+  const fMap = S.fleetMap = L.map('fleet-map-el', { preferCanvas: true, zoomControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(fMap);
+
+  const cluster = L.markerClusterGroup({
+    maxClusterRadius: 60,
+    iconCreateFunction(c) {
+      const children = c.getAllChildMarkers();
+      const allStale = children.every(m => m.options._stale);
+      const anyStale = children.some(m => m.options._stale);
+      const color = allStale ? '#ef4444' : anyStale ? '#f59e0b' : '#34d399';
+      const n = c.getChildCount();
+      return L.divIcon({
+        html: `<div class="fm-cluster" style="background:${color}22;border-color:${color}"><span style="color:${color}">${n}</span></div>`,
+        className: '',
+        iconSize: [42, 42],
+        iconAnchor: [21, 21],
+      });
+    },
+  });
+
+  trackers.forEach(s => {
+    const stale = isStale(s.latestTimestamp, s.brand);
+    const color = stale ? '#ef4444' : '#34d399';
+    const rawName = s.sensorName ?? s.vehicleName ?? s.sensorID;
+    const ago   = fmtAgo(s.latestTimestamp);
+    const icon  = L.divIcon({
+      html: `<div class="fm-pin" style="background:${color}22;border-color:${color}"><div class="fm-pin-dot" style="background:${color}"></div></div>`,
+      className: '',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+    const marker = L.marker([s.latestLatitude, s.latestLongitude], { icon, _stale: stale });
+    marker.bindPopup(`<b>${escHTML(rawName)}</b><br>${stale ? 'Stale' : 'Live'} \u2014 ${ago}`);
+    marker.on('click', () => {
+      selectSensor(s.sensorID).then(() => { showMode('map'); pushHash(); });
+    });
+    cluster.addLayer(marker);
+  });
+
+  fMap.addLayer(cluster);
+  const bounds = cluster.getBounds();
+  if (bounds.isValid()) {
+    fMap.fitBounds(bounds, { padding: [32, 32], maxZoom: 15 });
+  }
 }
 
 // ─── Threshold alerts (5.2) ───────────────────────────────────────────────────
@@ -4061,6 +4122,7 @@ Share this with the user — it is only shown once.`);
     if (S.mode === 'device') renderDevice();
     if (S.mode === 'wheels') renderWheels();
     if (S.mode === 'errors') renderErrors();
+    if (S.mode === 'fleet')  renderFleet();
     pushHash();
   });
 
