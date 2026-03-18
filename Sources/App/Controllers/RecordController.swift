@@ -229,10 +229,10 @@ struct RecordController: RouteCollection {
         let requested = (try? req.query.get(Int.self, at: "limit")) ?? 1_000
         let limit = min(max(1, requested), 10_000)
         var q = SensorReading.query(on: req.db)
-            .filter(\.\$sensorID == id)
-            .sort(\.\$timestamp, .descending)
-        if let from = dateParam(req, key: "from") { q = q.filter(\.\$timestamp >= from) }
-        if let to   = dateParam(req, key: "to")   { q = q.filter(\.\$timestamp <= to) }
+            .filter(\.$sensorID == id)
+            .sort(\.$timestamp, .descending)
+        if let from = dateParam(req, key: "from") { q = q.filter(\.$timestamp >= from) }
+        if let to   = dateParam(req, key: "to")   { q = q.filter(\.$timestamp <= to) }
         return try await q.limit(limit).all()
     }
 
@@ -243,10 +243,10 @@ struct RecordController: RouteCollection {
         let requested = (try? req.query.get(Int.self, at: "limit")) ?? 1_000
         let limit = min(max(1, requested), 10_000)
         var q = SensorReading.query(on: req.db)
-            .filter(\.\$vehicleID == id)
-            .sort(\.\$timestamp, .descending)
-        if let from = dateParam(req, key: "from") { q = q.filter(\.\$timestamp >= from) }
-        if let to   = dateParam(req, key: "to")   { q = q.filter(\.\$timestamp <= to) }
+            .filter(\.$vehicleID == id)
+            .sort(\.$timestamp, .descending)
+        if let from = dateParam(req, key: "from") { q = q.filter(\.$timestamp >= from) }
+        if let to   = dateParam(req, key: "to")   { q = q.filter(\.$timestamp <= to) }
         return try await q.limit(limit).all()
     }
 
