@@ -317,10 +317,27 @@ body {
 .s-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
 .sidebar-footer { padding: 9px 14px; font-size: 11px; color: var(--fg3); border-top: 1px solid var(--sep); flex-shrink: 0; background: var(--bg); }
 
+/* ── Panel entrance animation ─────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.panel-enter { animation: fadeUp .18s ease both; }
+/* Sidebar sensor list: lighter / faster fade so it feels snappy */
+@keyframes fadeIn-fast {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.sidebar-list-enter { animation: fadeIn-fast .14s ease both; }
+
 /* ═══════════════════════════════════════════════════════════════
    Content area
    ═══════════════════════════════════════════════════════════════ */
 #content { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); min-width: 0; }
+/* respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .panel-enter, .sidebar-list-enter { animation: none; }
+}
 [data-theme="dark"] #sidebar { background: linear-gradient(180deg, var(--bg2) 0%, var(--bg3) 100%); }
 #content.loading { opacity: .55; pointer-events: none; }
 
