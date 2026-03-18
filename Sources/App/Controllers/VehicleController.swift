@@ -1,5 +1,6 @@
 import Vapor
 import Fluent
+import SQLKit
 
 struct VehicleController: RouteCollection {
 
@@ -118,13 +119,20 @@ struct VehicleController: RouteCollection {
         guard let id = req.parameters.get("vehicleID", as: UUID.self),
               let v  = try await Vehicle.find(id, on: req.db)
         else { throw Abort(.notFound) }
-        // Cascade: remove user-asset links, sensor readings, and tracker journey events for this vehicle
-        try await UserAsset.query(on: req.db).filter(\.$assetID == id).delete()
-        try await SensorReading.query(on: req.db).filter(\.$vehicleID == id.uuidString).delete()
-        if let sql = req.db as? SQLDatabase {
-            try await sql.raw("DELETE FROM vehicle_events WHERE vehicle_id = \(bind: id.uuidString)").run()
+        // All cascade deletes run inside a single transaction so a mid-delete failure
+        // cannot leave the database in a partially-cleaned state.
+        try await req.db.transaction { db in
+            try await UserAsset.query(on: db).filter(\.$assetID == id).delete()
+            try await SensorReading.query(on: db).filter(\.$vehicleID == id.uuidString).delete()
+            if let sql = db as? SQLDatabase {
+                let vid = id.uuidString
+                try await sql.raw("DELETE FROM vehicle_events          WHERE vehicle_id = \(bind: vid)").run()
+                try await sql.raw("DELETE FROM driver_behavior_events  WHERE vehicle_id = \(bind: vid)").run()
+                try await sql.raw("DELETE FROM device_lifecycle_events WHERE vehicle_id = \(bind: vid)").run()
+                try await sql.raw("DELETE FROM journey_stats_events    WHERE vehicle_id = \(bind: vid)").run()
+            }
+            try await v.delete(on: db)
         }
-        try await v.delete(on: req.db)
         return .noContent
     }
 }
