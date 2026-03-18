@@ -298,6 +298,8 @@ body {
 [data-theme="dark"] .sensor-row.selected:has([data-brand="stihl"])   { background: rgba(255,204,0,.10); }
 .s-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .s-info { flex: 1; min-width: 0; }
+/* Mini sparkline SVG — right-side value trend indicator */
+.spark  { flex-shrink: 0; opacity: 0.72; display: block; overflow: visible; pointer-events: none; }
 .s-name { font-size: 14px; font-weight: 500; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .s-sub  { font-size: 12px; color: var(--fg3); white-space: normal; overflow: visible; text-overflow: unset; margin-top: 2px; line-height: 1.6; }
 .s-brand {
