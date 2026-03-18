@@ -99,7 +99,13 @@ func authUserFromBearerOrCookie(_ request: Request) async throws -> AuthUser? {
             .filter(\.$value == bearer.token)
             .filter(\.$expiresAt > Date())
             .first() {
-            return AuthUser(userID: token.userID, email: token.email, role: token.role)
+            // Re-read the live role from the users table so that role changes
+            // and account deletions take effect immediately without requiring
+            // the token to expire first.
+            guard let user = try await User.find(token.userID, on: request.db) else {
+                return nil  // user deleted
+            }
+            return AuthUser(userID: token.userID, email: user.email, role: user.role)
         }
     }
     // Try every known session cookie name — a stale cookie for one name
@@ -111,7 +117,11 @@ func authUserFromBearerOrCookie(_ request: Request) async throws -> AuthUser? {
             .filter(\.$expiresAt > Date())
             .first()
         else { continue }
-        return AuthUser(userID: token.userID, email: token.email, role: token.role)
+        // Same live role check for session cookies.
+        guard let user = try await User.find(token.userID, on: request.db) else {
+            continue  // user deleted — try next cookie
+        }
+        return AuthUser(userID: token.userID, email: user.email, role: user.role)
     }
     return nil
 }
