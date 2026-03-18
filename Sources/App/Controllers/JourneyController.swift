@@ -101,7 +101,22 @@ struct VehicleEventController: RouteCollection {
 
         for p in payloads {
             let imei      = p.imei
-            let eventType = p.eventType ?? "driving"
+            let rawType   = p.eventType ?? "driving"
+
+            // ── Validate eventType ───────────────────────────────────────────
+            guard TelemetryEventType(rawValue: rawType) != nil else {
+                req.logger.warning("⛔️ [ingest] imei=\(imei) rejected unknown eventType='\(rawType)'")
+                throw Abort(.badRequest, reason: "Unknown eventType '\(rawType)'. Valid values: \(TelemetryEventType.allCases.map(\.rawValue).joined(separator: ", "))")
+            }
+            let eventType = rawType
+
+            // ── Warn on unknown resetReason / wakeupSource ───────────────────
+            if let rr = p.resetReason, ResetReason(rawValue: rr) == nil {
+                req.logger.warning("⚠️ [ingest] imei=\(imei) unknown resetReason='\(rr)' — storing as-is")
+            }
+            if let ws = p.wakeupSource, WakeupSource(rawValue: ws) == nil {
+                req.logger.warning("⚠️ [ingest] imei=\(imei) unknown wakeupSource='\(ws)' — storing as-is")
+            }
 
             req.logger.info("🛰 [tracker] imei=\(imei) type=\(eventType) ts=\(p.timestamp.map { String(format:"%.0f",$0.timeIntervalSince1970) } ?? "nil") lat=\(p.latitude.map{String($0)} ?? "nil") lon=\(p.longitude.map{String($0)} ?? "nil") spd=\(p.speedKmh.map{String($0)} ?? "nil") fuel=\(p.fuelLevelPct.map{String($0)} ?? "nil")")
 
