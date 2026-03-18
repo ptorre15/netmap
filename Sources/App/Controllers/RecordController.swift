@@ -211,8 +211,10 @@ struct RecordController: RouteCollection {
     // MARK: - Read
 
     /// GET /api/records?limit=&vehicle=&sensor=&brand=
+    /// Default: 1 000 rows. Max: 10 000 rows (pass ?limit= to customise within the cap).
     func list(req: Request) async throws -> [SensorReading] {
-        let limit = (try? req.query.get(Int.self, at: "limit")) ?? 1_000
+        let requested = (try? req.query.get(Int.self, at: "limit")) ?? 1_000
+        let limit = min(max(1, requested), 10_000)
         var q = SensorReading.query(on: req.db).sort(\.$timestamp, .descending)
         if let v = try? req.query.get(String.self, at: "vehicle") { q = q.filter(\.$vehicleID == v) }
         if let s = try? req.query.get(String.self, at: "sensor")  { q = q.filter(\.$sensorID  == s) }
@@ -220,26 +222,32 @@ struct RecordController: RouteCollection {
         return try await q.limit(limit).all()
     }
 
-    /// GET /api/records/by-sensor/:sensorID?from=ISO8601&to=ISO8601
+    /// GET /api/records/by-sensor/:sensorID?from=ISO8601&to=ISO8601&limit=
+    /// Default: 1 000 rows. Max: 10 000 rows.
     func bySensor(req: Request) async throws -> [SensorReading] {
         guard let id = req.parameters.get("sensorID") else { throw Abort(.badRequest) }
+        let requested = (try? req.query.get(Int.self, at: "limit")) ?? 1_000
+        let limit = min(max(1, requested), 10_000)
         var q = SensorReading.query(on: req.db)
-            .filter(\.$sensorID == id)
-            .sort(\.$timestamp, .descending)
-        if let from = dateParam(req, key: "from") { q = q.filter(\.$timestamp >= from) }
-        if let to   = dateParam(req, key: "to")   { q = q.filter(\.$timestamp <= to) }
-        return try await q.limit(100_000).all()
+            .filter(\.\$sensorID == id)
+            .sort(\.\$timestamp, .descending)
+        if let from = dateParam(req, key: "from") { q = q.filter(\.\$timestamp >= from) }
+        if let to   = dateParam(req, key: "to")   { q = q.filter(\.\$timestamp <= to) }
+        return try await q.limit(limit).all()
     }
 
-    /// GET /api/records/by-vehicle/:vehicleID?from=ISO8601&to=ISO8601
+    /// GET /api/records/by-vehicle/:vehicleID?from=ISO8601&to=ISO8601&limit=
+    /// Default: 1 000 rows. Max: 10 000 rows.
     func byVehicle(req: Request) async throws -> [SensorReading] {
         guard let id = req.parameters.get("vehicleID") else { throw Abort(.badRequest) }
+        let requested = (try? req.query.get(Int.self, at: "limit")) ?? 1_000
+        let limit = min(max(1, requested), 10_000)
         var q = SensorReading.query(on: req.db)
-            .filter(\.$vehicleID == id)
-            .sort(\.$timestamp, .descending)
-        if let from = dateParam(req, key: "from") { q = q.filter(\.$timestamp >= from) }
-        if let to   = dateParam(req, key: "to")   { q = q.filter(\.$timestamp <= to) }
-        return try await q.limit(100_000).all()
+            .filter(\.\$vehicleID == id)
+            .sort(\.\$timestamp, .descending)
+        if let from = dateParam(req, key: "from") { q = q.filter(\.\$timestamp >= from) }
+        if let to   = dateParam(req, key: "to")   { q = q.filter(\.\$timestamp <= to) }
+        return try await q.limit(limit).all()
     }
 
     /// GET /api/sensors/latest — one summary row per unique sensor (used by web dashboard).
