@@ -278,6 +278,24 @@ body {
 }
 .sensor-row:hover    { background: rgba(99,102,241,.06); }
 .sensor-row.selected { background: var(--m-blue-lt); border-left-color: var(--m-blue); }
+
+/* ── Brand-tinted selected/hover state via :has() ─────────────────────────
+   Each brand keeps its own accent so the active row gives an instant
+   visual cue about which sensor type is selected.                        */
+.sensor-row.selected:has([data-brand="tracker"]) { border-left-color: #34C759; background: rgba(52,199,89,.07); }
+.sensor-row.selected:has([data-brand="ela"])     { border-left-color: #32ADE6; background: rgba(50,173,230,.07); }
+.sensor-row.selected:has([data-brand="airtag"])  { border-left-color: #007AFF; background: rgba(0,122,255,.07); }
+.sensor-row.selected:has([data-brand="stihl"])   { border-left-color: #FFCC00; background: rgba(255,204,0,.07); }
+/* Subtle hover tint matching the brand */
+.sensor-row:hover:has([data-brand="tracker"]) { background: rgba(52,199,89,.04); }
+.sensor-row:hover:has([data-brand="ela"])     { background: rgba(50,173,230,.04); }
+.sensor-row:hover:has([data-brand="airtag"])  { background: rgba(0,122,255,.04); }
+.sensor-row:hover:has([data-brand="stihl"])   { background: rgba(255,204,0,.04); }
+[data-theme="dark"] .sensor-row.selected { background: rgba(99,102,241,.13); }
+[data-theme="dark"] .sensor-row.selected:has([data-brand="tracker"]) { background: rgba(52,199,89,.10); }
+[data-theme="dark"] .sensor-row.selected:has([data-brand="ela"])     { background: rgba(50,173,230,.10); }
+[data-theme="dark"] .sensor-row.selected:has([data-brand="airtag"])  { background: rgba(0,122,255,.10); }
+[data-theme="dark"] .sensor-row.selected:has([data-brand="stihl"])   { background: rgba(255,204,0,.10); }
 .s-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .s-info { flex: 1; min-width: 0; }
 .s-name { font-size: 14px; font-weight: 500; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
