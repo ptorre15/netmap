@@ -98,11 +98,6 @@ struct AddSecurityEventHashChain: AsyncMigration {
     func revert(on db: Database) async throws { }
 }
 
-private func sha256Hex(_ input: String) -> String {
-    let digest = SHA256.hash(data: Data(input.utf8))
-    return digest.map { String(format: "%02x", $0) }.joined()
-}
-
 private func securityEventLogPath() -> String {
     Environment.get("SECURITY_EVENT_LOG_PATH") ?? "/var/log/netmap/security_events.log"
 }

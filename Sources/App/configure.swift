@@ -92,6 +92,7 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(CreateTrackerConfigProfile())             // reusable config profile templates
     app.migrations.add(AddProfileIDToTrackerConfig())            // profile_id FK on tracker_configs
     app.migrations.add(AddVersionToTrackerConfigProfile())       // version counter on tracker_config_profiles
+    app.migrations.add(AddSoftDeleteToVehicle())                 // deleted_at column for vehicle soft-delete
     try await app.autoMigrate()   // non-blocking in async context
 
     // ── Seed built-in asset types if absent ─────────────────────
@@ -137,22 +138,42 @@ public func configure(_ app: Application) async throws {
     }
 
     // ── Load API key (DB override > env var > dev default) ───────────────
+    // The key is stored as a SHA-256 hex hash in the DB (prefix: "sha256v1:").
+    // Plaintext is kept in app.currentAPIKey only when it is freshly set this
+    // session (via env var or rotation); after a restart it will be empty.
     let envKey = Environment.get("API_KEY") ?? "netmap-dev"
     if let stored = try? await AppSetting.query(on: app.db).filter(\.$key == "api_key").first() {
-        app.currentAPIKey = stored.value
+        let rawValue = stored.value
+        if rawValue.hasPrefix("sha256v1:") {
+            // Already migrated — extract hash; plaintext is not available
+            app.currentAPIKey     = ""
+            app.currentAPIKeyHash = String(rawValue.dropFirst("sha256v1:".count))
+        } else {
+            // Old plaintext in DB — hash it, update the record, keep plaintext in memory this session
+            let hash = sha256Hex(rawValue)
+            app.currentAPIKey     = rawValue
+            app.currentAPIKeyHash = hash
+            stored.value = "sha256v1:" + hash
+            try? await stored.save(on: app.db)
+            app.logger.notice("API key migrated from plaintext to SHA-256 hash in DB.")
+        }
         app.logger.info("API key loaded from database.")
     } else {
-        app.currentAPIKey = envKey
+        app.currentAPIKey     = envKey
+        app.currentAPIKeyHash = sha256Hex(envKey)
         if envKey == "netmap-dev" {
             app.logger.warning("Using default API key 'netmap-dev'. Set API_KEY env var for production.")
         }
     }
 
     // ── Safety check: refuse to start in production with the default key ─
-    if app.environment == .production && app.currentAPIKey == "netmap-dev" {
+    if app.environment == .production && app.currentAPIKeyHash == sha256Hex("netmap-dev") {
         app.logger.critical("Refusing to start: default API key 'netmap-dev' must not be used in production. Set the API_KEY environment variable.")
         throw Abort(.internalServerError, reason: "Insecure default API key in production.")
     }
+
+    // ── Record boot time for uptime reporting ────────────────────────────
+    app.startedAt = Date()
 
     // ── Periodic token cleanup ───────────────────────────────────────────
     app.lifecycle.use(TokenCleanupLifecycle())
