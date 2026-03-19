@@ -132,17 +132,40 @@ systemctl daemon-reload && systemctl reload caddy
 
 ## Updates
 
+### Supported path: GitHub Actions deploy workflow
+
+Use the `Deploy` workflow from the GitHub Actions UI. This is the primary and supported deploy process.
+
+It performs the following steps:
+1. Bumps the version in CI
+2. Builds the Linux release binary in CI
+3. Deploys matching `VERSION`, `Public/`, and binary artifacts
+4. Restarts the service
+5. Verifies `GET /health`
+6. Opens or updates the follow-up version bump PR
+
+Required GitHub configuration:
+- `production` environment
+- secrets: `DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `DEPLOY_USER`, `NETMAP_DOMAIN`
+
+### Legacy fallback: workstation script
+
+The workstation script is now deprecated and should be used only as an emergency fallback when GitHub Actions is unavailable.
+
 From your workstation, inside the `NetMapServer/` folder:
 
 ```bash
-./deploy/update.sh admin@192.168.1.x
+NETMAP_ALLOW_LEGACY_UPDATE=1 ./deploy/update.sh admin@192.168.1.x
 ```
 
-The script:
+This legacy script:
 1. Syncs sources via `rsync`
 2. Builds in release mode **on the server**
 3. Atomically replaces the binary
 4. Restarts the service
+5. Verifies local `GET /health`
+
+It is intentionally no longer the default path because it does not provide the same reproducibility, approvals, and artifact traceability as the GitHub Actions workflow.
 
 ---
 

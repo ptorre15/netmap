@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NetMapServer — Deploy an update from your workstation
+# NetMapServer — Legacy workstation deploy (fallback only)
 #
-# Usage: ./deploy/update.sh <user>@<host>
-#   e.g. ./deploy/update.sh netmap@192.168.1.10
-#        ./deploy/update.sh admin@your-server.example.com
+# This script is intentionally NOT the primary deploy path anymore.
+# The supported deploy flow is the GitHub Actions "Deploy" workflow, which:
+#   - bumps version in CI
+#   - builds the Linux binary in CI
+#   - deploys matching VERSION/Public/binary artifacts
+#   - verifies /health after restart
 #
-# Prerequisites:
-#   - passwordless SSH key access to the server
-#   - Swift + systemd service already installed (deploy/install.sh)
+# Usage (legacy fallback only):
+#   NETMAP_ALLOW_LEGACY_UPDATE=1 ./deploy/update.sh <user>@<host>
 # =============================================================================
 set -euo pipefail
+
+warn() { echo -e "\033[1;33m!\033[0m  $*"; }
+
+if [[ "${NETMAP_ALLOW_LEGACY_UPDATE:-0}" != "1" ]]; then
+  cat >&2 <<'EOF'
+Legacy workstation deploy is deprecated.
+
+Use the GitHub Actions "Deploy" workflow instead.
+
+If you explicitly need the old emergency fallback path, rerun with:
+  NETMAP_ALLOW_LEGACY_UPDATE=1 ./deploy/update.sh <user>@<host>
+EOF
+  exit 1
+fi
 
 TARGET="${1:-}"
 [[ -n "$TARGET" ]] || { echo "Usage: $0 <user>@<host>"; exit 1; }
@@ -23,6 +39,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"  # NetMapServer root
 info()    { echo -e "\033[1;34m▶\033[0m  $*"; }
 success() { echo -e "\033[1;32m✓\033[0m  $*"; }
 die()     { echo -e "\033[1;31m✗\033[0m  $*" >&2; exit 1; }
+
+warn "Using deprecated legacy deploy path. Prefer the GitHub Actions Deploy workflow."
 
 # ── 0. Bump version ──────────────────────────────────────────────────────────
 info "Bumping patch version..."
@@ -67,8 +85,11 @@ sudo chmod 755 /opt/netmap/bin/netmap-server
 sudo chown netmap:netmap /opt/netmap/bin/netmap-server
 # Restart
 sudo systemctl restart $SERVICE
-sleep 2
-sudo systemctl is-active --quiet $SERVICE && echo "Service running." || { echo "ERROR: service not running." ; sudo journalctl -u $SERVICE -n 20; exit 1; }
+sleep 3
+curl -sf --retry 5 --retry-delay 2 \
+  "http://127.0.0.1:8092/health" > /dev/null \
+  && echo "Service healthy." \
+  || { echo "ERROR: service health check failed." ; sudo journalctl -u $SERVICE -n 20; exit 1; }
 ENDSSH
 success "NetMapServer updated and restarted."
 
