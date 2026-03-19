@@ -52,7 +52,7 @@ jobs:
             ${{ runner.os }}-swift-6.0-spm-
 
       - name: Build (release)
-        run: swift build -c release
+        run: swift build -c release --static-swift-stdlib
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
@@ -123,6 +123,7 @@ jobs:
           sudo mv /tmp/netmap-server.new /opt/netmap/bin/netmap-server
           sudo chmod 755 /opt/netmap/bin/netmap-server
           sudo chown netmap:netmap /opt/netmap/bin/netmap-server
+          sudo systemctl daemon-reload
           sudo systemctl restart netmap-server
           ENDSSH
 
@@ -130,6 +131,6 @@ jobs:
         env:
           NETMAP_DOMAIN: ${{ secrets.NETMAP_DOMAIN }}
         run: |
-          sleep 3
-          curl -sf --retry 5 --retry-delay 2 \
+          sleep 10
+          curl -sf --retry 8 --retry-delay 3 \
             "https://$NETMAP_DOMAIN/health" > /dev/null
