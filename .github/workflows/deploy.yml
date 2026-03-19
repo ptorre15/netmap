@@ -10,6 +10,10 @@ on:
         description: "Optional explicit release version (default: 1.0.<run_number>+<short_sha>)"
         required: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # ── Step 1: compile the release binary in CI (same toolchain as production) ──
   build:
@@ -37,7 +41,7 @@ jobs:
 
       - name: Apply release version to workspace
         run: |
-          ./set-release-version.sh "${{ steps.release_version.outputs.release_version }}"
+          bash ./set-release-version.sh "${{ steps.release_version.outputs.release_version }}"
 
       - name: Cache Swift packages
         uses: actions/cache@v4
@@ -84,7 +88,7 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
         run: |
-          ./set-release-version.sh "$RELEASE_VERSION"
+          bash ./set-release-version.sh "$RELEASE_VERSION"
 
       - name: Download binary artifact
         uses: actions/download-artifact@v4
@@ -118,11 +122,12 @@ jobs:
           sudo chmod 755 /opt/netmap/bin/netmap-server
           sudo chown netmap:netmap /opt/netmap/bin/netmap-server
           sudo systemctl restart netmap-server
-          sleep 3
-          curl -sf --retry 5 --retry-delay 2 \
-            "https://$NETMAP_DOMAIN/health" > /dev/null \
-            && echo "Service healthy." \
-            || { sudo journalctl -u netmap-server -n 20; exit 1; }
           ENDSSH
+
+      - name: Verify public health endpoint
         env:
           NETMAP_DOMAIN: ${{ secrets.NETMAP_DOMAIN }}
+        run: |
+          sleep 3
+          curl -sf --retry 5 --retry-delay 2 \
+            "https://$NETMAP_DOMAIN/health" > /dev/null

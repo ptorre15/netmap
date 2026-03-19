@@ -137,12 +137,13 @@ systemctl daemon-reload && systemctl reload caddy
 Use the `Deploy` workflow from the GitHub Actions UI. This is the primary and supported deploy process.
 
 It performs the following steps:
-1. Bumps the version in CI
+1. Computes a release version in CI (default: `1.0.<run_number>+<short_sha>`, or an explicit `release_version` input)
 2. Builds the Linux release binary in CI
 3. Deploys matching `VERSION`, `Public/`, and binary artifacts
 4. Restarts the service
 5. Verifies `GET /health`
-6. Opens or updates the follow-up version bump PR
+
+No deploy-time git mutation is performed anymore: no version bump branch and no follow-up PR.
 
 Required GitHub configuration:
 - `production` environment
