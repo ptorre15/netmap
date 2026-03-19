@@ -76,6 +76,11 @@ jobs:
           name: netmap-server-binary
           path: ./artifact/
 
+      - name: Ensure deploy user can write to /opt/netmap/Public
+        run: |
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "sudo chown -R ${{ secrets.DEPLOY_USER }}:${{ secrets.DEPLOY_USER }} /opt/netmap/Public && sudo chmod -R u+w /opt/netmap/Public"
+
       - name: Deploy static files and binary
         run: |
           chmod +x ./artifact/App
