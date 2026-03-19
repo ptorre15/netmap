@@ -190,7 +190,8 @@
     <!-- Toolbar: mode tabs left, period right -->
     <div id="top-toolbar">
       <div id="mode-bar">
-        <button class="mode-btn"        data-mode="map"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 18.5l-3 -1.5l-6 3v-13l6 -3l6 3l6 -3v7.5"/><path d="M9 4v13"/><path d="M15 7v5.5"/><path d="M21.121 20.121a3 3 0 1 0 -4.242 0c.418 .419 1.125 1.045 2.121 1.879c1.051 -.89 1.759 -1.516 2.121 -1.879"/><path d="M19 18v.01"/></svg> Map</button>
+          <div id="mode-indicator" aria-hidden="true"></div>
+          <button class="mode-btn"        data-mode="map"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 18.5l-3 -1.5l-6 3v-13l6 -3l6 3l6 -3v7.5"/><path d="M9 4v13"/><path d="M15 7v5.5"/><path d="M21.121 20.121a3 3 0 1 0 -4.242 0c.418 .419 1.125 1.045 2.121 1.879c1.051 -.89 1.759 -1.516 2.121 -1.879"/><path d="M19 18v.01"/></svg> Map</button>
         <button class="mode-btn active" data-mode="chart"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 19l16 0"/><path d="M4 15l4 -6l4 2l4 -5l4 4"/></svg> Chart</button>
         <button class="mode-btn"        data-mode="wheels"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M3 12h6"/><path d="M15 12h6"/><path d="M13.6 9.4l3.4 -4.8"/><path d="M10.4 14.6l-3.4 4.8"/><path d="M7 4.6l3.4 4.8"/><path d="M13.6 14.6l3.4 4.8"/></svg> Tires</button>
         <button class="mode-btn"        data-mode="table"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 5h8"/><path d="M13 9h5"/><path d="M13 15h8"/><path d="M13 19h5"/><path d="M3 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M3 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/></svg> Events</button>
@@ -213,9 +214,21 @@
 
     <!-- Stats bar -->
     <div id="stats-bar">
-      <div class="stat-cell"><div class="stat-label">Min</div>    <div class="stat-value" id="stat-min">–</div></div>
-      <div class="stat-cell"><div class="stat-label">Avg</div>    <div class="stat-value" id="stat-avg">–</div></div>
-      <div class="stat-cell"><div class="stat-label">Max</div>    <div class="stat-value" id="stat-max">–</div></div>
+      <div class="stat-cell">
+        <div class="stat-label-row"><span class="stat-label">Min</span><span class="stat-trend" id="stat-trend-min"></span></div>
+        <div class="stat-value" id="stat-min">–</div>
+        <svg class="stat-spark" id="stat-spark-min" viewBox="0 0 60 14" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label-row"><span class="stat-label">Avg</span><span class="stat-trend" id="stat-trend-avg"></span></div>
+        <div class="stat-value" id="stat-avg">–</div>
+        <svg class="stat-spark" id="stat-spark-avg" viewBox="0 0 60 14" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label-row"><span class="stat-label">Max</span><span class="stat-trend" id="stat-trend-max"></span></div>
+        <div class="stat-value" id="stat-max">–</div>
+        <svg class="stat-spark" id="stat-spark-max" viewBox="0 0 60 14" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </div>
     </div>
     <div id="chart-container" style="display:none">
       <div id="chart-gps-only" style="display:none" class="chart-gps-only">

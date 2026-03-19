@@ -1096,6 +1096,46 @@ function chargeStateColor(state) {
 }
 
 // ─── Stats bar ────────────────────────────────────────────────────────────────
+
+// Maximum number of readings rendered in each stat-cell sparkline (visual/perf tradeoff)
+const MAX_SPARKLINE_POINTS = 40;
+// Minimum value range used when all data points are identical, to avoid division by zero
+const MIN_SPARKLINE_RANGE  = 0.001;
+// Minimum % change between first-half and second-half averages to show a trend arrow
+const TREND_CHANGE_THRESHOLD = 0.003;
+
+// Render a mini sparkline from an array of numeric values into an SVG element
+function renderStatSparkline(svgId, values) {
+  const el = document.getElementById(svgId);
+  if (!el) return;
+  const pts = values.slice(-MAX_SPARKLINE_POINTS);
+  if (pts.length < 2) { el.innerHTML = ''; return; }
+  const min = Math.min(...pts), max = Math.max(...pts);
+  const range = max - min || MIN_SPARKLINE_RANGE;
+  const W = 60, H = 14, pad = 1;
+  const coords = pts.map((v, i) => {
+    const x = pad + (i / (pts.length - 1)) * (W - 2 * pad);
+    const y = H - pad - ((v - min) / range) * (H - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  el.innerHTML = `<polyline points="${coords}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+}
+
+// Render a trend arrow based on comparing first-half vs second-half aggregate
+function renderStatTrend(trendId, values, aggregateFn) {
+  const el = document.getElementById(trendId);
+  if (!el) return;
+  el.className = 'stat-trend';
+  if (values.length < 6) { el.textContent = ''; return; }
+  const mid  = Math.floor(values.length / 2);
+  const aVal = aggregateFn(values.slice(0, mid));
+  const bVal = aggregateFn(values.slice(mid));
+  const threshold = Math.abs(aVal) * TREND_CHANGE_THRESHOLD;
+  if      (bVal - aVal >  threshold) { el.textContent = '↑'; el.classList.add('up'); }
+  else if (aVal - bVal >  threshold) { el.textContent = '↓'; el.classList.add('down'); }
+  else                               { el.textContent = '–'; el.classList.add('flat'); }
+}
+
 function setStatLabels(min, avg, max) {
   if (D.statMinLbl) D.statMinLbl.textContent = min;
   if (D.statAvgLbl) D.statAvgLbl.textContent = avg;
@@ -1108,6 +1148,13 @@ function showStatCells(show) {
 }
 function renderStats() {
   document.querySelectorAll('.stat-cell').forEach(c => { c.className = 'stat-cell'; });
+  // Clear trend arrows and sparklines from the previous render
+  ['min', 'avg', 'max'].forEach(k => {
+    const t = document.getElementById(`stat-trend-${k}`);
+    const s = document.getElementById(`stat-spark-${k}`);
+    if (t) { t.textContent = ''; t.className = 'stat-trend'; }
+    if (s) s.innerHTML = '';
+  });
   showStatCells(false);
   const sensor = S.sensors.find(s => s.sensorID === S.selected);
   if (!sensor) return;
@@ -1127,12 +1174,31 @@ function renderStats() {
       if (D.statMin) D.statMin.closest('.stat-cell').classList.add(pStatus(minP, target));
       if (D.statAvg) D.statAvg.closest('.stat-cell').classList.add(pStatus(avgP, target));
       if (D.statMax) D.statMax.closest('.stat-cell').classList.add(pStatus(maxP, target));
+      // Sparklines (shared pressure series) and per-cell trend arrows
+      renderStatSparkline('stat-spark-min', pressures);
+      renderStatSparkline('stat-spark-avg', pressures);
+      renderStatSparkline('stat-spark-max', pressures);
+      renderStatTrend('stat-trend-min', pressures, a => Math.min(...a));
+      renderStatTrend('stat-trend-avg', pressures, a => a.reduce((s, v) => s + v, 0) / a.length);
+      renderStatTrend('stat-trend-max', pressures, a => Math.max(...a));
     }
     return;
   }
 }
 
 // ─── Panel entrance helper ────────────────────────────────────────────────────
+// Positions the sliding pill indicator under the currently-active mode button
+function updateModeIndicator() {
+  const bar = document.getElementById('mode-bar');
+  const ind = document.getElementById('mode-indicator');
+  if (!bar || !ind) return;
+  const active = bar.querySelector('.mode-btn.active');
+  if (!active || active.offsetParent === null) { ind.style.opacity = '0'; return; }
+  ind.style.opacity = '1';
+  ind.style.left  = active.offsetLeft + 'px';
+  ind.style.width = active.offsetWidth + 'px';
+}
+
 // Sets display and, when making visible, fires the fadeUp animation by
 // removing+re-adding .panel-enter after a forced reflow.
 function revealPanel(el, disp) {
@@ -1196,6 +1262,8 @@ function showMode(mode) {
   } else {
     if (_vsEl) _vsEl.classList.remove('select-pulse');
   }
+  // Update the sliding pill indicator to match the newly active tab
+  updateModeIndicator();
 }
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
@@ -4200,6 +4268,9 @@ Share this with the user — it is only shown once.`);
   const now = new Date();
   D.customTo.value   = toDatetimeLocal(now);
   D.customFrom.value = toDatetimeLocal(new Date(now - 86_400_000));
+
+  // Reposition the mode indicator on resize (layout shift can move button positions)
+  window.addEventListener('resize', updateModeIndicator, { passive: true });
 }
 // ─── Admin panel ───────────────────────────────────────────────────────────────
 async function adminCreateUser(payload) {
@@ -5241,6 +5312,8 @@ async function main() {
   });
 
   setup();  // register all event listeners first (auth form needs to be live)
+  // Position the mode indicator immediately for the default-active tab in HTML
+  updateModeIndicator();
 
   try {
     await checkAuth();
