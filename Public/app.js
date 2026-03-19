@@ -1097,14 +1097,21 @@ function chargeStateColor(state) {
 
 // ─── Stats bar ────────────────────────────────────────────────────────────────
 
+// Maximum number of readings rendered in each stat-cell sparkline (visual/perf tradeoff)
+const MAX_SPARKLINE_POINTS = 40;
+// Minimum value range used when all data points are identical, to avoid division by zero
+const MIN_SPARKLINE_RANGE  = 0.001;
+// Minimum % change between first-half and second-half averages to show a trend arrow
+const TREND_CHANGE_THRESHOLD = 0.003;
+
 // Render a mini sparkline from an array of numeric values into an SVG element
 function renderStatSparkline(svgId, values) {
   const el = document.getElementById(svgId);
   if (!el) return;
-  const pts = values.slice(-40);
+  const pts = values.slice(-MAX_SPARKLINE_POINTS);
   if (pts.length < 2) { el.innerHTML = ''; return; }
   const min = Math.min(...pts), max = Math.max(...pts);
-  const range = max - min || 0.001;
+  const range = max - min || MIN_SPARKLINE_RANGE;
   const W = 60, H = 14, pad = 1;
   const coords = pts.map((v, i) => {
     const x = pad + (i / (pts.length - 1)) * (W - 2 * pad);
@@ -1123,7 +1130,7 @@ function renderStatTrend(trendId, values, aggregateFn) {
   const mid  = Math.floor(values.length / 2);
   const aVal = aggregateFn(values.slice(0, mid));
   const bVal = aggregateFn(values.slice(mid));
-  const threshold = Math.abs(aVal) * 0.003;
+  const threshold = Math.abs(aVal) * TREND_CHANGE_THRESHOLD;
   if      (bVal - aVal >  threshold) { el.textContent = '↑'; el.classList.add('up'); }
   else if (aVal - bVal >  threshold) { el.textContent = '↓'; el.classList.add('down'); }
   else                               { el.textContent = '–'; el.classList.add('flat'); }
