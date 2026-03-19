@@ -104,11 +104,12 @@ jobs:
       - name: Deploy static files and binary
         run: |
           chmod +x ./artifact/App
-          # Static files and VERSION (no full source tree needed on the server)
+          # Static files are synced directly; VERSION and the binary are staged
+          # in /tmp so root-owned install paths are only modified via sudo.
           rsync -az --delete \
             Public/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/netmap/Public/
           rsync -az \
-            VERSION ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/netmap/VERSION
+            VERSION ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/netmap-version.new
           # Stage binary at /tmp for atomic swap during restart
           rsync -az \
             ./artifact/App ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/netmap-server.new
@@ -117,6 +118,7 @@ jobs:
         run: |
           ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash <<'ENDSSH'
           set -euo pipefail
+          sudo mv /tmp/netmap-version.new /opt/netmap/VERSION
           sudo chown -R netmap:netmap /opt/netmap/Public /opt/netmap/VERSION
           sudo mv /tmp/netmap-server.new /opt/netmap/bin/netmap-server
           sudo chmod 755 /opt/netmap/bin/netmap-server
