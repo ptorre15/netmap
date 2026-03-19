@@ -4112,8 +4112,12 @@ Share this with the user — it is only shown once.`);
   D.vehicleSelect.addEventListener('change', () => {
     S.vehicleFilter = D.vehicleSelect.value || null;
     renderSensors();
-    // Auto-select first sensor of chosen vehicle
-    const first = S.sensors.find(s => s.vehicleID === S.vehicleFilter);
+    // Auto-select first sensor of chosen vehicle.
+    // Use groupByVehicle() so we look up sensors from the consolidated group entry
+    // (sensors may have a different vehicleID than the group key after consolidation).
+    const groups = groupByVehicle();
+    const entry  = S.vehicleFilter ? groups[S.vehicleFilter] : null;
+    const first  = entry?.sensors[0] ?? null;
     if (first) selectSensor(first.sensorID);
     else { S.selected = null; S.records = []; renderAll(); pushHash(); }
   });
