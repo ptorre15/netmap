@@ -46,9 +46,9 @@ export PATH="/usr/local/swift/usr/bin:$PATH"
 cd /opt/netmap/src
 # Clear any stale build lock from a previous failed build
 sudo rm -f /tmp/_opt_netmap_src_*.lock
+# Fix #8: build once; binary is always at .build/release/App for a single-target package
 swift build -c release 2>&1
-BIN_PATH=$(swift build -c release --show-bin-path 2>/dev/null)/App
-cp "$BIN_PATH" /tmp/netmap-server.new
+cp .build/release/App /tmp/netmap-server.new
 ENDSSH
 success "Build complete."
 
