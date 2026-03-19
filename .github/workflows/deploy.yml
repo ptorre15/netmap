@@ -12,26 +12,35 @@ jobs:
     name: Deploy to server
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.confirm == 'deploy' }}
+    environment: production   # requires approval from a designated reviewer
+    permissions:
+      contents: write   # required to push the version bump commit back to main
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Fix #6: use ssh-agent so the key never touches disk as a plain file
       - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
-        
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add server to known hosts
+        run: ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      # Fix #1: bump version and commit it back so git history stays in sync
       - name: Bump patch version
         run: |
           ./bump-version.sh patch
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: bump version [skip ci]"
+          git push
 
       - name: Sync sources
         run: |
           rsync -az --delete \
-            -e "ssh -i ~/.ssh/deploy_key" \
             --exclude='.build/' \
             --exclude='*.db' \
             --exclude='*.sqlite' \
@@ -39,21 +48,21 @@ jobs:
             --exclude='.git/' \
             ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/netmap/src/
 
+      # Fix #8: build once and capture the binary path in a single invocation
       - name: Build on server
         run: |
-          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash <<'ENDSSH'
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash <<'ENDSSH'
           set -euo pipefail
           export PATH="/usr/local/swift/usr/bin:$PATH"
           cd /opt/netmap/src
           sudo rm -f /tmp/_opt_netmap_src_*.lock
           swift build -c release 2>&1
-          BIN_PATH=$(swift build -c release --show-bin-path 2>/dev/null)/App
-          cp "$BIN_PATH" /tmp/netmap-server.new
+          cp .build/release/App /tmp/netmap-server.new
           ENDSSH
 
       - name: Restart service
         run: |
-          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash <<'ENDSSH'
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash <<'ENDSSH'
           set -euo pipefail
           sudo cp -a /opt/netmap/src/Public/. /opt/netmap/Public/
           sudo cp /opt/netmap/src/VERSION /opt/netmap/VERSION
@@ -62,6 +71,12 @@ jobs:
           sudo chmod 755 /opt/netmap/bin/netmap-server
           sudo chown netmap:netmap /opt/netmap/bin/netmap-server
           sudo systemctl restart netmap-server
-          sleep 2
-          sudo systemctl is-active --quiet netmap-server && echo "Service running." || { sudo journalctl -u netmap-server -n 20; exit 1; }
+          sleep 3
+          # Fix #3: probe the actual HTTP endpoint, not just the systemd state
+          curl -sf --retry 5 --retry-delay 2 \
+            "https://$NETMAP_DOMAIN/api/ping" > /dev/null \
+            && echo "Service healthy." \
+            || { sudo journalctl -u netmap-server -n 20; exit 1; }
           ENDSSH
+        env:
+          NETMAP_DOMAIN: ${{ secrets.NETMAP_DOMAIN }}

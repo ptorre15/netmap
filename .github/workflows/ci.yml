@@ -30,9 +30,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          # Fix #7: include Swift image tag in cache key to avoid stale cache on toolchain upgrades
+          key: ${{ runner.os }}-swift-6.0-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-spm-
+            ${{ runner.os }}-swift-6.0-spm-
 
       - name: Build (release)
         run: swift build -c release
