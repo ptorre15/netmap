@@ -8,10 +8,41 @@ on:
         required: true
 
 jobs:
+  # ── Step 1: compile the release binary in CI (same toolchain as production) ──
+  build:
+    name: Build release binary
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.confirm == 'deploy' }}
+    container:
+      image: swift:6.0          # Ubuntu 22.04 base — binary-compatible with the prod server
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-swift-6.0-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-swift-6.0-spm-
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netmap-server-binary
+          path: .build/release/App
+          retention-days: 1   # only needed for the deploy step below
+
+  # ── Step 2: ship the pre-built artifact — no Swift needed on the server ──────
   deploy:
     name: Deploy to server
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.confirm == 'deploy' }}
+    needs: build
     environment: production   # requires approval from a designated reviewer
     permissions:
       contents: write   # required to push the version bump commit back to main
@@ -20,7 +51,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Fix #6: use ssh-agent so the key never touches disk as a plain file
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -29,7 +59,6 @@ jobs:
       - name: Add server to known hosts
         run: ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
 
-      # Fix #1: bump version and commit it back so git history stays in sync
       - name: Bump patch version
         run: |
           ./bump-version.sh patch
@@ -38,41 +67,34 @@ jobs:
           git commit -am "chore: bump version [skip ci]"
           git push
 
-      - name: Sync sources
-        run: |
-          rsync -az --delete \
-            --exclude='.build/' \
-            --exclude='*.db' \
-            --exclude='*.sqlite' \
-            --exclude='.DS_Store' \
-            --exclude='.git/' \
-            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/netmap/src/
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: netmap-server-binary
+          path: ./artifact/
 
-      # Fix #8: build once and capture the binary path in a single invocation
-      - name: Build on server
+      - name: Deploy static files and binary
         run: |
-          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash <<'ENDSSH'
-          set -euo pipefail
-          export PATH="/usr/local/swift/usr/bin:$PATH"
-          cd /opt/netmap/src
-          sudo rm -f /tmp/_opt_netmap_src_*.lock
-          swift build -c release 2>&1
-          cp .build/release/App /tmp/netmap-server.new
-          ENDSSH
+          chmod +x ./artifact/App
+          # Static files and VERSION (no full source tree needed on the server)
+          rsync -az --delete \
+            Public/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/netmap/Public/
+          rsync -az \
+            VERSION ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/netmap/VERSION
+          # Stage binary at /tmp for atomic swap during restart
+          rsync -az \
+            ./artifact/App ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/netmap-server.new
 
       - name: Restart service
         run: |
           ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash <<'ENDSSH'
           set -euo pipefail
-          sudo cp -a /opt/netmap/src/Public/. /opt/netmap/Public/
-          sudo cp /opt/netmap/src/VERSION /opt/netmap/VERSION
           sudo chown -R netmap:netmap /opt/netmap/Public /opt/netmap/VERSION
           sudo mv /tmp/netmap-server.new /opt/netmap/bin/netmap-server
           sudo chmod 755 /opt/netmap/bin/netmap-server
           sudo chown netmap:netmap /opt/netmap/bin/netmap-server
           sudo systemctl restart netmap-server
           sleep 3
-          # Fix #3: probe the actual HTTP endpoint, not just the systemd state
           curl -sf --retry 5 --retry-delay 2 \
             "https://$NETMAP_DOMAIN/api/ping" > /dev/null \
             && echo "Service healthy." \
