@@ -10,9 +10,11 @@
 	# Compress responses
 	encode gzip zstd
 
-	# No browser cache for local JS/CSS so fixes are picked up immediately
+	# Long-lived cache for local JS/CSS — every deploy bumps the ?v=X.Y.Z
+	# query string in index.html via bump-version.sh, so browsers always
+	# fetch the updated file even with a year-long cache.
 	@localAssets path *.js *.css
-	header @localAssets Cache-Control "no-store, no-cache, must-revalidate"
+	header @localAssets Cache-Control "public, max-age=31536000, immutable"
 
 	# ── Simulator: relaxed CSP (page uses inline onclick handlers) ────────
 	handle /simulator.html {
