@@ -31,3 +31,14 @@ APP_JS="$SCRIPT_DIR/Public/app.js"
 if [[ -f "$APP_JS" ]]; then
   sed -i.bak "s/const WEB_VERSION = '[^']*'/const WEB_VERSION = '$new_version'/" "$APP_JS" && rm -f "$APP_JS.bak"
 fi
+
+# Sync ?v= cache-buster query strings in Public/index.html so browsers
+# always fetch the latest JS/CSS after a deploy (pairs with the Caddyfile
+# long-lived Cache-Control header set on *.js and *.css).
+INDEX_HTML="$SCRIPT_DIR/Public/index.html"
+if [[ -f "$INDEX_HTML" ]]; then
+  sed -i.bak \
+    -e "s/style\.css?v=[^\"']*/style.css?v=$new_version/g" \
+    -e "s/app\.js?v=[^\"']*/app.js?v=$new_version/g" \
+    "$INDEX_HTML" && rm -f "$INDEX_HTML.bak"
+fi
