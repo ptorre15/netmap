@@ -1,6 +1,10 @@
 # NetMapServer — Bare metal deployment (Linux)
 
-Supported targets: **Ubuntu 22.04 LTS** and **Ubuntu 24.04 LTS**.
+Supported targets: **Ubuntu 22.04 LTS** (jammy) — this must match the CI build image (`swift:6.0.3-jammy`).
+
+> **Binary compatibility:** The CI workflow compiles the release binary inside `swift:6.0.3-jammy` and ships the
+> resulting ELF binary to the server. The server **must** run the same Swift version (6.0.3) on Ubuntu 22.04.
+> The deploy step automatically verifies this before swapping the binary; a mismatch will abort the deploy.
 
 Architecture:
 - **Vapor 4** listens on `localhost:8092` (not directly exposed)
@@ -50,7 +54,7 @@ The script automatically performs:
 | Step | Detail |
 |---|---|
 | System dependencies | `libsqlite3-dev`, `libcurl4-openssl-dev`, etc. |
-| Swift 6.0.3 | Installed to `/usr/local/swift` |
+| Swift 6.0.3 | Installed to `/usr/local/swift` — **must match the CI build image** (`swift:6.0.3-jammy`) |
 | System user | `netmap` (no shell) |
 | Directories | `/opt/netmap/{bin,Public,data}` |
 | Build | `swift build -c release` |
