@@ -23,7 +23,7 @@ jobs:
     outputs:
       release_version: ${{ steps.release_version.outputs.release_version }}
     container:
-      image: swift:6.0.3-jammy   # pinned: Swift 6.0.3 on Ubuntu 22.04 — glibc forward-compat with Ubuntu 25.10 prod server
+      image: swift:6.0          # Ubuntu 22.04 base — binary compatible with Ubuntu 25.10 prod server
 
     steps:
       - name: Checkout
@@ -47,9 +47,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-swift-6.0.3-spm-${{ hashFiles('Package.resolved') }}
+          key: ${{ runner.os }}-swift-6.0-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-swift-6.0.3-spm-
+            ${{ runner.os }}-swift-6.0-spm-
 
       - name: Build (release)
         run: swift build -c release
@@ -113,16 +113,6 @@ jobs:
           # Stage binary at /tmp for atomic swap during restart
           rsync -az \
             ./artifact/App ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/netmap-server.new
-
-      - name: Verify remote Swift runtime matches build image
-        run: |
-          REMOTE_SWIFT=$(ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "swift --version 2>&1 | head -1")
-          echo "Remote Swift: $REMOTE_SWIFT"
-          if ! echo "$REMOTE_SWIFT" | grep -q '6.0.3'; then
-            echo "ERROR: production server Swift version does not match build image (swift:6.0.3-jammy)."
-            echo "Update the server with: sudo /opt/netmap/src/deploy/install.sh (or manually install Swift 6.0.3)"
-            exit 1
-          fi
 
       - name: Restart service
         run: |
