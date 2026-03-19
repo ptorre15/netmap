@@ -23,7 +23,7 @@ jobs:
     outputs:
       release_version: ${{ steps.release_version.outputs.release_version }}
     container:
-      image: swift:6.0.3-jammy   # pinned: Swift 6.0.3 on Ubuntu 22.04 — must match prod server
+      image: swift:6.0.3-jammy   # pinned: Swift 6.0.3 on Ubuntu 22.04 — glibc forward-compat with Ubuntu 25.10 prod server
 
     steps:
       - name: Checkout
