@@ -2,11 +2,6 @@
 
 Production server: **Ubuntu 25.10**.
 
-> **Binary compatibility:** The CI build runs inside `swift:6.0.3-jammy` (Ubuntu 22.04). Binaries compiled
-> against an older glibc are forward-compatible and run without issue on Ubuntu 25.10's newer glibc.
-> The deploy step verifies that the server has Swift **6.0.3** installed before swapping the binary;
-> a version mismatch will abort the deploy.
-
 Architecture:
 - **Vapor 4** listens on `localhost:8092` (not directly exposed)
 - **Caddy** serves HTTPS on port 443, reverse-proxies to Vapor
@@ -55,7 +50,7 @@ The script automatically performs:
 | Step | Detail |
 |---|---|
 | System dependencies | `libsqlite3-dev`, `libcurl4-openssl-dev`, etc. |
-| Swift 6.0.3 | Installed to `/usr/local/swift` — version must match the CI build image (both 6.0.3) |
+| Swift 6.0.3 | Installed to `/usr/local/swift` |
 | System user | `netmap` (no shell) |
 | Directories | `/opt/netmap/{bin,Public,data}` |
 | Build | `swift build -c release` |
