@@ -126,7 +126,7 @@ jobs:
           sudo systemctl restart netmap-server
           sleep 3
           curl -sf --retry 5 --retry-delay 2 \
-            "https://$NETMAP_DOMAIN/api/ping" > /dev/null \
+            "https://$NETMAP_DOMAIN/health" > /dev/null \
             && echo "Service healthy." \
             || { sudo journalctl -u netmap-server -n 20; exit 1; }
           ENDSSH
