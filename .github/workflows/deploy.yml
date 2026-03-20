@@ -9,6 +9,9 @@ on:
       release_version:
         description: "Optional explicit release version (default: 1.0.<run_number>+<short_sha>)"
         required: false
+      ui_version:
+        description: "Optional UI version to deploy alongside the server (e.g. 1.1.0). If omitted, the UI version in Public/ui-version.json is left unchanged."
+        required: false
 
 defaults:
   run:
@@ -42,6 +45,9 @@ jobs:
       - name: Apply release version to workspace
         run: |
           bash ./set-release-version.sh "${{ steps.release_version.outputs.release_version }}"
+          if [[ -n "${{ github.event.inputs.ui_version }}" ]]; then
+            bash ./set-ui-version.sh "${{ github.event.inputs.ui_version }}"
+          fi
 
       - name: Cache Swift packages
         uses: actions/cache@v4
@@ -89,6 +95,9 @@ jobs:
           RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
         run: |
           bash ./set-release-version.sh "$RELEASE_VERSION"
+          if [[ -n "${{ github.event.inputs.ui_version }}" ]]; then
+            bash ./set-ui-version.sh "${{ github.event.inputs.ui_version }}"
+          fi
 
       - name: Download binary artifact
         uses: actions/download-artifact@v4

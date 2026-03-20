@@ -1,0 +1,70 @@
+name: Deploy UI only
+
+# Deploys only the Public/ static files (HTML/CSS/JS) without recompiling the
+# Swift binary or restarting the server process. Use this for UI-only changes
+# such as styling tweaks, layout improvements, or bug fixes in app.js.
+#
+# The server binary is NOT touched. Cache-busters in index.html are updated
+# automatically so browsers fetch the new JS/CSS on their next page load.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'deploy-ui' to confirm"
+        required: true
+      ui_version:
+        description: "New UI version (e.g. 1.1.0). Must be greater than the current version in Public/ui-version.json."
+        required: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy-ui:
+    name: Deploy UI to server
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.confirm == 'deploy-ui' }}
+    environment: production   # requires approval from a designated reviewer
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply UI version
+        run: bash ./set-ui-version.sh "${{ github.event.inputs.ui_version }}"
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add server to known hosts
+        run: ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Ensure deploy user can write to /opt/netmap/Public
+        run: |
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "sudo chown -R ${{ secrets.DEPLOY_USER }}:${{ secrets.DEPLOY_USER }} /opt/netmap/Public && sudo chmod -R u+w /opt/netmap/Public"
+
+      - name: Deploy static files
+        run: |
+          rsync -az --delete \
+            Public/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/netmap/Public/
+
+      - name: Fix ownership
+        run: |
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "sudo chown -R netmap:netmap /opt/netmap/Public"
+
+      - name: Verify public health endpoint
+        env:
+          NETMAP_DOMAIN: ${{ secrets.NETMAP_DOMAIN }}
+        run: |
+          sleep 5
+          curl -sf --retry 5 --retry-delay 2 \
+            "https://$NETMAP_DOMAIN/health" > /dev/null
+          echo "UI v${{ github.event.inputs.ui_version }} deployed successfully."
