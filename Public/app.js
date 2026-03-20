@@ -1,6 +1,7 @@
 'use strict';
 
-const WEB_VERSION = '1.0.24';
+// UI version is fetched at runtime from /ui-version.json, which is updated
+// independently of the server binary by the deploy-ui-only workflow.
 
 // ─── Auth state ────────────────────────────────────────────────────────────────────────────────
 const AUTH = { token: null, username: null, role: null,
@@ -5306,13 +5307,17 @@ async function main() {
     document.documentElement.setAttribute('data-theme', 'dark');
   }
 
-  // Show server + web version in sidebar footer (no auth required)
-  fetch('/health').then(r => r.json()).then(h => {
+  // Show server + UI version in sidebar footer (no auth required).
+  // Both are fetched independently: server version from /health, UI version
+  // from /ui-version.json so they can be deployed and versioned separately.
+  Promise.all([
+    fetch('/health').then(r => r.json()).catch(e => { console.warn('Could not fetch server version:', e); return null; }),
+    fetch('/ui-version.json').then(r => r.json()).catch(e => { console.warn('Could not fetch UI version:', e); return null; })
+  ]).then(([h, ui]) => {
     const el = $('server-version');
-    if (el) el.textContent = h?.version ? `Server v${h.version} · Web v${WEB_VERSION}` : `Web v${WEB_VERSION}`;
-  }).catch(() => {
-    const el = $('server-version');
-    if (el) el.textContent = `Web v${WEB_VERSION}`;
+    if (!el) return;
+    const uiVer = ui?.version ?? '?';
+    el.textContent = h?.version ? `Server v${h.version} · UI v${uiVer}` : `UI v${uiVer}`;
   });
 
   setup();  // register all event listeners first (auth form needs to be live)
