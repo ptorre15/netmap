@@ -1286,6 +1286,55 @@ body {
 .picto-btn:hover { background: color-mix(in srgb, var(--m-blue) 12%, transparent); border-color: var(--m-blue); color: var(--m-blue); }
 .picto-btn.picto-sel { background: var(--m-blue); border-color: var(--m-blue); color: #fff; }
 .picto-btn.picto-sel svg { stroke: #fff; }
+/* Checkmark badge on selected icon */
+.picto-btn.picto-sel { position: relative; }
+.picto-btn.picto-sel::after {
+  content: '✓';
+  position: absolute; top: -6px; right: -6px;
+  width: 14px; height: 14px;
+  background: #22c55e; color: #fff;
+  font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
+  border-radius: 50%;
+  border: 1.5px solid var(--bg);
+}
+
+/* ─── Modal step wizard ──────────────────────────────────────────────────────── */
+.modal-stepper {
+  padding: 14px 24px 0;
+  margin-bottom: 24px;
+  display: flex; align-items: center; gap: 0;
+  position: relative;
+}
+.modal-stepper.stepper-hidden { display: none; }
+.modal-step-dot {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--bg3); border: 2px solid var(--sep);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; z-index: 1;
+  transition: background var(--trans), border-color var(--trans);
+}
+.modal-step-dot span { font-size: 11px; font-weight: 700; color: var(--fg3); }
+.modal-step-dot.active { background: var(--m-blue); border-color: var(--m-blue); }
+.modal-step-dot.active span { color: #fff; }
+.modal-step-dot.done { background: #22c55e; border-color: #22c55e; }
+.modal-step-dot.done span { color: #fff; }
+.modal-step-dot.done::before { content: '✓'; font-size: 11px; font-weight: 700; color: #fff; }
+.modal-step-dot.done span { display: none; }
+.modal-step-line {
+  flex: 1; height: 2px;
+  background: var(--sep);
+  transition: background .3s;
+}
+.modal-step-line.done { background: #22c55e; }
+.modal-step-labels {
+  position: absolute; bottom: -18px; left: 0; right: 0;
+  display: flex; justify-content: space-between;
+  padding: 0 11px;
+}
+.modal-step-labels span { font-size: 10px; color: var(--fg3); font-weight: 500; }
+/* Step sections — only active step shown */
+.modal-step-section { display: none; }
+.modal-step-section.active { display: block; }
 
 .modal-card-wide { max-width: 680px !important; }
 
@@ -1971,18 +2020,50 @@ tr.journey-sep-row td {
   white-space: nowrap;
 }
 
+/* ─── Mobile hamburger button (desktop: hidden) ─────────────────────────────── */
+.mobile-only { display: none; }
+/* ─── Mobile sidebar backdrop ───────────────────────────────────────────────── */
+#mobile-sidebar-backdrop {
+  display: none;
+  position: fixed; inset: 0; z-index: 350;
+  background: rgba(0,0,0,.45);
+  backdrop-filter: blur(2px);
+  animation: fadeIn .18s ease;
+}
+#main.mobile-sidebar-open #mobile-sidebar-backdrop { display: block; }
+
 /* ═══════════════════════════════════════════════════════════════
    Mobile
    ═══════════════════════════════════════════════════════════════ */
 @media (max-width: 700px) {
-  :root { --sidebar-w: 100%; --header-h: 50px; }
-  #main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  #sidebar { border-right: none; border-bottom: 1px solid var(--sep); max-height: 150px; }
-  #sensor-list { display: flex; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; padding: 6px 10px 8px; gap: 6px; }
-  .vehicle-group { display: flex; gap: 6px; flex-shrink: 0; }
-  .sensor-row { flex-shrink: 0; border-radius: 20px; padding: 7px 13px; border-left: none; border: 1px solid var(--sep); background: var(--bg3); white-space: nowrap; }
-  .sensor-row.selected { background: var(--m-blue-lt); border-color: var(--m-blue); }
-  .s-sub { display: none; }
+  :root { --header-h: 50px; }
+  .mobile-only { display: flex; }
+
+  /* Layout: full-width single-column (sidebar removed from flow) */
+  #main {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+  }
+
+  /* Sidebar: fixed slide-in drawer from the left */
+  #sidebar {
+    position: fixed;
+    left: -100%;
+    top: var(--header-h);
+    height: calc(100vh - var(--header-h));
+    width: min(290px, 85vw);
+    z-index: 400;
+    border-right: 1px solid var(--sep);
+    border-bottom: none;
+    overflow-y: auto;
+    transition: left .25s cubic-bezier(.4,0,.2,1);
+    box-shadow: var(--shadow-md);
+  }
+  #main.mobile-sidebar-open #sidebar { left: 0; }
+
+  /* Hide the desktop collapse toggle on mobile */
+  .sidebar-toggle-btn { display: none; }
+
   #stats-bar .stat-cell { padding: 9px 10px; }
   .stat-value { font-size: 16px; }
   #chart-container, #map-container, #table-container { padding: 10px 12px; }

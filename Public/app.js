@@ -77,6 +77,38 @@ async function checkAuth() {
 
 // ─── Vehicle / Asset modal ────────────────────────────────────────────────────
 let _editingVehicleID = null;
+let _formStep = 0;
+
+function goToVehicleFormStep(step) {
+  const isEditing = !!_editingVehicleID;
+  _formStep = step;
+
+  // Show/hide step sections
+  document.querySelectorAll('.modal-step-section').forEach(sec => {
+    sec.classList.toggle('active', isEditing || +sec.dataset.stepSection === step);
+  });
+
+  // Update stepper dots
+  document.querySelectorAll('.modal-step-dot').forEach(dot => {
+    const s = +dot.dataset.step;
+    dot.classList.remove('active', 'done');
+    if (s === step) dot.classList.add('active');
+    else if (s < step) dot.classList.add('done');
+  });
+  document.querySelectorAll('.modal-step-line').forEach((line, i) => {
+    line.classList.toggle('done', i < step);
+  });
+
+  // Show/hide stepper
+  $('modal-stepper').classList.toggle('stepper-hidden', isEditing);
+
+  // Button visibility
+  const lastStep = 2;
+  $('modal-back-btn').style.display  = (!isEditing && step > 0) ? '' : 'none';
+  $('modal-next-btn').style.display  = (!isEditing && step < lastStep) ? '' : 'none';
+  $('modal-save-btn').style.display  = (isEditing || step === lastStep) ? '' : 'none';
+  $('modal-error').style.display     = 'none';
+}
 
 function isVehicleType(typeID) {
   const t = S.assetTypes.find(x => x.id === typeID);
@@ -124,6 +156,7 @@ function openVehicleModal(vehicle = null) {
 
   $('modal-delete-btn').style.display = vehicle ? '' : 'none';
   $('modal-error').style.display = 'none';
+  goToVehicleFormStep(vehicle ? 2 : 0);
   $('vehicle-modal').style.display = 'flex';
 }
 function closeVehicleModal() {
@@ -4081,6 +4114,21 @@ function setup() {
     localStorage.setItem('netmap-sidebar', collapsed ? 'collapsed' : '');
   });
 
+  // Mobile hamburger — slide-in sidebar overlay
+  function closeMobileSidebar() { $('main').classList.remove('mobile-sidebar-open'); }
+  const mobileMenuBtn = $('mobile-menu-btn');
+  if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => $('main').classList.toggle('mobile-sidebar-open'));
+  }
+  const mobileSidebarBackdrop = $('mobile-sidebar-backdrop');
+  if (mobileSidebarBackdrop) {
+    mobileSidebarBackdrop.addEventListener('click', closeMobileSidebar);
+  }
+  // Close mobile sidebar when a sensor row is clicked
+  D.sensorList.addEventListener('click', () => closeMobileSidebar());
+  // Close mobile sidebar when vehicle selection changes
+  D.vehicleSelect.addEventListener('change', () => closeMobileSidebar(), { capture: true });
+
   // Asset type selector change (show/hide vehicle vs tool fields)
   $('vf-type').addEventListener('change', () => updateModalFields($('vf-type').value));
 
@@ -4227,6 +4275,17 @@ Share this with the user — it is only shown once.`);
   const cancelBtn = $('modal-cancel-btn');
   if (cancelBtn) cancelBtn.addEventListener('click', closeVehicleModal);
   $('vehicle-modal').addEventListener('click', e => { if (e.target === $('vehicle-modal')) closeVehicleModal(); });
+
+  // Multi-step form: Next / Back
+  $('modal-next-btn').addEventListener('click', () => {
+    if (_formStep === 0) {
+      // Advance from type → icon; update vehicle/tool fields based on current selection
+      updateModalFields($('vf-type').value);
+    }
+    goToVehicleFormStep(_formStep + 1);
+    if (_formStep === 2) $('vf-name').focus();
+  });
+  $('modal-back-btn').addEventListener('click', () => goToVehicleFormStep(_formStep - 1));
 
   // Vehicle form submit
   $('vehicle-form').addEventListener('submit', async e => {
