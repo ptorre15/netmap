@@ -77,6 +77,38 @@ async function checkAuth() {
 
 // ─── Vehicle / Asset modal ────────────────────────────────────────────────────
 let _editingVehicleID = null;
+let _formStep = 0;
+
+function goToVehicleFormStep(step) {
+  const isEditing = !!_editingVehicleID;
+  _formStep = step;
+
+  // Show/hide step sections
+  document.querySelectorAll('.modal-step-section').forEach(sec => {
+    sec.classList.toggle('active', isEditing || +sec.dataset.stepSection === step);
+  });
+
+  // Update stepper dots
+  document.querySelectorAll('.modal-step-dot').forEach(dot => {
+    const s = +dot.dataset.step;
+    dot.classList.remove('active', 'done');
+    if (s === step) dot.classList.add('active');
+    else if (s < step) dot.classList.add('done');
+  });
+  document.querySelectorAll('.modal-step-line').forEach((line, i) => {
+    line.classList.toggle('done', i < step);
+  });
+
+  // Show/hide stepper
+  $('modal-stepper').classList.toggle('stepper-hidden', isEditing);
+
+  // Button visibility
+  const lastStep = 2;
+  $('modal-back-btn').style.display  = (!isEditing && step > 0) ? '' : 'none';
+  $('modal-next-btn').style.display  = (!isEditing && step < lastStep) ? '' : 'none';
+  $('modal-save-btn').style.display  = (isEditing || step === lastStep) ? '' : 'none';
+  $('modal-error').style.display     = 'none';
+}
 
 function isVehicleType(typeID) {
   const t = S.assetTypes.find(x => x.id === typeID);
@@ -124,6 +156,7 @@ function openVehicleModal(vehicle = null) {
 
   $('modal-delete-btn').style.display = vehicle ? '' : 'none';
   $('modal-error').style.display = 'none';
+  goToVehicleFormStep(vehicle ? 2 : 0);
   $('vehicle-modal').style.display = 'flex';
 }
 function closeVehicleModal() {
@@ -372,6 +405,7 @@ const S = {
   secAudit: { limit: 50, offset: 0, total: 0, action: '', actor: '' },
   otaUpgrades: { limit: 50, offset: 0, total: 0, imeiFilter: '', statusFilter: '' },
   profiles: [],   // cached TrackerConfigProfile list
+  sensorSearch: '',  // sensor filter text
 };
 
 // ─── DOM helpers ──────────────────────────────────────────────────────────────
@@ -570,6 +604,8 @@ function renderSensors() {
   if (!entry) {
     D.assetCard.innerHTML = '';
     D.sensorList.innerHTML = '<div class="sidebar-hint sidebar-hint-arrow">↑ Pick an asset from the dropdown above</div>';
+    $('sensor-search-bar').style.display = 'none';
+    S.sensorSearch = '';
     return;
   }
   const sv      = entry.serverVehicle;
@@ -641,16 +677,36 @@ function renderSensors() {
   }
   if (!sensors.length) {
     D.sensorList.innerHTML = '<div class="sidebar-hint">No sensors</div>';
+    $('sensor-search-bar').style.display = 'none';
     return;
   }
 
+  // Show search bar when a vehicle is selected with sensors
+  $('sensor-search-bar').style.display = '';
+
+  // Apply search filter
+  const q = S.sensorSearch.trim().toLowerCase();
+  const matchesSensor = s => {
+    if (!q) return true;
+    const name  = (s.sensorName  ?? '').toLowerCase();
+    const vname = (s.vehicleName ?? '').toLowerCase();
+    const brand = (BRAND_LABELS[s.brand] ?? s.brand ?? '').toLowerCase();
+    return name.includes(q) || vname.includes(q) || brand.includes(q);
+  };
+
   const WHEEL_ORDER    = ['FL', 'FR', 'RL', 'RR'];
-  const tpmsSensors    = sensors.filter(s => isTpms(s));
+  const tpmsSensors    = sensors.filter(s => isTpms(s) && matchesSensor(s));
+  // If none of the individual TPMS sensors matched by name but the query itself
+  // matches 'tpms', show all TPMS sensors in the group anyway.
+  const tpmsAll        = sensors.filter(s => isTpms(s));
+  const tpmsVisible    = tpmsSensors.length ? tpmsSensors : (q && q.includes('tpms') ? tpmsAll : []);
   // Trackers first, then everything else (excluding TPMS)
   const nonTpmsSensors = [
-    ...sensors.filter(s => !isTpms(s) && s.brand === 'tracker'),
-    ...sensors.filter(s => !isTpms(s) && s.brand !== 'tracker'),
+    ...sensors.filter(s => !isTpms(s) && s.brand === 'tracker' && matchesSensor(s)),
+    ...sensors.filter(s => !isTpms(s) && s.brand !== 'tracker' && matchesSensor(s)),
   ];
+
+  const totalVisible = nonTpmsSensors.length + (tpmsVisible.length ? 1 : 0);
   let html = '';
 
   // ──── Non-TPMS tracker rows rendered first ───────────────────────────────
@@ -688,23 +744,23 @@ function renderSensors() {
   }).join('');
 
   // ──── TPMS group card ────────────────────────────────────────────────────
-  if (tpmsSensors.length) {
+  if (tpmsVisible.length) {
     // Worst status
     let worstStatus = 'ok';
-    for (const s of tpmsSensors) {
+    for (const s of tpmsVisible) {
       const st = pStatus(s.latestPressureBar, s.targetPressureBar);
       if (st === 'critical') { worstStatus = 'critical'; break; }
       if (st === 'low') worstStatus = 'low';
     }
-    const anyStale   = tpmsSensors.some(s => isStale(s.latestTimestamp, s.brand));
+    const anyStale   = tpmsVisible.some(s => isStale(s.latestTimestamp, s.brand));
     const worstDot   = anyStale ? SC.unknown : SC[worstStatus];
-    const brandLabel = BRAND_LABELS[tpmsSensors[0].brand] ?? tpmsSensors[0].brand;
-    const anySelected = tpmsSensors.some(s => s.sensorID === S.selected);
+    const brandLabel = BRAND_LABELS[tpmsVisible[0].brand] ?? tpmsVisible[0].brand;
+    const anySelected = tpmsVisible.some(s => s.sensorID === S.selected);
 
     // Sort by wheel position
     const byPos = {};
     const unpositioned = [];
-    for (const s of tpmsSensors) {
+    for (const s of tpmsVisible) {
       if (s.wheelPosition) byPos[s.wheelPosition] = s;
       else unpositioned.push(s);
     }
@@ -746,12 +802,12 @@ function renderSensors() {
     const extrasHtml = [...extraPos.map(p => chip(byPos[p], p)), ...unpositioned.map(s => chip(s))].join('');
     const extraGrid  = extrasHtml ? `<div class="tpms-wheel-grid tpms-extra-grid">${extrasHtml}</div>` : '';
 
-    html += `<div class="sensor-row tpms-group-card${anySelected ? ' selected' : ''}" data-sid="${escAttr(tpmsSensors[0].sensorID)}" data-tpms-card="1">
+    html += `<div class="sensor-row tpms-group-card${anySelected ? ' selected' : ''}" data-sid="${escAttr(tpmsVisible[0].sensorID)}" data-tpms-card="1">
       <div class="tpms-row-top">
         <div class="s-dot" style="background:${worstDot}"></div>
         <div class="s-info">
-          <div class="s-name"><span class="s-brand" data-brand="${escAttr(tpmsSensors[0].brand)}">${escHTML(brandLabel)}</span></div>
-          <div class="s-sub">${tpmsSensors.length} sensor${tpmsSensors.length > 1 ? 's' : ''}${anyStale ? ' \u00b7 <span style="color:var(--fg3)">stale</span>' : ''}</div>
+          <div class="s-name"><span class="s-brand" data-brand="${escAttr(tpmsVisible[0].brand)}">${escHTML(brandLabel)}</span></div>
+          <div class="s-sub">${tpmsVisible.length} sensor${tpmsVisible.length > 1 ? 's' : ''}${anyStale ? ' \u00b7 <span style="color:var(--fg3)">stale</span>' : ''}</div>
         </div>
       </div>
       ${gridHtml}${extraGrid}
@@ -799,6 +855,9 @@ function renderSensors() {
     </div>`;
   }).join('');
 
+  if (!totalVisible && q) {
+    html = `<div class="sidebar-hint">No sensors match "<strong>${escHTML(q)}</strong>"</div>`;
+  }
 
   D.sensorList.innerHTML = html;
   D.sensorList.classList.remove('sidebar-list-enter');
@@ -4046,13 +4105,29 @@ function _setWsIndicator(connected) {
 
 // ─── Event setup ──────────────────────────────────────────────────────────────
 function setup() {
-  // Sidebar collapse toggle
+  // Sidebar collapse toggle — persists state across sessions
   $('sidebar-toggle').addEventListener('click', () => {
     const collapsed = $('main').classList.toggle('sidebar-collapsed');
     const btn = $('sidebar-toggle');
     btn.title        = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
     btn.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+    localStorage.setItem('netmap-sidebar', collapsed ? 'collapsed' : '');
   });
+
+  // Mobile hamburger — slide-in sidebar overlay
+  function closeMobileSidebar() { $('main').classList.remove('mobile-sidebar-open'); }
+  const mobileMenuBtn = $('mobile-menu-btn');
+  if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => $('main').classList.toggle('mobile-sidebar-open'));
+  }
+  const mobileSidebarBackdrop = $('mobile-sidebar-backdrop');
+  if (mobileSidebarBackdrop) {
+    mobileSidebarBackdrop.addEventListener('click', closeMobileSidebar);
+  }
+  // Close mobile sidebar when a sensor row is clicked
+  D.sensorList.addEventListener('click', () => closeMobileSidebar());
+  // Close mobile sidebar when vehicle selection changes
+  D.vehicleSelect.addEventListener('change', () => closeMobileSidebar(), { capture: true });
 
   // Asset type selector change (show/hide vehicle vs tool fields)
   $('vf-type').addEventListener('change', () => updateModalFields($('vf-type').value));
@@ -4066,9 +4141,78 @@ function setup() {
     btn.addEventListener('click', () => switchAdminTab(btn.dataset.tab))
   );
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && $('logs-overlay').style.display !== 'none') { closeLogsViewer(); return; }
-    if (e.key === 'Escape' && $('admin-drawer').classList.contains('open')) closeAdminPanel();
+    // Always allow ESC to close dialogs regardless of focus
+    if (e.key === 'Escape') {
+      if ($('logs-overlay').style.display !== 'none') { closeLogsViewer(); return; }
+      if ($('admin-drawer').classList.contains('open')) { closeAdminPanel(); return; }
+      if ($('kbd-dialog').style.display !== 'none') { $('kbd-dialog').style.display = 'none'; return; }
+      return;
+    }
+    // All other shortcuts require no modifier and no focused input
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.matches('input, textarea, select, [contenteditable]')) return;
+
+    // Focus sensor search
+    if (e.key === '/') { e.preventDefault(); $('sensor-search-input')?.focus(); return; }
+
+    // Toggle keyboard shortcuts dialog
+    if (e.key === '?') {
+      e.preventDefault();
+      const d = $('kbd-dialog');
+      d.style.display = d.style.display === 'none' ? 'flex' : 'none';
+      return;
+    }
+
+    // Period shortcuts: 1→1H, 2→24H, 3→7D, 4→30D
+    const periodMap = { '1': '1H', '2': '24H', '3': '7D', '4': '30D' };
+    if (periodMap[e.key]) {
+      e.preventDefault();
+      document.querySelector(`.period-btn[data-period="${periodMap[e.key]}"]`)?.click();
+      return;
+    }
+
+    // Mode shortcuts: m→map, c→chart, w→wheels, e→table, f→fleet
+    const modeMap = { m: 'map', c: 'chart', w: 'wheels', e: 'table', f: 'fleet' };
+    if (modeMap[e.key]) {
+      e.preventDefault();
+      document.querySelector(`.mode-btn[data-mode="${modeMap[e.key]}"]`)?.click();
+      return;
+    }
   });
+
+  // Sensor search input
+  const searchInput = $('sensor-search-input');
+  const searchClear = $('sensor-search-clear');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      S.sensorSearch = searchInput.value;
+      searchClear.style.display = searchInput.value ? '' : 'none';
+      renderSensors();
+    });
+    searchInput.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        S.sensorSearch = '';
+        searchClear.style.display = 'none';
+        renderSensors();
+        searchInput.blur();
+      }
+    });
+  }
+  if (searchClear) {
+    searchClear.addEventListener('click', () => {
+      searchInput.value = ''; S.sensorSearch = ''; searchClear.style.display = 'none';
+      renderSensors(); searchInput.focus();
+    });
+  }
+
+  // Keyboard shortcuts help dialog
+  $('kbd-help-btn')?.addEventListener('click', () => {
+    const d = $('kbd-dialog');
+    d.style.display = d.style.display === 'none' ? 'flex' : 'none';
+  });
+  $('kbd-dialog-close')?.addEventListener('click', () => { $('kbd-dialog').style.display = 'none'; });
+  $('kbd-dialog')?.addEventListener('click', e => { if (e.target === $('kbd-dialog')) $('kbd-dialog').style.display = 'none'; });
   // Logs viewer
   const logsBtn = $('logs-btn');
   if (logsBtn) logsBtn.addEventListener('click', openLogsViewer);
@@ -4131,6 +4275,17 @@ Share this with the user — it is only shown once.`);
   const cancelBtn = $('modal-cancel-btn');
   if (cancelBtn) cancelBtn.addEventListener('click', closeVehicleModal);
   $('vehicle-modal').addEventListener('click', e => { if (e.target === $('vehicle-modal')) closeVehicleModal(); });
+
+  // Multi-step form: Next / Back
+  $('modal-next-btn').addEventListener('click', () => {
+    if (_formStep === 0) {
+      // Advance from type → icon; update vehicle/tool fields based on current selection
+      updateModalFields($('vf-type').value);
+    }
+    goToVehicleFormStep(_formStep + 1);
+    if (_formStep === 2) $('vf-name').focus();
+  });
+  $('modal-back-btn').addEventListener('click', () => goToVehicleFormStep(_formStep - 1));
 
   // Vehicle form submit
   $('vehicle-form').addEventListener('submit', async e => {
@@ -5307,6 +5462,12 @@ async function main() {
     document.documentElement.setAttribute('data-theme', 'dark');
   }
 
+  // Restore sidebar collapsed state
+  if (localStorage.getItem('netmap-sidebar') === 'collapsed') {
+    $('main').classList.add('sidebar-collapsed');
+    const btn = $('sidebar-toggle');
+    if (btn) { btn.title = 'Expand sidebar'; btn.setAttribute('aria-label', 'Expand sidebar'); }
+  }
   // Show server + UI version in sidebar footer (no auth required).
   // Both are fetched independently: server version from /health, UI version
   // from /ui-version.json so they can be deployed and versioned separately.

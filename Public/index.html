@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="style.css?v=1.0.0">
+  <link rel="stylesheet" href="style.css?v=1.2.0">
 </head>
 <body>
 
@@ -62,66 +62,88 @@
       <h3 id="modal-title">New Asset</h3>
       <button class="modal-close" id="vehicle-modal-close">✕</button>
     </div>
+    <!-- Step indicator (shown for new assets only) -->
+    <div id="modal-stepper" class="modal-stepper">
+      <div class="modal-step-dot active" data-step="0"><span>1</span></div>
+      <div class="modal-step-line"></div>
+      <div class="modal-step-dot" data-step="1"><span>2</span></div>
+      <div class="modal-step-line"></div>
+      <div class="modal-step-dot" data-step="2"><span>3</span></div>
+      <div class="modal-step-labels">
+        <span>Type</span>
+        <span>Icon</span>
+        <span>Details</span>
+      </div>
+    </div>
     <form id="vehicle-form" novalidate>
-      <!-- Asset type selector (hidden when editing since type can't change) -->
-      <div class="modal-field" id="vf-type-row">
-        <label>Asset Type</label>
-        <select id="vf-type"></select>
-      </div>
-      <!-- Pictogram picker -->
-      <div class="modal-field" id="vf-picto-row">
-        <label>Pictogram</label>
-        <div id="vf-picto-grid"></div>
-        <input type="hidden" id="vf-icon-key">
-      </div>
-      <!-- Common -->
-      <div class="modal-field">
-        <label>Name *</label>
-        <input type="text" id="vf-name" required placeholder="e.g. Paul's Car, Chainsaw 1">
-      </div>
-      <!-- Vehicle-specific fields -->
-      <div id="vf-vehicle-fields">
-        <div class="modal-row">
-          <div class="modal-field">
-            <label>Brand</label>
-            <input type="text" id="vf-brand" placeholder="Toyota">
-          </div>
-          <div class="modal-field">
-            <label>Model</label>
-            <input type="text" id="vf-model" placeholder="Corolla">
-          </div>
+      <!-- Step 1: Asset type selector -->
+      <div class="modal-step-section" data-step-section="0">
+        <div class="modal-field" id="vf-type-row">
+          <label>Asset Type</label>
+          <select id="vf-type"></select>
         </div>
-        <div class="modal-row">
-          <div class="modal-field">
-            <label>Year</label>
-            <input type="number" id="vf-year" placeholder="2024" min="1900" max="2100">
-          </div>
-          <div class="modal-field">
-            <label>Plate</label>
-            <input type="text" id="vf-vrn" placeholder="AB-123-CD">
-          </div>
+      </div>
+      <!-- Step 2: Pictogram picker -->
+      <div class="modal-step-section" data-step-section="1">
+        <div class="modal-field" id="vf-picto-row">
+          <label>Choose an icon</label>
+          <div id="vf-picto-grid"></div>
+          <input type="hidden" id="vf-icon-key">
         </div>
+      </div>
+      <!-- Step 3: Details -->
+      <div class="modal-step-section" data-step-section="2">
+        <!-- Common -->
         <div class="modal-field">
-          <label>VIN</label>
-          <input type="text" id="vf-vin" placeholder="optional">
+          <label>Name *</label>
+          <input type="text" id="vf-name" required placeholder="e.g. Paul's Car, Chainsaw 1">
         </div>
-      </div>
-      <!-- Tool-specific fields -->
-      <div id="vf-tool-fields" style="display:none">
-        <div class="modal-field">
-          <label>Tool Type</label>
-          <input type="text" id="vf-tool-type" placeholder="e.g. Chainsaw, Hedge Trimmer">
+        <!-- Vehicle-specific fields -->
+        <div id="vf-vehicle-fields">
+          <div class="modal-row">
+            <div class="modal-field">
+              <label>Brand</label>
+              <input type="text" id="vf-brand" placeholder="Toyota">
+            </div>
+            <div class="modal-field">
+              <label>Model</label>
+              <input type="text" id="vf-model" placeholder="Corolla">
+            </div>
+          </div>
+          <div class="modal-row">
+            <div class="modal-field">
+              <label>Year</label>
+              <input type="number" id="vf-year" placeholder="2024" min="1900" max="2100">
+            </div>
+            <div class="modal-field">
+              <label>Plate</label>
+              <input type="text" id="vf-vrn" placeholder="AB-123-CD">
+            </div>
+          </div>
+          <div class="modal-field">
+            <label>VIN</label>
+            <input type="text" id="vf-vin" placeholder="optional">
+          </div>
         </div>
-        <div class="modal-field">
-          <label>Serial Number</label>
-          <input type="text" id="vf-serial" placeholder="Manufacturer serial number">
+        <!-- Tool-specific fields -->
+        <div id="vf-tool-fields" style="display:none">
+          <div class="modal-field">
+            <label>Tool Type</label>
+            <input type="text" id="vf-tool-type" placeholder="e.g. Chainsaw, Hedge Trimmer">
+          </div>
+          <div class="modal-field">
+            <label>Serial Number</label>
+            <input type="text" id="vf-serial" placeholder="Manufacturer serial number">
+          </div>
         </div>
       </div>
       <div id="modal-error" class="auth-error" style="display:none"></div>
       <div class="modal-actions">
         <button type="button"   id="modal-delete-btn"   class="modal-btn-danger"     style="display:none">Delete</button>
         <button type="button"   id="modal-cancel-btn"   class="modal-btn-secondary">Cancel</button>
-        <button type="submit"                            class="modal-btn-primary"   id="modal-save-btn">Save</button>
+        <button type="button"   id="modal-back-btn"     class="modal-btn-secondary"  style="display:none">← Back</button>
+        <button type="button"   id="modal-next-btn"     class="modal-btn-primary"    style="display:none">Next →</button>
+        <button type="submit"                            class="modal-btn-primary"    id="modal-save-btn">Save</button>
       </div>
     </form>
   </div>
@@ -149,18 +171,23 @@
     <span id="live-label">–</span>
   </div>
   <div class="spacer"></div>
-  <button id="refresh-btn" class="icon-btn" title="Refresh now"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"/></svg></button>
-  <button id="theme-btn"       class="icon-btn" title="Toggle theme"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/></svg></button>
-  <button id="logs-btn"        class="icon-btn" title="Server logs" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 4a2 2 0 0 0 -2 2v3a2 3 0 0 1 -2 3a2 3 0 0 1 2 3v3a2 2 0 0 0 2 2"/><path d="M17 4a2 2 0 0 1 2 2v3a2 3 0 0 0 2 3a2 3 0 0 0 -2 3v3a2 2 0 0 1 -2 2"/></svg></button>
-  <button id="admin-btn"       class="icon-btn" title="Admin panel" style="display:none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg></button>
+  <button id="mobile-menu-btn" class="icon-btn mobile-only" title="Toggle sidebar" aria-label="Toggle sidebar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 6l16 0"/><path d="M4 12l16 0"/><path d="M4 18l16 0"/></svg></button>
+  <button id="refresh-btn" class="icon-btn" title="Refresh now" aria-label="Refresh now"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"/></svg></button>
+  <button id="kbd-help-btn"    class="icon-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M10 14h4"/></svg></button>
+  <button id="theme-btn"       class="icon-btn" title="Toggle theme" aria-label="Toggle theme"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/></svg></button>
+  <button id="logs-btn"        class="icon-btn" title="Server logs" aria-label="Server logs" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 4a2 2 0 0 0 -2 2v3a2 3 0 0 1 -2 3a2 3 0 0 1 2 3v3a2 2 0 0 0 2 2"/><path d="M17 4a2 2 0 0 1 2 2v3a2 3 0 0 0 2 3a2 3 0 0 0 -2 3v3a2 2 0 0 1 -2 2"/></svg></button>
+  <button id="admin-btn"       class="icon-btn" title="Admin panel" aria-label="Admin panel" style="display:none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg></button>
   <div id="user-badge" class="user-badge" style="display:none">
     <span id="user-name" class="user-name"></span>
     <span id="user-role" class="role-badge"></span>
-    <button id="logout-btn" class="icon-btn" title="Logout"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2"/><path d="M9 12h12l-3 -3"/><path d="M18 15l3 -3"/></svg></button>
+    <button id="logout-btn" class="icon-btn" title="Sign out" aria-label="Sign out"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2"/><path d="M9 12h12l-3 -3"/><path d="M18 15l3 -3"/></svg></button>
   </div>
 </header>
 
 <div id="main">
+
+  <!-- ── Mobile sidebar backdrop ───────────────────────────── -->
+  <div id="mobile-sidebar-backdrop"></div>
 
   <!-- ── Sidebar collapse toggle ────────────────────────── -->
   <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Collapse sidebar" aria-label="Collapse sidebar">
@@ -171,10 +198,17 @@
   <nav id="sidebar">
     <div class="sidebar-vehicle-bar">
       <select id="vehicle-select"><option value="">Loading…</option></select>
-      <button id="add-vehicle-btn" class="icon-btn" title="New asset" style="display:none">＋</button>
+      <button id="add-vehicle-btn" class="icon-btn" title="New asset" aria-label="New asset" style="display:none">＋</button>
     </div>
     <div id="asset-card"></div>
     <div id="fleet-summary" class="fleet-summary-bar" style="display:none"></div>
+    <div id="sensor-search-bar" class="sensor-search-bar" style="display:none">
+      <div class="sensor-search-wrap">
+        <svg class="sensor-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" id="sensor-search-input" placeholder="Filter sensors…" autocomplete="off" aria-label="Filter sensors">
+        <button id="sensor-search-clear" class="sensor-search-clear" style="display:none" aria-label="Clear search">✕</button>
+      </div>
+    </div>
     <div id="sensor-list" style="flex:1;overflow-y:auto">
       <div class="sidebar-hint">Select an asset</div>
     </div>
@@ -508,6 +542,39 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3/dist/chartjs-plugin-annotation.min.js"></script>
-<script src="app.js?v=1.0.0"></script>
+<script src="app.js?v=1.2.0"></script>
+
+<!-- ── Keyboard shortcuts dialog ─────────────────────────── -->
+<div id="kbd-dialog" class="kbd-dialog-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+  <div class="kbd-dialog-card">
+    <div class="kbd-dialog-header">
+      <h3>Keyboard Shortcuts</h3>
+      <button id="kbd-dialog-close" class="modal-close" aria-label="Close keyboard shortcuts">✕</button>
+    </div>
+    <div class="kbd-dialog-body">
+      <div class="kbd-section">
+        <div class="kbd-section-title">General</div>
+        <div class="kbd-row"><kbd>/</kbd><span>Focus sensor search</span></div>
+        <div class="kbd-row"><kbd>?</kbd><span>Toggle this help</span></div>
+        <div class="kbd-row"><kbd>Esc</kbd><span>Close dialogs / panels</span></div>
+      </div>
+      <div class="kbd-section">
+        <div class="kbd-section-title">Time Period</div>
+        <div class="kbd-row"><kbd>1</kbd><span>Last 1 hour</span></div>
+        <div class="kbd-row"><kbd>2</kbd><span>Last 24 hours</span></div>
+        <div class="kbd-row"><kbd>3</kbd><span>Last 7 days</span></div>
+        <div class="kbd-row"><kbd>4</kbd><span>Last 30 days</span></div>
+      </div>
+      <div class="kbd-section">
+        <div class="kbd-section-title">View Mode</div>
+        <div class="kbd-row"><kbd>m</kbd><span>Map</span></div>
+        <div class="kbd-row"><kbd>c</kbd><span>Chart</span></div>
+        <div class="kbd-row"><kbd>w</kbd><span>Wheels / TPMS</span></div>
+        <div class="kbd-row"><kbd>e</kbd><span>Events table</span></div>
+        <div class="kbd-row"><kbd>f</kbd><span>Fleet overview</span></div>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
